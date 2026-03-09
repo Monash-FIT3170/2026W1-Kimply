@@ -2,3 +2,4 @@
 Dhruv Israni (dhruv.isr14@gmail.com)
 Jeremy Lim (jeremylim.0304@gmail.com)
 Owen Kolotsos (owenkolotsos@outlook.com)
+Ojaswi Pandey (ojaswioj98@gmail.com)
