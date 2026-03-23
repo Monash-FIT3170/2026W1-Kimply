@@ -1,18 +1,26 @@
-let tasks = [];
+import { TasksCollection } from "./collections/TaskCollection";
+
 let nextID = 1;
 
 export function getTasks() {
-    return tasks;
+    return TasksCollection.find().fetch();
 }
 
 export function addTask(text) {
-    tasks.push({ id: nextID++, text, completed: false });
+    TasksCollection.insertAsync(
+        {
+            task_id: nextID++,
+            task_name: text,
+            completed: false, 
+        }
+    )
 }
 
 export function removeTask(id) {
-    tasks = tasks.filter(task => task.id !== id);
+    TasksCollection.removeAsync({task_id:id});
 }
 
 export function setCompleted(id, completed) {
-    tasks = tasks.map(task => task.id === id ? {...task, completed } : task);
+
+    TasksCollection.updateAsync({task_id : id }, { $set: {completed : completed }});
 }
