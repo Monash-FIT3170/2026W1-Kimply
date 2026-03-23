@@ -1,12 +1,25 @@
 import { Meteor } from "meteor/meteor";
 import { Random } from "meteor/random";
+import { TasksCollection } from "../imports/api/collections/TasksCollection";
+import "../imports/api/publications/TasksPublications";
 
-async function insertLink({ title, url }) {
-  await LinksCollection.insertAsync({ title, url, createdAt: new Date() });
+const insert_task = (taskText) => {
+  TasksCollection.insertAsync({text:taskText});
 }
 
+
+
 Meteor.startup(async () => {
+  if ((await TasksCollection.find().countAsync()) == 0){
+    [
+      "First Task",
+      "Second Task",
+      "Third Task"
+    ].forEach(insert_task);
+  }
 });
+
+
 
 Meteor.methods({
   about() {
