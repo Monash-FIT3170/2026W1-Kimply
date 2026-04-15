@@ -1,15 +1,1 @@
-# 2026W1-Kimply
-Dhruv Israni (dhruv.isr14@gmail.com)
-Jeremy Lim (jeremylim.0304@gmail.com)
-Owen Kolotsos (owenkolotsos@outlook.com)
-Ojaswi Pandey (ojaswioj98@gmail.com)
-Koby Crosby (crosbk01@gmail.com)
-Tan Ee Dhing (joycetan613@gmail.com)
-Trisha Bhagat  (trisha.bhagat445@gmail.com)
-Layela Moyo (layelaheart@gmail.com)
-Ian Nguyen (mriannguyen352@gmail.com)
-Zeji Li (jarrodlizeji@gmail.com)
-Ze Xiang Li (lijefferson73@gmail.com)
-Benjamin Quan (scientistquan@gmail.com)
-Lachlan Shi (lshi0046@student.monash.edu)
-Ambrris Bushen (ambrrisb2803@gmail.com)
+## Lachlan's tutorial plan
