@@ -7,6 +7,18 @@ import "./App.css";
 function App() {
   const [todos, setTodos] = useState([]);
 
+  //Load saved todos when the app first opens
+  useEffect(() => {
+    const saved = JSON.parse(localStorage.getItem("todos"));
+    if (saved) setTodos(saved);
+  }, []);
+
+
+//Save todos to LocalStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem("todos", JSON.stringify(todos));
+  }, [todos]);
+
 
   const addTodo = (text) => {
     const newTodo = {
