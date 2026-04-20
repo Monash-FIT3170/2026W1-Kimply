@@ -1,0 +1,17 @@
+FROM node:20
+
+RUN apt-get update && apt-get install -y \
+    curl git python3 build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl https://install.meteor.com/ | sh
+ENV PATH="/root/.meteor:$PATH"
+ENV METEOR_ALLOW_SUPERUSER=1
+
+WORKDIR /app
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 3000
+ENTRYPOINT ["/entrypoint.sh"]
