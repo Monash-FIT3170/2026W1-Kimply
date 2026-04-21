@@ -9,8 +9,10 @@ if [ ! -f "package.json" ]; then
   exit 1
 fi
 
-echo "Installing Meteor npm dependencies..."
-meteor npm install
+if [ ! -d "node_modules" ]; then
+  echo "Installing Meteor npm dependencies..."
+  meteor npm install
+fi
 
 echo "Starting Meteor..."
 exec meteor --port 3000 --exclude-archs web.browser.legacy,web.cordova
