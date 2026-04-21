@@ -1,0 +1,55 @@
+# Meteor
+.meteor/local
+2026W1-Kimply/_build/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker
+*.env.docker
+
+# MongoDB data (if running locally)
+data/db/
+
+# Build outputs
+dist/
+build/
+.cache/
+build/Release
+
+# Logs
+logs
+*.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+
+# Coverage
+.nyc_output
+coverage
+
+# Misc
+lib-cov
+.grunt
+.lock-wscript
