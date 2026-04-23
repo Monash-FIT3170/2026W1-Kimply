@@ -9,7 +9,7 @@ if [ ! -f "package.json" ]; then
   exit 1
 fi
 
-if [ ! -d "node_modules" ]; then
+if [ ! -d "node_modules/@meteorjs/rspack" ]; then
   echo "Installing Meteor npm dependencies..."
   meteor npm install
 fi
