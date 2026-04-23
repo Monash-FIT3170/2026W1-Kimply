@@ -28,6 +28,10 @@ Starts MongoDB and the Meteor dev server. Logs stream to your terminal. The app 
 
 The first startup takes several minutes — Meteor downloads packages and compiles the app. Subsequent starts are much faster thanks to the cached `.meteor/local` volume.
 
+### Opening in VS Code
+
+Install the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers), then open the Command Palette (`Ctrl+Shift+P`) and run **Dev Containers: Attach to Running Container** and select the backend container.
+
 ### Running in the background
 
 ```bash
