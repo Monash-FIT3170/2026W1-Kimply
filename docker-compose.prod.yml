@@ -11,7 +11,7 @@ services:
 
   backend:
     build:
-      context: ./2026W1-Kimply
+      context: ./app
       dockerfile: Dockerfile
     restart: always
     ports:
