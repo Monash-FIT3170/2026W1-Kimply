@@ -20,12 +20,14 @@ Ambrris Bushen (ambrrisb2803@gmail.com)
 
 ### Startup
 
-Navigate to the repo root and confirm you can see the `docker-compose.yml` file:
+Open a terminal (Terminal on Mac, PowerShell on Windows) and navigate to the repo root:
 
 ```bash
 cd 2026W1-Kimply
 ls
 ```
+
+You should see `docker-compose.yml` in the output.
 
 Then start the containers:
 
