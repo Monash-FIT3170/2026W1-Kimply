@@ -20,6 +20,15 @@ Ambrris Bushen (ambrrisb2803@gmail.com)
 
 ### Startup
 
+Navigate to the repo root and confirm you can see the `docker-compose.yml` file:
+
+```bash
+cd 2026W1-Kimply
+ls
+```
+
+Then start the containers:
+
 ```bash
 docker compose up
 ```
