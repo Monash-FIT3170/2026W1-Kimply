@@ -19,3 +19,9 @@
 
 /* Link to ⚡ Rspack Server App */
 import './server-rspack.js';
+
+function lazyExternalImports1() {
+  require('meteor/meteor');
+  require('meteor/random');
+  require('meteor/mongo');
+}

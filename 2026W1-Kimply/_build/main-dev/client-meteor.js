@@ -18,3 +18,24 @@
 */
 
 /* No link to ⚡ Rspack Client App as served by HMR server */
+
+/* Polyfill globalThis.module, exports & module for legacy */
+if (typeof globalThis !== 'undefined') {
+  if (typeof globalThis.module === 'undefined') {
+    globalThis.module = { exports: {} };
+  }
+  if (typeof globalThis.exports === 'undefined') {
+    globalThis.exports = globalThis.module.exports;
+  }
+}
+if (typeof window.module === 'undefined') {
+  window.module = { exports: {} };
+}
+
+function lazyExternalImports1() {
+  require('meteor/meteor');
+  require('react-dom');
+  require('react');
+  require('meteor/react-meteor-data');
+  require('meteor/mongo');
+}
