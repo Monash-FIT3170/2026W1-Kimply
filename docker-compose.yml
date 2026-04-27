@@ -17,7 +17,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      MONGO_URL: mongodb://mongodb:27017/kimply?directConnection=true&tls=false
+      MONGO_URL: mongodb://mongodb:27017/kimply
       ROOT_URL: http://localhost:3000
       PORT: 3000
       METEOR_ALLOW_SUPERUSER: 1
