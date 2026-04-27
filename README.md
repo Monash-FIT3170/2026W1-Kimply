@@ -20,7 +20,7 @@ Ambrris Bushen (ambrrisb2803@gmail.com)
 
 ### Prerequisites
 
-Download and install [Docker Desktop](https://www.docker.com/get-started/) before proceeding.
+Download and install [Docker Desktop](https://www.docker.com/get-started/) before proceeding. Make sure Docker Desktop is running in the background before using any `docker` commands.
 
 ### Startup
 
