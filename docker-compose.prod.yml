@@ -1,0 +1,29 @@
+services:
+  mongodb:
+    image: mongo:7.0
+    restart: always
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_INITDB_DATABASE: kimply
+
+  backend:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      MONGO_URL: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongodb:27017/kimply?authSource=admin&directConnection=true
+      ROOT_URL: ${ROOT_URL}
+      PORT: 3000
+      METEOR_SETTINGS: ${METEOR_SETTINGS:-{}}
+
+    depends_on:
+      - mongodb
+
+volumes:
+  mongodb_data:

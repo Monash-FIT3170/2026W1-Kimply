@@ -1,0 +1,57 @@
+@startuml
+title Kimply - Conceptual Class Diagram (Basic Requirements)
+
+class GameSession {
+  status
+  startGame()
+  endGame()
+}
+
+class Player {
+  username
+  lives
+  currentLevel
+  status
+}
+
+class Sequence {
+  length
+}
+
+class Leaderboard {
+}
+
+class Result {
+  finalLevel
+  rank
+}
+
+enum PlayerStatus {
+  ACTIVE
+  ELIMINATED
+}
+
+enum GameStatus {
+  WAITING
+  IN_PROGRESS
+  FINISHED
+}
+
+enum Color {
+  RED
+  BLUE
+  GREEN
+  YELLOW
+}
+
+' Relationships
+GameSession "1" -- "many" Player
+GameSession "1" -- "1" Sequence
+GameSession "1" -- "1" Leaderboard
+
+Player "1" -- "1" Result
+Sequence "1" -- "many" Color
+
+Leaderboard "1" -- "many" Player
+
+@enduml
