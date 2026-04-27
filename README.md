@@ -18,6 +18,10 @@ Ambrris Bushen (ambrrisb2803@gmail.com)
 
 ## Running with Docker
 
+### Prerequisites
+
+Download and install [Docker Desktop](https://www.docker.com/get-started/) before proceeding.
+
 ### Startup
 
 Open a terminal (Terminal on Mac, PowerShell on Windows) and navigate to the repo root:
