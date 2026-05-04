@@ -1,4 +1,6 @@
-/* this file is imported in client/main.jsx */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
   /* Colors */
