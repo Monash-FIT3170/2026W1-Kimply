@@ -1,4 +1,5 @@
 const { defineConfig } = require("@meteorjs/rspack");
+const { rspack } = require("@rspack/core");
 
 /**
  * Rspack configuration for Meteor projects.

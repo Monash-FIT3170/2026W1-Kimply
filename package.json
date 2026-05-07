@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@meteorjs/rspack": "^2.0.1"
+  }
+}
