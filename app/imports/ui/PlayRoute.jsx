@@ -151,7 +151,7 @@ export function PlayRoute() {
         {/* route cards */}
         <div className="w-full max-w-2xl grid gap-3.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
           <RouteCard
-            kind="create" title="Create Room TESTING" blurb="Start a new game and invite friends."
+            kind="create" title="Create Room" blurb="Start a new game and invite friends."
             color={PRIMARY} primary disabled={!hasName || loading} onClick={handleCreate}
           />
           <RouteCard

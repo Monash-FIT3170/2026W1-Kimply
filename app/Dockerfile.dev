@@ -8,7 +8,7 @@ RUN curl https://install.meteor.com/ | sh
 ENV PATH="/root/.meteor:$PATH"
 ENV METEOR_ALLOW_SUPERUSER=1
 
-WORKDIR /app/app
+WORKDIR /kimply/app
 
 COPY app/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
