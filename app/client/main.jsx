@@ -1,10 +1,10 @@
 import { createRoot } from "react-dom/client";
 import { Meteor } from "meteor/meteor";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { Splash } from "/imports/ui/Splash";
-import { PlayRoute } from "/imports/ui/PlayRoute";
-import { JoinRoom } from "/imports/ui/JoinRoom";
-import { PlayerLobby } from "/imports/ui/PlayerLobby";
+import { Splash } from "/imports/ui/pages/Splash";
+import { PlayRoute } from "/imports/ui/pages/PlayRoute";
+import { JoinRoom } from "/imports/ui/pages/JoinRoom";
+import { PlayerLobby } from "/imports/ui/pages/PlayerLobby";
 import "/imports/ui/styles.css";
 
 Meteor.startup(() => {

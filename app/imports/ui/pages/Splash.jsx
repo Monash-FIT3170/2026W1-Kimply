@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { BG, PRIMARY, TILE, TileLattice } from './design';
+import { BG, PRIMARY, TILE, TileLattice } from '../components/design';
 
 function BigLogo() {
   return (

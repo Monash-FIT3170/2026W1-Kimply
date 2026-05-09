@@ -6,7 +6,7 @@ import { RoomsCollection } from '/imports/api/rooms';
 import {
   PRIMARY, TILE, HAIRLINE, FG2,
   TileLattice, Wordmark, Avatar, avatarColor, ReadyChip, CopyIcon, BackChevron,
-} from './design';
+} from '../components/design';
 
 const MAX_PLAYERS = 8;
 
