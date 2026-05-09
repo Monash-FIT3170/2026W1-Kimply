@@ -19,6 +19,7 @@ Meteor.methods({
             lengthOfSequence: length,
             sequence,
             createdAt: new Date(),
+            advanced: false
         });
     },
 
@@ -36,15 +37,15 @@ Meteor.methods({
     },
 
     // Submit a player's attempted sequence
-    'players.submitSequence'(playerId, attemptedSequence) {
-        const player = PlayersCollection.findOneAsync(playerId);
-        const round = RoundsCollection.findOneAsync(player.roundId);
+    async 'players.submitSequence'(playerId, attemptedSequence) {
+        const player = await PlayersCollection.findOneAsync(playerId);
+        const round = await RoundsCollection.findOneAsync(player.roundId);
 
         const correct = JSON.stringify(attemptedSequence) == JSON.stringify(round.sequence);
 
         // if correct update player values 
         if (correct) {
-            PlayersCollection.updateAsync(playerId, {
+            await PlayersCollection.updateAsync(playerId, {
                 $set: {
                     attemptedSequence,
                     completeRound: true,
@@ -52,7 +53,7 @@ Meteor.methods({
             }),
 
             // add to leaderboard
-            LeaderboardCollection.insertAsync({
+            await LeaderboardCollection.insertAsync({
                 playerId,
                 name: player.name,
                 lives: player.lives,
@@ -61,7 +62,7 @@ Meteor.methods({
             });
         } else {
             const newLives = player.lives - 1;
-            PlayersCollection.updateAsync(playerId, {
+            await PlayersCollection.updateAsync(playerId, {
                 $set: {
                     attemptedSequence,
                     lives: newLives,
@@ -75,16 +76,16 @@ Meteor.methods({
             eliminated: false,
         }).fetchAsync();
 
-        const allFinished = activePlayers.every(p => p.completeRound);
+        const allFinished = activePlayers.length > 0 && activePlayers.every(p => p.completeRound);
 
-        if (allFinished && activePlayers.length > 0) {
+        if (!round.advanced && allFinished) {
             await Meteor.callAsync('rounds.advance', player.roundId);
         }
 
         return correct;
     },
 
-    'rounds.advance'(currentRoundId) {
+    async 'rounds.advance'(currentRoundId) {
 
         // get current round
         const currentRound = await RoundsCollection.findOneAsync(currentRoundId);
@@ -92,6 +93,12 @@ Meteor.methods({
         if (!currentRound) {
             throw new Meteor.Error('round-not-found', 'Current round does not exist');
         }
+
+        if (currentRound.advanced) return;
+
+        await RoundsCollection.updateAsync(player.roundId, {
+                $set: { advanced: true }
+        });
 
         const nextLength = currentRound.lengthOfSequence + 1;
         const nextSequence = generateSequence(nextLength);
@@ -101,6 +108,7 @@ Meteor.methods({
             lengthOfSequence: nextLength,
             sequence: nextSequence,
             createdAt: new Date(),
+            advanced: false
         });
 
         // move active players into next round
