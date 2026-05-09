@@ -1,6 +1,6 @@
 import { Meteor } from 'meteor/meteor';
 import { RoundsCollection } from './rounds';
-import { PlatersCollection } from './players';
+import { PlayersCollection } from './players';
 import { LeaderboardCollection } from './leaderboard';
 
 const COLOURS = ['red', 'blue', 'green', 'yellow'];
@@ -24,7 +24,7 @@ Meteor.methods({
 
     // Add a player to a round
     'players.join'(roundId, playerName) {
-        return PlatersCollection.insertAsync({
+        return PlayersCollection.insertAsync({
             roundId,
             name: playerName,
             lives: 3,
@@ -44,11 +44,10 @@ Meteor.methods({
 
         // if correct update player values 
         if (correct) {
-            PlatersCollection.updateAsync(playerId, {
+            PlayersCollection.updateAsync(playerId, {
                 $set: {
                     attemptedSequence,
                     completeRound: true,
-                    winner: true,
                 },
             }),
 
@@ -70,6 +69,56 @@ Meteor.methods({
                 },
             });
         }
+
+        const activePlayers = await PlayersCollection.find({
+            roundId: player.roundId,
+            eliminated: false,
+        }).fetchAsync();
+
+        const allFinished = activePlayers.every(p => p.completeRound);
+
+        if (allFinished && activePlayers.length > 0) {
+            await Meteor.callAsync('rounds.advance', player.roundId);
+        }
+
         return correct;
+    },
+
+    'rounds.advance'(currentRoundId) {
+
+        // get current round
+        const currentRound = await RoundsCollection.findOneAsync(currentRoundId);
+
+        if (!currentRound) {
+            throw new Meteor.Error('round-not-found', 'Current round does not exist');
+        }
+
+        const nextLength = currentRound.lengthOfSequence + 1;
+        const nextSequence = generateSequence(nextLength);
+
+        // create next round
+        const nextRoundId = await RoundsCollection.insertAsync({
+            lengthOfSequence: nextLength,
+            sequence: nextSequence,
+            createdAt: new Date(),
+        });
+
+        // move active players into next round
+        await PlayersCollection.updateAsync(
+            {
+                roundId: currentRoundId,
+                eliminated: false,
+            },
+            {
+                $set: {
+                    roundId: nextRoundId,
+                    completeRound: false,
+                    attemptedSequence: [],
+                },
+            },
+            { multi: true }
+        );
+
+        return nextRoundId;
     },
 });
