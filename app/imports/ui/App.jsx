@@ -1,10 +1,4 @@
 import { Header } from "./Header.jsx";
+import { GamePage } from './pages/GamePage.jsx';
 
-export const App = () => (
-  <div className="page">
-    <Header />
-    <main className="main">
-      <p></p>
-    </main>
-  </div>
-);
+export const App = () => < GamePage />;
