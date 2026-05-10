@@ -5,7 +5,7 @@ import { useSubscribe, useTracker } from 'meteor/react-meteor-data';
 import { RoomsCollection } from '/imports/api/rooms';
 import {
   PRIMARY, TILE, HAIRLINE, FG2,
-  TileLattice, Wordmark, Avatar, avatarColor, ReadyChip, CopyIcon, BackChevron,
+  TileLattice, Wordmark, Avatar, avatarColor, ReadyChip, CopyIcon, BackChevron, PencilIcon
 } from '../components/design';
 
 const MAX_PLAYERS = 8;
@@ -102,9 +102,18 @@ function SharePanel({ link }) {
 function HostView({ room, playerName, onBack }) {
   const players = room.players || [];
   const joinLink = `${window.location.origin}/play/join?code=${room.pin}`;
+  const [editing, setEditing] = useState(true);
+  const [gameName, setGameName] = useState('');
+  const trimmedGameName = gameName.trim()
+  const hasGameName = trimmedGameName.length > 0;
 
   const kickPlayer = (playerId) => {
     Meteor.call('rooms.kick', room.pin, playerId);
+  };
+
+  const saveGameName = async() =>{
+    await Meteor.callAsync("rooms.updateGameName", room.pin, hasGameName ? trimmedGameName : `Game${room.pin}`)
+    setEditing(false);
   };
 
   return (
@@ -126,6 +135,36 @@ function HostView({ room, playerName, onBack }) {
             className="absolute top-0 left-0 right-0 h-1"
             style={{ background:`linear-gradient(90deg, ${TILE.pink}, ${TILE.amber}, ${TILE.teal}, ${TILE.violet})` }}
           />
+
+          {/* Game Name */}
+          <div className='flex items-center gap-1'>
+            <p className="font-mono height-[32px] text-[11px] text-fg3 uppercase tracking-[0.16em] text-center leading-none whitespace-nowrap shrink-0">Game Name: </p>
+
+            {editing ? (
+              <input
+                autoFocus
+                value={gameName}
+                onChange={(e) => setGameName(e.target.value)}
+                onBlur={() => hasGameName && setEditing(false)}
+                onKeyDown={(e) => e.key === 'Enter' && hasGameName && saveGameName()}
+                placeholder={room.gameName}
+                maxLength={30}
+                className="w-48 bg-surface border border-hairline rounded-[12px] px-3 py-1 font-outfit font-semibold text-base text-fg outline-none placeholder:text-fg3 text-center"
+                style={{ caretColor: PRIMARY }}
+              />
+            ) : (
+              <div className='flex items-center gap-1'> 
+                <span className="font-outfit font-semibold text-base text-fg">{trimmedGameName}</span>
+                <button
+                  onClick={() => setEditing(true)}
+                  className="w-8 h-8 rounded-lg bg-transparent border-none text-fg2 cursor-pointer inline-flex items-center justify-center"
+                >
+                  <PencilIcon size={14} />
+                </button>
+              </div>
+            )}
+          </div>
+
 
           <p className="font-mono text-[11px] text-fg3 uppercase tracking-[0.18em]">Your Room Code</p>
 

@@ -1,16 +1,8 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Meteor } from 'meteor/meteor';
-import { BG, PRIMARY, TILE, HAIRLINE, FG2, TileLattice, Wordmark, Avatar, avatarColor, ArrowIcon } from '../components/design';
+import { BG, PRIMARY, TILE, HAIRLINE, FG2, TileLattice, Wordmark, Avatar, avatarColor, ArrowIcon, PencilIcon} from '../components/design';
 
-function PencilIcon({ size = 14 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
-      <path d="m3 13 .5-2.5L10 4l2 2-6.5 6.5L3 13Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-      <path d="m9 5 2 2" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  );
-}
 
 function RouteCard({ kind, title, blurb, color, primary, onClick, disabled }) {
   return (

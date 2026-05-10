@@ -19,6 +19,15 @@ export function avatarColor(name = '') {
   return TILE_COLORS[name.charCodeAt(0) % TILE_COLORS.length] ?? TILE.pink;
 }
 
+export function PencilIcon({ size = 14 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <path d="m3 13 .5-2.5L10 4l2 2-6.5 6.5L3 13Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="m9 5 2 2" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
 export function TileLattice({ opacity = 0.07 }) {
   const cells = 7;
   const colors = [TILE.pink, TILE.amber, TILE.teal, TILE.violet];
