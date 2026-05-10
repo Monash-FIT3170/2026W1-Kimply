@@ -1,10 +1,5 @@
 // Colours for sequence
-export const COLOURS = [
-    { id: 'red', label: 'Red', hex: '#FF0000' },
-    { id: 'yellow', label: 'Yellow', hex: '#FFD700' },
-    { id: 'green', label: 'Green', hex: '#00CC00' },
-    { id: 'blue', label: 'Blue', hex: '#0000ff' },
-];
+export const COLOURS = ['red', 'blue', 'green', 'yellow'];
 
 /**
  * Generate a random sequence of colours from the predefines set

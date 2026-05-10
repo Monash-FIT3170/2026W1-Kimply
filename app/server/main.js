@@ -1,6 +1,7 @@
 import { Meteor } from "meteor/meteor";
 import { LinksCollection } from "/imports/api/links";
 import { Random } from "meteor/random";
+import { generateSequence } from "/imports/api/sequence";
 import { RoundsCollection } from "../imports/api/rounds";
 import { PlayersCollection } from "../imports/api/players";
 import { LeaderboardCollection } from "../imports/api/leaderboard";
@@ -8,19 +9,18 @@ import '../imports/api/gameMethods';
 
 
 Meteor.startup(async () => {
-  const count = await RoundsCollection.find().countAsync();
-  // Seed a round if empty
-  if (count == 0) {
-    const colours = ['red', 'blue', 'green', 'yellow'];
+  await RoundsCollection.removeAsync({});
+  let existingRound = await RoundsCollection.findOneAsync({ isCurrent: true });
 
-    const sequence = Array.from({ length: 4 }, () =>
-      colours[Math.floor(Math.random() * colours.length)]
-    );
+  if (!existingRound) {
+    const sequence = generateSequence(4);
 
-    RoundsCollection.insertAsync({
+    await RoundsCollection.insertAsync({
       lengthOfSequence: 4,
       sequence,
       createdAt: new Date(),
+      advanced: false,
+      isCurrent: true
     });
   }
 });
