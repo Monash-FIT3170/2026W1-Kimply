@@ -16,48 +16,58 @@ const COLOURS = {
 
 const TILE_ORDER = ['red', 'yellow', 'green', 'blue'];
 
-export const ColourSequence = ({ sequence =[], onSequenceComplete }) => {
+export const ColourSequence = ({ roundId, sequence =[], onSequenceComplete }) => {
     const [activeColour, setActiveColour] = useState(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isDone, setIsDone] = useState(false);
 
     useEffect(() => {
-        if (sequence.length === 0) return;
+        if (!sequence || sequence.length === 0) return;
 
-        let timeouts = [];
+        let i = 0;
+        let cancelled = false;
 
-        // small delay before starting sequence
-        const start = setTimeout(() => {
-            setIsPlaying(true);
+        // UI state: we are now showing the sequence
+        setIsPlaying(true);
+        setIsDone(false);
 
-            sequence.forEach((colour, index) => {
-                //light up
-                const on = setTimeout(() => {
-                    setActiveColour(colour.id);
-                }, index * 1000);
+        // This function plays each colour one by one
+        const showNext = () => {
+            if (cancelled) return;
 
-                //dim
-                const off = setTimeout(() => {
-                    setActiveColour(null);
-                }, index * 1000 + 600);
-
-                timeouts.push(on, off); 
-            });
-
-            // all done
-            const done = setTimeout(() => {
-                setIsPlaying(false);
+            // If we've shown all colours, end the sequence
+            if (i >= sequence.length) {
+                setActiveColour(null); 
+                setIsPlaying(false);   
                 setIsDone(true);
+
+                // notify parent component that sequence finished
                 if (onSequenceComplete) onSequenceComplete();
-            }, sequence.length * 1000 + 600);
+                return;
+            }
 
-            timeouts.push(done);
-        }, 800);
+            // current colour in the sequence
+            const colour = sequence[i];
 
-        timeouts.push(start);
+            // highlight current colour
+            setActiveColour(colour);
 
-        return () => timeouts.forEach(clearTimeout);
-    }, [sequence]);
+            // after 600ms, turn it off and move to next
+            setTimeout(() => {
+                setActiveColour(null);
+                i++;
+                // small pause between flashes (250ms)
+                setTimeout(showNext, 250);
+            }, 600);
+        };
+
+        // small delay before starting sequence playback
+        const startDelay = setTimeout(showNext, 800);
+        return () => {
+            cancelled = true;
+            clearTimeout(startDelay);
+        };
+    }, [roundId]);
 
     //text telling player to watch sequence and then to play
     return (
@@ -76,30 +86,10 @@ export const ColourSequence = ({ sequence =[], onSequenceComplete }) => {
                 {isDone && 'YOUR TURN!'}
             </p>
 
-        <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(2, 1fr)',
-                gap: '6px',
-                width: '280px',
-                margin: '0 auto 20px auto',
-            }}>
-            {sequence.map((item, index) => (
-                <div
-                    key={index}
-                    style={{
-                        width: '136px',
-                        height: '136px',
-                        backgroundColor: COLOURS[item.id].dim,
-                        borderRadius: '6px',
-                    }}
-                />
-            ))}
-        </div>
             {/*2x2 colour tile grid*/}
             <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(2, 1fr)',
-                gridAutoRows: '136px',
+                gridTemplateColumns: '1fr 1fr',
                 gap: '6px',
                 width: '280px',
                 margin: '0 auto',
