@@ -19,7 +19,8 @@ Meteor.methods({
             lengthOfSequence: length,
             sequence,
             createdAt: new Date(),
-            advanced: false
+            advanced: false,
+            isCurrent: true 
         });
     },
 
@@ -40,7 +41,6 @@ Meteor.methods({
     async 'players.submitSequence'(playerId, attemptedSequence) {
         const player = await PlayersCollection.findOneAsync(playerId);
         const round = await RoundsCollection.findOneAsync(player.roundId);
-
         const correct = JSON.stringify(attemptedSequence) == JSON.stringify(round.sequence);
 
         // if correct update player values 
@@ -50,7 +50,7 @@ Meteor.methods({
                     attemptedSequence,
                     completeRound: true,
                 },
-            }),
+            });
 
             // add to leaderboard
             await LeaderboardCollection.insertAsync({
@@ -71,11 +71,11 @@ Meteor.methods({
             });
         }
 
-        const activePlayers = await PlayersCollection.find({
+        const playersInRound = await PlayersCollection.find({
             roundId: player.roundId,
-            eliminated: false,
         }).fetchAsync();
 
+        const activePlayers = playersInRound.filter(p => !p.eliminated);
         const allFinished = activePlayers.length > 0 && activePlayers.every(p => p.completeRound);
 
         if (!round.advanced && allFinished) {
@@ -96,8 +96,11 @@ Meteor.methods({
 
         if (currentRound.advanced) return;
 
-        await RoundsCollection.updateAsync(player.roundId, {
-                $set: { advanced: true }
+        await RoundsCollection.updateAsync(currentRoundId, {
+                $set: { 
+                    advanced: true,
+                    isCurrent: false
+                }
         });
 
         const nextLength = currentRound.lengthOfSequence + 1;
@@ -108,7 +111,8 @@ Meteor.methods({
             lengthOfSequence: nextLength,
             sequence: nextSequence,
             createdAt: new Date(),
-            advanced: false
+            advanced: false,
+            isCurrent: true 
         });
 
         // move active players into next round
