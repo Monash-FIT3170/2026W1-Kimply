@@ -11,8 +11,8 @@ services:
 
   backend:
     build:
-      context: ./app
-      dockerfile: Dockerfile.dev
+      context: .
+      dockerfile: ./app/Dockerfile.dev
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -21,12 +21,14 @@ services:
       ROOT_URL: http://localhost:3000
       PORT: 3000
       METEOR_ALLOW_SUPERUSER: 1
+      CHOKIDAR_USEPOLLING: 1
+      CHOKIDAR_INTERVAL: 500
     depends_on:
       - mongodb
     volumes:
-      - ./app:/app
-      - meteor_local:/app/.meteor/local
-      - backend_node_modules:/app/node_modules
+      - .:/kimply
+      - meteor_local:/kimply/app/.meteor/local
+      - backend_node_modules:/kimply/app/node_modules
 
 volumes:
   mongodb_data:
