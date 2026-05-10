@@ -1,11 +1,39 @@
-import React, { useState } from 'react';
-import { generateSequence } from '../../api/sequence';
+import React, { useState, useEffect } from 'react';
+import { Meteor } from 'meteor/meteor';
+import { useTracker } from 'meteor/react-meteor-data';
+import { RoundsCollection } from '../../api/rounds';
 import { ColourSequence } from '../ColourSequence.jsx';
 
 export const GamePage = () => {
-    const [level, setLevel] = useState(1);
-    const [sequence, setSequence] = useState(() => generateSequence(4));
+    useEffect(() => {
+        const sub = Meteor.subscribe('rounds');
+        return () => sub.stop();
+    }, []);
+
+    const round = useTracker(() => {
+        return RoundsCollection.findOne({ isCurrent: true });
+    });
     const [playerCanInput, setPlayerCanInput] = useState(false);
+
+    useEffect(() => {
+        setPlayerCanInput(false);
+    }, [round?._id]);
+
+    if (!round) {
+        return (
+            <div style={{
+                minHeight: '100vh',
+                background: 'linear-gradient(135deg, #1a0533 0%, #0d1b4b 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+            }}>
+                <p style={{ color: 'white', letterSpacing: '4px', fontSize: '0.8rem', fontWeight: 'bold', opacity: 0.5 }}>
+                    LOADING...
+                </p>
+            </div>
+        );
+    }
 
     return (
         <div style={{
@@ -19,22 +47,23 @@ export const GamePage = () => {
         }}>
             <div style={{ textAlign: 'center' }}>
                 <p style={{ color: 'white', marginBottom: '12px', fontWeight: 'bold', letterSpacing: '2px', }}>
-                    LEVEL 1
+                    LEVEL {round.lengthOfSequence - 3}
                 </p>
                 {/* Sequence progress dots*/}
-                <div style={{ display: 'flex', justfyContent: 'center', gap: '6px', marginBottom: '20px' }}>
-                    {sequence.map((_, i) => (
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', marginBottom: '20px' }}>
+                    {(round.sequence || []).map((_, i) => (
                         <div key={i} style={{
                             width: '12px', height: '12px', borderRadius: '50%',
-                            backgroundColour: '#556',
+                            backgroundColor: '#556',
                         }} />
                     ))}
                 </div>
 
                 {/*Colour sequence tiles with flashing*/}
                 <ColourSequence 
-                sequence={sequence} 
-                onSequenceComplete={() => setPlayerCanInput(true)}
+                    roundId={round._id}
+                    sequence={round.sequence} 
+                    onSequenceComplete={() => setPlayerCanInput(true)}
                 />
 
                 {/*DONE button disabled until sequence finishes*/}
@@ -44,7 +73,7 @@ export const GamePage = () => {
                         marginTop: '28px',
                         width: '260px',
                         padding: '16px',
-                        backgroundColour: playerCanInput ? '##666' : '##2a2a3a',
+                        backgroundColor: playerCanInput ? '#666' : '#2a2a3a',
                         color: playerCanInput ? 'white' : '#444',
                         fontWeight: 'bold',
                         fontSize: '1rem',
