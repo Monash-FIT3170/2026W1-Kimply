@@ -304,3 +304,8 @@ a {
   opacity: 1;
   color: var(--color-primary);
 }
+
+html, body, #react-target {
+    height: 100%;
+    background: #1a0533;
+}
