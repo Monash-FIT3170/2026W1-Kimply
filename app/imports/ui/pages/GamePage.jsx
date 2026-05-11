@@ -15,6 +15,8 @@ export const GamePage = () => {
     });
     const [playerCanInput, setPlayerCanInput] = useState(false);
 
+    const [lives, setLives] = useState(3);
+
     useEffect(() => {
         setPlayerCanInput(false);
     }, [round?._id]);
@@ -45,6 +47,27 @@ export const GamePage = () => {
             justifyContent: 'center',
             padding: '20px',
         }}>
+
+            {/* Lives display */}
+            <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '8px', marginBottom: '16px' }}>
+                {[1, 2, 3].map((heart) => (
+                    <div key={heart} style={{
+                        width: '44px',
+                        height: '44px',
+                        backgroundColor: heart <= lives ? '#e03030' : '#333',
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '20px',
+                        boxShadow: heart <= lives ? '0 0 10px #e0303088' : 'none',
+                        transition: 'all 0.3s ease',
+                    }}>
+                        {'\u2764'}
+                    </div>
+                ))}
+            </div>
+
             <div style={{ textAlign: 'center' }}>
                 <p style={{ color: 'white', marginBottom: '12px', fontWeight: 'bold', letterSpacing: '2px', }}>
                     LEVEL {round.lengthOfSequence - 3}
@@ -60,9 +83,9 @@ export const GamePage = () => {
                 </div>
 
                 {/*Colour sequence tiles with flashing*/}
-                <ColourSequence 
+                <ColourSequence
                     roundId={round._id}
-                    sequence={round.sequence} 
+                    sequence={round.sequence}
                     onSequenceComplete={() => setPlayerCanInput(true)}
                 />
 
@@ -82,9 +105,9 @@ export const GamePage = () => {
                         cursor: playerCanInput ? 'pointer' : 'not-allowed',
                         letterSpacing: '2px',
                         transition: 'all 0.3s ease',
-                    }}> DONE 
+                    }}> DONE
                 </button>
-            </div> 
+            </div>
         </div>
     );
 };
