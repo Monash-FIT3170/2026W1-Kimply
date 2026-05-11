@@ -1,4 +1,5 @@
 import { Meteor } from "meteor/meteor";
+import "/imports/api/systemMethods";
 import { LinksCollection } from "/imports/api/links";
 import { Random } from "meteor/random";
 
