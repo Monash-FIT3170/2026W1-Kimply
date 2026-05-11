@@ -3,7 +3,7 @@ import { Meteor } from "meteor/meteor";
 import {getCorrectAnswer} from "../api/system.js";
 
 Meteor.methods({
-    "game.checkAnswer"(gameId, playerId, submittedAnswer) {
+    "system.checkAnswer"(gameId, playerId, submittedAnswer) {
         // TODO: update with actual answer structure
         const correctAnswer = getCorrectAnswer(gameId);
 
