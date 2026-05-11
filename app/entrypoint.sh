@@ -14,5 +14,9 @@ if [ ! -d "node_modules/@meteorjs/rspack" ]; then
   meteor npm install
 fi
 
-echo "Starting Meteor..."
-exec meteor --port 3000 --exclude-archs web.browser.legacy,web.cordova
+if [ $# -eq 0 ]; then
+    echo "Starting Meteor..."
+    exec meteor --port 3000 --exclude-archs web.browser.legacy,web.cordova
+else
+    exec "$@"
+fi
