@@ -2,16 +2,16 @@ import { useState } from "react";
 
 export const EndLeaderboard = () => {
     const [players, setPlayers] = useState([
-        { name: "Alice", score: 1500, },
-        { name: "Charlie", score: 900, },
-        { name: "Bob", score: 1200, },
-        { name: "Daniel", score: 547, },
-        { name: "Erik", score: 987, },
-        { name: "Fred", score: 838, },
-        { name: "Gordon", score: 238, },
+        { name: "Alice", eliminatedRound: 3, },
+        { name: "Charlie", eliminatedRound: 4, },
+        { name: "Bob", eliminatedRound: 2, },
+        { name: "Daniel", eliminatedRound: 5, },
+        { name: "Erik", eliminatedRound: 7, },
+        { name: "Fred", eliminatedRound: 8, },
+        { name: "Gordon", eliminatedRound: 4, },
     ]);
 
-    const sorted = [...players].sort((a, b) => b.score - a.score);
+    const sorted = [...players].sort((a, b) => b.eliminatedRound - a.eliminatedRound);
 
     const rankColors = ["from-yellow-300 via-yellow-400 to-yellow-600", "from-gray-200 via-gray-300 to-gray-400", "from-amber-400 via-amber-500 to-amber-700"];
 
@@ -22,13 +22,13 @@ export const EndLeaderboard = () => {
                 <div className="flex">
                     <span className="w-1/6 text-left py-2 text-gray-500 font-medium">Rank</span>
                     <span className="w-3/6 text-left py-2 text-gray-500 font-medium">Name</span>
-                    <span className="w-2/6 text-left py-2 text-gray-500 font-medium">Score</span>
+                    <span className="w-2/6 text-left py-2 text-gray-500 font-medium">Round Eliminated</span>
                 </div>
                 {sorted.map((player, index) => (
                     <div className={`flex rounded-lg mb-2 py-3 ${"bg-gradient-to-r " + rankColors[index] || "bg-white"}`}>
                         <span className="w-1/6 pl-3">{index + 1}</span>
-                        <span className="w-3/6">{player.name}</span>
-                        <span className="w-2/6">{player.score}</span>
+                        <span className="w-3/6">{`${player.name} ${index == 0 ? "- Winner" : ""}`}</span>
+                        <span className="w-2/6">{player.eliminatedRound}</span>
                     </div>
                 ))}
             </div>
