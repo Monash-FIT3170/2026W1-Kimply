@@ -145,16 +145,16 @@ function HostView({ room, playerName, onBack }) {
                 autoFocus
                 value={gameName}
                 onChange={(e) => setGameName(e.target.value)}
-                onBlur={() => hasGameName && setEditing(false)}
-                onKeyDown={(e) => e.key === 'Enter' && hasGameName && saveGameName()}
-                placeholder={room.gameName}
+                onBlur={() => saveGameName()}
+                onKeyDown={(e) => e.key === 'Enter' && saveGameName()}
+                placeholder={`Game${room.pin}`}
                 maxLength={30}
                 className="w-48 bg-surface border border-hairline rounded-[12px] px-3 py-1 font-outfit font-semibold text-base text-fg outline-none placeholder:text-fg3 text-center"
                 style={{ caretColor: PRIMARY }}
               />
             ) : (
               <div className='flex items-center gap-1'> 
-                <span className="font-outfit font-semibold text-base text-fg">{trimmedGameName}</span>
+                <span className="font-outfit font-semibold text-base text-fg">{hasGameName ? trimmedGameName : `Game${room.pin}`}</span>
                 <button
                   onClick={() => setEditing(true)}
                   className="w-8 h-8 rounded-lg bg-transparent border-none text-fg2 cursor-pointer inline-flex items-center justify-center"
