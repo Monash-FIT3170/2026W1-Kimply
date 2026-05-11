@@ -13,6 +13,10 @@ export const EndLeaderboard = () => {
 
     const sorted = [...players].sort((a, b) => b.eliminatedRound - a.eliminatedRound);
 
+    const ranks = sorted.map((player, index) => 
+        sorted.findIndex(p=>p.eliminatedRound == player.eliminatedRound)
+    );
+
     const rankColors = ["from-yellow-300 via-yellow-400 to-yellow-600", "from-gray-200 via-gray-300 to-gray-400", "from-amber-400 via-amber-500 to-amber-700"];
 
     return (
@@ -25,9 +29,9 @@ export const EndLeaderboard = () => {
                     <span className="w-2/6 text-left py-2 text-gray-500 font-medium">Round Eliminated</span>
                 </div>
                 {sorted.map((player, index) => (
-                    <div className={`flex rounded-lg mb-2 py-3 ${"bg-gradient-to-r " + rankColors[index] || "bg-white"}`}>
-                        <span className="w-1/6 pl-3">{index + 1}</span>
-                        <span className="w-3/6">{`${player.name} ${index == 0 ? "- Winner" : ""}`}</span>
+                    <div className={`flex rounded-lg mb-2 py-3 ${"bg-gradient-to-r " + rankColors[ranks[index]] || "bg-white"}`}>
+                        <span className="w-1/6 pl-3">{ranks.filter((r)=>r==ranks[index]).length > 1 ? '=' : ''}{ranks[index]+1}</span>
+                        <span className="w-3/6">{`${player.name} ${ranks[index] == 0 ? "- Winner" : ""}`}</span>
                         <span className="w-2/6">{player.eliminatedRound}</span>
                     </div>
                 ))}
