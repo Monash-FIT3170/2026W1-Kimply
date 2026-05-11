@@ -53,3 +53,6 @@ coverage
 lib-cov
 .grunt
 .lock-wscript
+
+# Claude
+.claude
