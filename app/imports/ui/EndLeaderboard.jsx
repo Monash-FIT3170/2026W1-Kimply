@@ -45,14 +45,20 @@ export const EndLeaderboard = () => {
                 <p className="font-mono text-[11px] uppercase tracking-widest mb-8" style={{ color: FG2 }}>Final Results</p>
 
                 {/* Podium */}
-                <div className="w-full max-w-md flex items-end justify-center gap-3 mb-10">
+                <div className="w-full max-w-md flex items-end justify-center gap-3 mb-10 overflow-hidden">
                     {podiumOrder.map((group, i) => {
                         const medalIndex = i === 0 ? 1 : i === 1 ? 0 : 2;
                         const medal = MEDAL[medalIndex];
+                        // 3rd rises first (i=2, delay 0s), 2nd next (i=0, delay 0.5s), 1st last (i=1, delay 1s)
+                        const riseDelay = i === 2 ? 0 : i === 0 ? 0.5 : 1;
+                        const avatarDelay = riseDelay + 0.35;
                         if (group.length === 0) return <div key={i} className="flex-1" />;
                         return (
                             <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                                <div className="flex items-end">
+                                <div
+                                    className="flex items-end"
+                                    style={{ animation: `avatarPop 0.5s cubic-bezier(0.34,1.56,0.64,1) ${avatarDelay}s both` }}
+                                >
                                     <Avatar letter={group[0].name[0]} color={avatarColor(group[0].name)} size={44} />
                                     {group.length > 1 && (
                                         <div
@@ -67,7 +73,13 @@ export const EndLeaderboard = () => {
                                         </div>
                                     )}
                                 </div>
-                                <span className="font-outfit font-bold text-sm text-center" style={{ color: medal.color }}>
+                                <span
+                                    className="font-outfit font-bold text-sm text-center"
+                                    style={{
+                                        color: medal.color,
+                                        animation: `avatarPop 0.4s cubic-bezier(0.34,1.56,0.64,1) ${avatarDelay + 0.05}s both`,
+                                    }}
+                                >
                                     {group[0].name}{group.length > 1 ? ` +${group.length - 1}` : ''}
                                 </span>
                                 <div
@@ -78,6 +90,7 @@ export const EndLeaderboard = () => {
                                         border: `1px solid color-mix(in oklab, ${medal.color} 35%, transparent)`,
                                         borderBottom: 'none',
                                         color: medal.color,
+                                        animation: `podiumRise 0.6s cubic-bezier(0.22,1,0.36,1) ${riseDelay}s both`,
                                     }}
                                 >
                                     {group.length > 1 ? `=${medalIndex + 1}` : medalIndex + 1}
@@ -100,12 +113,14 @@ export const EndLeaderboard = () => {
                         const tied = sorted.filter(p => p.eliminatedRound === player.eliminatedRound).length > 1;
                         const medal   = MEDAL[rank];
                         const rowColor = medal ? medal.color : 'oklch(0.93 0.01 270)';
+                        const rowDelay = 1.5 + index * 0.04;
 
                         return (
                             <div
                                 key={player.name}
                                 className="flex items-center gap-3 px-3 py-3 rounded-xl"
                                 style={{
+                                    animation: `rowSlideIn 0.4s ease ${rowDelay}s both`,
                                     background: medal
                                         ? `color-mix(in oklab, ${medal.color} 12%, transparent)`
                                         : 'color-mix(in oklab, white 4%, transparent)',
@@ -130,7 +145,10 @@ export const EndLeaderboard = () => {
                                 <span className="flex-1 font-outfit font-semibold text-[15px]" style={{ color: rowColor }}>
                                     {player.name}
                                     {rank === 0 && (
-                                        <span className="ml-2 font-mono text-[10px] uppercase tracking-widest" style={{ color: PRIMARY }}>
+                                        <span
+                                            className="ml-2 font-mono text-[10px] uppercase tracking-widest"
+                                            style={{ color: PRIMARY, animation: 'winnerPulse 1.5s ease-in-out infinite' }}
+                                        >
                                             Winner
                                         </span>
                                     )}
