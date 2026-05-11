@@ -14,6 +14,7 @@ export const EndLeaderboard = () => {
     const [players] = useState([
         { name: "Fred",    eliminatedRound: 8 },
         { name: "Gordon",  eliminatedRound: 7 },
+        { name: "Hannah",  eliminatedRound: 7 },
         { name: "Zara",    eliminatedRound: 2 },
         { name: "Yusuf",   eliminatedRound: 2 },
         { name: "Mia",     eliminatedRound: 2 },
@@ -56,21 +57,26 @@ export const EndLeaderboard = () => {
                         return (
                             <div key={i} className="flex-1 flex flex-col items-center gap-2">
                                 <div
-                                    className="flex items-end"
+                                    className="flex items-end gap-1"
                                     style={{ animation: `avatarPop 0.5s cubic-bezier(0.34,1.56,0.64,1) ${avatarDelay}s both` }}
                                 >
-                                    <Avatar letter={group[0].name[0]} color={avatarColor(group[0].name)} size={44} />
-                                    {group.length > 1 && (
-                                        <div
-                                            className="rounded-full flex items-center justify-center font-outfit font-extrabold text-[11px] -ml-2 mb-0.5"
-                                            style={{
-                                                width: 22, height: 22,
-                                                background: medal.color,
-                                                color: 'oklch(0.18 0.02 270)',
-                                            }}
-                                        >
-                                            +{group.length - 1}
-                                        </div>
+                                    {group.length === 2 ? (
+                                        <>
+                                            <Avatar letter={group[0].name[0]} color={avatarColor(group[0].name)} size={40} />
+                                            <Avatar letter={group[1].name[0]} color={avatarColor(group[1].name)} size={40} />
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Avatar letter={group[0].name[0]} color={avatarColor(group[0].name)} size={44} />
+                                            {group.length > 1 && (
+                                                <div
+                                                    className="rounded-full flex items-center justify-center font-outfit font-extrabold text-[11px] -ml-2 mb-0.5"
+                                                    style={{ width: 22, height: 22, background: medal.color, color: 'oklch(0.18 0.02 270)' }}
+                                                >
+                                                    +{group.length - 1}
+                                                </div>
+                                            )}
+                                        </>
                                     )}
                                 </div>
                                 <span
@@ -80,7 +86,9 @@ export const EndLeaderboard = () => {
                                         animation: `avatarPop 0.4s cubic-bezier(0.34,1.56,0.64,1) ${avatarDelay + 0.05}s both`,
                                     }}
                                 >
-                                    {group[0].name}{group.length > 1 ? ` +${group.length - 1}` : ''}
+                                    {group.length === 2
+                                        ? `${group[0].name} & ${group[1].name}`
+                                        : `${group[0].name}${group.length > 1 ? ` +${group.length - 1}` : ''}`}
                                 </span>
                                 <div
                                     className="w-full rounded-t-xl flex items-center justify-center font-outfit font-extrabold text-lg"
