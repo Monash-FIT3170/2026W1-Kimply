@@ -1,6 +1,7 @@
 import { Meteor } from "meteor/meteor";
 import { LinksCollection } from "/imports/api/links";
 import { Random } from "meteor/random";
+import "/imports/api/playerAccounts";
 import "/imports/api/rooms";
 
 async function insertLink({ title, url }) {
