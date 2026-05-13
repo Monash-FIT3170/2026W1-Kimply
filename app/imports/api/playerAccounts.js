@@ -1,5 +1,6 @@
 import { Meteor } from 'meteor/meteor';
 import { Mongo } from 'meteor/mongo';
+import { createHash, randomBytes } from 'crypto';
 
 export const PlayerAccountsCollection = new Mongo.Collection('playerAccounts');
 
@@ -11,29 +12,45 @@ function normaliseEmail(email) {
   return cleanText(email).toLowerCase();
 }
 
+function hashPassword(password, salt) {
+  return createHash('sha256').update(`${salt}:${password}`).digest('hex');
+}
+
+function validateEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 if (Meteor.isServer) {
   Meteor.methods({
     async 'playerAccounts.register'(account) {
       const displayName = cleanText(account?.displayName);
       const email = normaliseEmail(account?.email);
+      const password = String(account?.password || '');
 
       if (!displayName) {
         throw new Meteor.Error('invalid-name', 'Please enter a display name.');
       }
 
-      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      if (!validateEmail(email)) {
         throw new Meteor.Error('invalid-email', 'Please enter a valid email address.');
       }
 
-      const existingAccount = await PlayerAccountsCollection.findOneAsync({ email });
+      if (password.length < 8) {
+        throw new Meteor.Error('weak-password', 'Password must be at least 8 characters.');
+      }
 
+      const existingAccount = await PlayerAccountsCollection.findOneAsync({ email });
       if (existingAccount) {
         throw new Meteor.Error('account-exists', 'An account with this email already exists.');
       }
 
+      const passwordSalt = randomBytes(16).toString('hex');
+
       await PlayerAccountsCollection.insertAsync({
         displayName,
         email,
+        passwordSalt,
+        passwordHash: hashPassword(password, passwordSalt),
         gamesPlayed: 0,
         wins: 0,
         bestRound: 0,
@@ -43,17 +60,26 @@ if (Meteor.isServer) {
       return { displayName, email };
     },
 
-    async 'playerAccounts.signIn'(emailInput) {
-      const email = normaliseEmail(emailInput);
+    async 'playerAccounts.signIn'(credentials) {
+      const email = normaliseEmail(credentials?.email);
+      const password = String(credentials?.password || '');
 
-      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      if (!validateEmail(email)) {
         throw new Meteor.Error('invalid-email', 'Please enter a valid email address.');
       }
 
-      const account = await PlayerAccountsCollection.findOneAsync({ email });
+      if (!password) {
+        throw new Meteor.Error('missing-password', 'Please enter your password.');
+      }
 
+      const account = await PlayerAccountsCollection.findOneAsync({ email });
       if (!account) {
         throw new Meteor.Error('not-found', 'No account found with this email.');
+      }
+
+      const attemptedHash = hashPassword(password, account.passwordSalt);
+      if (attemptedHash !== account.passwordHash) {
+        throw new Meteor.Error('wrong-password', 'Incorrect password.');
       }
 
       return {

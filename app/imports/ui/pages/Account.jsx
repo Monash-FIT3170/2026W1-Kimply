@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Meteor } from 'meteor/meteor';
 import { useNavigate } from 'react-router-dom';
-import { BG, PRIMARY, TILE, HAIRLINE, TileLattice, TopBar } from '../components/design';
+import { BG, HAIRLINE, PRIMARY, TILE, TileLattice, TopBar } from '../components/design';
 
 export function Account() {
   const navigate = useNavigate();
@@ -9,16 +9,28 @@ export function Account() {
   const [mode, setMode] = useState('register');
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  const switchMode = (nextMode) => {
+    setMode(nextMode);
+    setError('');
+  };
+
   const register = () => {
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
     setSaving(true);
     setError('');
 
     Meteor.call(
       'playerAccounts.register',
-      { displayName, email },
+      { displayName, email, password },
       (err, account) => {
         setSaving(false);
 
@@ -27,11 +39,7 @@ export function Account() {
           return;
         }
 
-        navigate('/play', {
-          state: {
-            playerAccount: account,
-          },
-        });
+        navigate('/play', { state: { playerAccount: account } });
       }
     );
   };
@@ -40,7 +48,7 @@ export function Account() {
     setSaving(true);
     setError('');
 
-    Meteor.call('playerAccounts.signIn', email, (err, account) => {
+    Meteor.call('playerAccounts.signIn', { email, password }, (err, account) => {
       setSaving(false);
 
       if (err) {
@@ -48,15 +56,12 @@ export function Account() {
         return;
       }
 
-      navigate('/play', {
-        state: {
-          playerAccount: account,
-        },
-      });
+      navigate('/play', { state: { playerAccount: account } });
     });
   };
 
   const submit = () => {
+    if (saving) return;
     if (mode === 'register') register();
     else signIn();
   };
@@ -89,16 +94,13 @@ export function Account() {
 
           <p className="font-manrope text-sm text-fg3 mb-5">
             {mode === 'register'
-              ? 'Register now so your stats can be saved after each game.'
-              : 'Sign in with your email to continue saving stats.'}
+              ? 'Register with an email and password so your stats can be saved.'
+              : 'Sign in with your email and password to continue saving stats.'}
           </p>
 
           <div className="grid grid-cols-2 gap-2 mb-5">
             <button
-              onClick={() => {
-                setMode('register');
-                setError('');
-              }}
+              onClick={() => switchMode('register')}
               className="rounded-xl px-4 py-2.5 font-outfit font-bold border cursor-pointer"
               style={{
                 background: mode === 'register' ? PRIMARY : 'transparent',
@@ -110,10 +112,7 @@ export function Account() {
             </button>
 
             <button
-              onClick={() => {
-                setMode('signin');
-                setError('');
-              }}
+              onClick={() => switchMode('signin')}
               className="rounded-xl px-4 py-2.5 font-outfit font-bold border cursor-pointer"
               style={{
                 background: mode === 'signin' ? PRIMARY : 'transparent',
@@ -141,7 +140,7 @@ export function Account() {
             </label>
           )}
 
-          <label className="block mb-4">
+          <label className="block mb-3">
             <span className="block font-mono text-[10px] text-fg3 uppercase tracking-widest mb-1.5">
               Email
             </span>
@@ -154,6 +153,38 @@ export function Account() {
               style={{ caretColor: PRIMARY }}
             />
           </label>
+
+          <label className="block mb-3">
+            <span className="block font-mono text-[10px] text-fg3 uppercase tracking-widest mb-1.5">
+              Password
+            </span>
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="At least 8 characters"
+              maxLength={80}
+              className="w-full bg-bg border border-hairline rounded-xl px-3.5 py-3 font-outfit font-semibold text-fg outline-none placeholder:text-fg3"
+              style={{ caretColor: PRIMARY }}
+            />
+          </label>
+
+          {mode === 'register' && (
+            <label className="block mb-4">
+              <span className="block font-mono text-[10px] text-fg3 uppercase tracking-widest mb-1.5">
+                Confirm password
+              </span>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                placeholder="Re-enter your password"
+                maxLength={80}
+                className="w-full bg-bg border border-hairline rounded-xl px-3.5 py-3 font-outfit font-semibold text-fg outline-none placeholder:text-fg3"
+                style={{ caretColor: PRIMARY }}
+              />
+            </label>
+          )}
 
           {error && <p className="font-manrope text-[13px] text-red-400 mb-3">{error}</p>}
 

@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { Meteor } from 'meteor/meteor';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Meteor } from 'meteor/meteor';
 import { BG, PRIMARY, TILE, HAIRLINE, FG2, TileLattice, Wordmark, Avatar, avatarColor, ArrowIcon } from '../components/design';
 
 function PencilIcon({ size = 14 }) {
@@ -139,10 +138,16 @@ export function PlayRoute() {
               </button>
             </div>
           )}
+
           <p className="font-manrope text-[13px] text-fg3 text-center mt-3">
-          Want to save your stats?{' '}
-          <Link to ="/account" className="font-outfit font-bold">
-          style={{ color: PRIMARY }}Sign up</Link>
+            Want to save your stats?{' '}
+            <Link
+              to="/account"
+              className="font-outfit font-bold"
+              style={{ color: PRIMARY }}
+            >
+              Sign up
+            </Link>
           </p>
         </div>
 
