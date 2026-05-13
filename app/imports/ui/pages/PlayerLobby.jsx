@@ -3,9 +3,10 @@ import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { Meteor } from 'meteor/meteor';
 import { useSubscribe, useTracker } from 'meteor/react-meteor-data';
 import { RoomsCollection } from '/imports/api/rooms';
+import { ConfirmationPopup } from '../components/ConfirmationPopup';
 import {
   PRIMARY, TILE, HAIRLINE, FG2,
-  TileLattice, Wordmark, Avatar, avatarColor, ReadyChip, CopyIcon, BackChevron, PencilIcon
+  TileLattice, Wordmark, Avatar, avatarColor, ReadyChip, CopyIcon, BackChevron, PencilIcon, RainbowBar,
 } from '../components/design';
 
 const MAX_PLAYERS = 8;
@@ -131,9 +132,8 @@ function HostView({ room, playerName, onBack }) {
           className="w-full max-w-lg bg-surface border border-hairline rounded-[22px] flex flex-col items-center gap-4 pt-8 pb-5 px-6 relative overflow-hidden"
         >
           {/* tile band */}
-          <div
+          <RainbowBar
             className="absolute top-0 left-0 right-0 h-1"
-            style={{ background:`linear-gradient(90deg, ${TILE.pink}, ${TILE.amber}, ${TILE.teal}, ${TILE.violet})` }}
           />
 
           {/* Game Name */}
@@ -296,6 +296,7 @@ export function PlayerLobby() {
   const navigate = useNavigate();
   const playerName = state?.playerName || '';
   const isHost = state?.isHost === true;
+  const [showExitPopup, setShowExitPopup] = useState(false);
 
   const isLoading = useSubscribe('rooms.lobby', pin);
   const room = useTracker(() => RoomsCollection.findOne({ pin }));
@@ -313,8 +314,31 @@ export function PlayerLobby() {
     );
   }
 
-  const onBack = () => navigate('/play', { replace: true });
-  return isHost
-    ? <HostView room={room} playerName={playerName} onBack={onBack} />
-    : <JoinedView room={room} playerName={playerName} onBack={onBack} navigate={navigate} />;
+  const onBack = () => setShowExitPopup(true);
+
+
+  return (
+    <>
+      <ConfirmationPopup
+        isOpen = {showExitPopup}
+        onConfirm ={() => {
+          setShowExitPopup(false);
+          navigate('/play', {replace: true});
+        }}
+        onCancel = {() =>{
+          setShowExitPopup(false);
+        }}
+        title='Leave Game'
+        message='Are you sure you want to disconnect from the game?'
+      />
+
+      { isHost? (
+        <HostView room={room} playerName={playerName} onBack={onBack} />
+      ) : (
+        <JoinedView room={room} playerName={playerName} onBack={onBack} navigate={navigate} />
+      )}
+    </>
+  )
+
+
 }
