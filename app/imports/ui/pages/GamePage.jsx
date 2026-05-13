@@ -77,14 +77,13 @@ export const GamePage = () => {
             }
 
             if (result) {
-                setMessage('Correct sequence!');
-            } else {
-                setMessage('Wrong sequence. Try again if you still have lives.');
-            }
-
-            setPlayerCanInput(false);
-        });
-    };
+    setMessage('Correct sequence! Please wait for other players to finish.');
+    setPlayerCanInput(false);
+} else {
+    setMessage('Wrong sequence. Try again.');
+    setAttemptedSequence([]);
+    setPlayerCanInput(true);
+}
 
     const handleClear = () => {
         setAttemptedSequence([]);
