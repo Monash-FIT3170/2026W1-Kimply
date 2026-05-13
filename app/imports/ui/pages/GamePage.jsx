@@ -59,31 +59,33 @@ export const GamePage = () => {
     };
 
     const handleSubmit = () => {
-        if (!playerId) {
-            setMessage('Player is not ready yet.');
+    if (!playerId) {
+        setMessage('Player is not ready yet.');
+        return;
+    }
+
+    if (attemptedSequence.length !== round.sequence.length) {
+        setMessage(`Choose ${round.sequence.length} colours before submitting.`);
+        return;
+    }
+
+    Meteor.call('players.submitSequence', playerId, attemptedSequence, (error, result) => {
+        if (error) {
+            console.error(error);
+            setMessage('Something went wrong while submitting.');
             return;
         }
 
-        if (attemptedSequence.length !== round.sequence.length) {
-            setMessage(`Choose ${round.sequence.length} colours before submitting.`);
-            return;
+        if (result) {
+            setMessage('Correct sequence! Please wait for other players to finish.');
+            setPlayerCanInput(false);
+        } else {
+            setMessage('Wrong sequence. Try again.');
+            setAttemptedSequence([]);
+            setPlayerCanInput(true);
         }
-
-        Meteor.call('players.submitSequence', playerId, attemptedSequence, (error, result) => {
-            if (error) {
-                console.error(error);
-                setMessage('Something went wrong while submitting.');
-                return;
-            }
-
-            if (result) {
-    setMessage('Correct sequence! Please wait for other players to finish.');
-    setPlayerCanInput(false);
-} else {
-    setMessage('Wrong sequence. Try again.');
-    setAttemptedSequence([]);
-    setPlayerCanInput(true);
-}
+    });
+};
 
     const handleClear = () => {
         setAttemptedSequence([]);
