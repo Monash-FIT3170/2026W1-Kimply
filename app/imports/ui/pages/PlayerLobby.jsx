@@ -301,6 +301,12 @@ export function PlayerLobby() {
   const isLoading = useSubscribe('rooms.lobby', pin);
   const room = useTracker(() => RoomsCollection.findOne({ pin }));
 
+  useEffect(()=>{
+    if (room === undefined){
+      navigate('/play', {replace: true});
+    }
+  }, [room]);
+
   if (!isLoading() && !room) {
     navigate('/play', { replace: true });
     return null;
@@ -323,13 +329,15 @@ export function PlayerLobby() {
         isOpen = {showExitPopup}
         onConfirm ={() => {
           setShowExitPopup(false);
+          Meteor.call('rooms.disconnect', pin, ) //TODO How do i get playerID here
           navigate('/play', {replace: true});
+
         }}
         onCancel = {() =>{
           setShowExitPopup(false);
         }}
         title='Leave Game'
-        message='Are you sure you want to disconnect from the game?'
+        message= { isHost ? 'Are you sure you want to disconnect from the game, this will terminate the game sesssion.' :'Are you sure you want to disconnect from the game?'}
       />
 
       { isHost? (

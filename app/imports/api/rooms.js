@@ -63,6 +63,26 @@ if (Meteor.isServer) {
       );
     },
 
+    async 'rooms.disconnect'(pin, playerId){
+      if (typeof pin !== 'string' || !pin.trim()) throw new Meteor.Error('invalid', 'Invalid PIN');
+      if (typeof playerId !== 'string' || !playerId.trim()) throw new Meteor.Error('invalid', 'Invalid player ID');
+
+      const room = await RoomsCollection.findOneAsync({ pin: pin.trim(), status: 'lobby' });
+      if (!room) throw new Meteor.Error('not-found', 'Room not found');
+      
+      const isHost = (room.players || []).find(p=> p.id === playerId)?.name === room.hostName
+
+      if (isHost){ // Delete room if host disconnects
+        await RoomsCollection.removeAsync({ _id : room._id });
+        return
+      }
+
+      await RoomsCollection.updateAsync(
+        {_id: room._id},
+        { $pull: { players: { id: playerId }}}
+      );
+    },
+
     async 'rooms.join'(pin, playerName) {
       if (typeof pin !== 'string' || !pin.trim()) {
         throw new Meteor.Error('invalid', 'Invalid PIN');
