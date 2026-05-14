@@ -10,6 +10,8 @@ export const GamePage = () => {
     const [playerCanInput, setPlayerCanInput] = useState(false);
     const [attemptedSequence, setAttemptedSequence] = useState([]);
     const [message, setMessage] = useState('');
+    const [shake, setShake] = useState(false);
+    const [correctGlow, setCorrectGlow] = useState(false);
 
     useEffect(() => {
         const roundsSub = Meteor.subscribe('rounds');
@@ -78,9 +80,13 @@ export const GamePage = () => {
 
         if (result) {
             setMessage('Correct sequence! Please wait for other players to finish.');
+            setCorrectGlow(true);
+            setTimeout(() => setCorrectGlow(false), 800);
             setPlayerCanInput(false);
         } else {
             setMessage('Wrong sequence. Try again.');
+            setShake(true);
+            setTimeout(() => setShake(false), 400);
             setAttemptedSequence([]);
             setPlayerCanInput(true);
         }
@@ -128,6 +134,9 @@ export const GamePage = () => {
                 alignItems: 'center',
                 justifyContent: 'center',
                 padding: '20px',
+                transform: shake ? 'translateX(-6px)' : 'translateX(0)',
+transition: 'transform 0.1s ease',
+boxShadow: correctGlow ? 'inset 0 0 80px #00aaff' : 'none',
             }}
         >
             <div style={{ textAlign: 'center' }}>
