@@ -71,13 +71,15 @@ function RouteCard({ kind, title, blurb, color, primary, onClick, disabled }) {
 }
 
 export function PlayRoute() {
-  const [name, setName] = useState('');
-  const [editing, setEditing] = useState(true);
+  const { state } = useLocation();
+  const signedInAccount = state?.playerAccount;
+
+  const [name, setName] = useState(signedInAccount?.displayName || '');
+  const [editing, setEditing] = useState(!signedInAccount?.displayName);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const { state } = useLocation();
   const wasKicked = state?.kicked === true;
 
   const trimmedName = name.trim();
@@ -90,13 +92,13 @@ export function PlayRoute() {
     Meteor.call('rooms.create', trimmedName, (err, result) => {
       setLoading(false);
       if (err) { setError('Could not create room. Try again.'); return; }
-      navigate(`/play/${result.pin}`, { state: { playerName: trimmedName, isHost: true } });
+      navigate(`/play/${result.pin}`, { state: { playerName: trimmedName, playerAccount: signedInAccount, isHost: true } });
     });
   };
 
   const handleJoin = () => {
     if (!hasName) return;
-    navigate('/play/join', { state: { playerName: trimmedName } });
+    navigate('/play/join', { state: { playerName: trimmedName, playerAccount: signedInAccount } });
   };
 
   return (
@@ -139,16 +141,22 @@ export function PlayRoute() {
             </div>
           )}
 
-          <p className="font-manrope text-[13px] text-fg3 text-center mt-3">
-            Want to save your stats?{' '}
-            <Link
-              to="/account"
-              className="font-outfit font-bold"
-              style={{ color: PRIMARY }}
-            >
-              Sign up
-            </Link>
-          </p>
+          {signedInAccount ? (
+            <p className="font-manrope text-[13px] text-center mt-3" style={{ color: PRIMARY }}>
+              Signed in as {signedInAccount.email}
+            </p>
+          ) : (
+            <p className="font-manrope text-[13px] text-fg3 text-center mt-3">
+              Want to save your stats?{' '}
+              <Link
+                to="/account"
+                className="font-outfit font-bold"
+                style={{ color: PRIMARY }}
+              >
+                Sign up
+              </Link>
+            </p>
+          )}
         </div>
 
         {wasKicked && (
