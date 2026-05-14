@@ -138,7 +138,7 @@ export const ColourSequence = ({
                             key={colourId}
                             data-testid={`colour-tile-${colourId}`}
                             disabled={!playerCanInput}
-                            onClick={() => onColourClick(colourId)}
+                            onClick={() => handleTileClick(colourId)}
                             style={{
                                 width: '136px',
                                 height: '136px',
@@ -149,7 +149,7 @@ export const ColourSequence = ({
                                 borderRadius: '6px',
                                 transition: 'all 0.15s ease',
                                 boxShadow: isActive
-                                    ? `0 0 40px ${COLOURS[colourId].active}99`
+                                    ? `0 0 45px ${COLOURS[colourId].active}`
                                     : 'none',
                                 border: '2px solid rgba(255,255,255,0.15)',
                                 cursor: playerCanInput ? 'pointer' : 'not-allowed',
