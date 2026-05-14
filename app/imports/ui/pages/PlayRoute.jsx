@@ -142,7 +142,7 @@ export function PlayRoute() {
           )}
 
           {signedInAccount ? (
-            <p className="font-manrope text-[13px] text-center mt-3" style={{ color: PRIMARY }}>
+            <p className="font-manrope text-[13px] text-fg3 text-center mt-3">
               Signed in as {signedInAccount.email}
             </p>
           ) : (
@@ -150,8 +150,7 @@ export function PlayRoute() {
               Want to save your stats?{' '}
               <Link
                 to="/account"
-                className="font-outfit font-bold"
-                style={{ color: PRIMARY }}
+                className="font-outfit font-bold text-fg"
               >
                 Sign up
               </Link>
