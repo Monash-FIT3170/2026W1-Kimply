@@ -66,6 +66,10 @@ export function Account() {
     else signIn();
   };
 
+  const onKey = (event) => {
+    if (event.key === 'Enter') submit();
+  };
+
   return (
     <div className="relative w-full h-full bg-bg text-fg overflow-hidden flex flex-col">
       <TileLattice opacity={0.05} />
@@ -132,6 +136,7 @@ export function Account() {
               <input
                 value={displayName}
                 onChange={(event) => setDisplayName(event.target.value)}
+                onKeyDown={onKey}
                 placeholder="Your name"
                 maxLength={40}
                 className="w-full bg-bg border border-hairline rounded-xl px-3.5 py-3 font-outfit font-semibold text-fg outline-none placeholder:text-fg3"
@@ -147,6 +152,7 @@ export function Account() {
             <input
               value={email}
               onChange={(event) => setEmail(event.target.value)}
+              onKeyDown={onKey}
               placeholder="you@example.com"
               maxLength={80}
               className="w-full bg-bg border border-hairline rounded-xl px-3.5 py-3 font-outfit font-semibold text-fg outline-none placeholder:text-fg3"
@@ -162,6 +168,7 @@ export function Account() {
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
+              onKeyDown={onKey}
               placeholder="At least 8 characters"
               maxLength={80}
               className="w-full bg-bg border border-hairline rounded-xl px-3.5 py-3 font-outfit font-semibold text-fg outline-none placeholder:text-fg3"
@@ -178,6 +185,7 @@ export function Account() {
                 type="password"
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
+                onKeyDown={onKey}
                 placeholder="Re-enter your password"
                 maxLength={80}
                 className="w-full bg-bg border border-hairline rounded-xl px-3.5 py-3 font-outfit font-semibold text-fg outline-none placeholder:text-fg3"
