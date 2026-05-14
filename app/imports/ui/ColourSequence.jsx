@@ -29,6 +29,7 @@ export const ColourSequence = ({
     onColourClick,
 }) => {
     const [activeColour, setActiveColour] = useState(null);
+    const [clickedColour, setClickedColour] = useState(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isDone, setIsDone] = useState(false);
 
@@ -74,7 +75,33 @@ export const ColourSequence = ({
             clearTimeout(startDelay);
         };
     }, [roundId]);
+    const playClickSound = () => {
+        const audioContext = new AudioContext();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
 
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        oscillator.frequency.value = 450;
+        gainNode.gain.value = 0.08;
+
+        oscillator.start();
+        oscillator.stop(audioContext.currentTime + 0.08);
+    };
+
+    const handleTileClick = (colourId) => {
+        if (!playerCanInput) return;
+
+        setClickedColour(colourId);
+        playClickSound();
+
+        setTimeout(() => {
+            setClickedColour(null);
+        }, 200);
+
+        onColourClick(colourId);
+    };
     return (
         <div>
             <p
@@ -103,7 +130,7 @@ export const ColourSequence = ({
             >
                 {TILE_ORDER.map((colourId) => {
                     const ShapeIcon = SHAPE_ICONS[colourId];
-                    const isActive = activeColour === colourId;
+                    const isActive = activeColour === colourId || clickedColour === colourId;
                     const bg = isActive ? COLOURS[colourId].active : COLOURS[colourId].dim;
 
                     return (
