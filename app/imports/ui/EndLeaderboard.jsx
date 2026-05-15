@@ -91,13 +91,22 @@ export const EndLeaderboard = () => {
                                         : `${group[0].name}${group.length > 1 ? ` +${group.length - 1}` : ''}`}
                                 </span>
                                 <span
-                                    className="font-mono text-[10px] uppercase tracking-widest text-center"
+                                    className="font-mono text-[10px] uppercase tracking-widest text-center px-2 py-1 rounded-full"
                                     style={{
-                                        color: FG2,
+                                        color: medal.color,
+                                        background: `color-mix(in oklab, ${medal.color} ${medalIndex === 0 ? 22 : medalIndex === 1 ? 14 : 18}%, transparent)`,
+                                        border: `1px solid color-mix(in oklab, ${medal.color} ${medalIndex === 0 ? 45 : medalIndex === 1 ? 28 : 36}%, transparent)`,
+                                        boxShadow: medalIndex === 0
+                                            ? `0 0 18px color-mix(in oklab, ${medal.color} 24%, transparent)`
+                                            : 'none',
                                         animation: `avatarPop 0.4s cubic-bezier(0.34,1.56,0.64,1) ${avatarDelay + 0.1}s both`,
                                     }}
                                 >
-                                    {`Rd ${group[0].eliminatedRound}`}
+                                    {medalIndex === 0
+                                        ? `Winner · Rd ${group[0].eliminatedRound}`
+                                        : medalIndex === 1
+                                            ? `Runner-up · Rd ${group[0].eliminatedRound}`
+                                            : `Third · Rd ${group[0].eliminatedRound}`}
                                 </span>
                                 <div
                                     className="w-full rounded-t-xl flex items-center justify-center font-outfit font-extrabold text-lg"
