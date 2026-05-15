@@ -78,7 +78,7 @@ export const GamePage = () => {
             return;
         }
 
-        if (result) {
+        if (result.success) {
             setMessage('Correct sequence! Please wait for other players to finish.');
             setCorrectGlow(true);
             setTimeout(() => setCorrectGlow(false), 800);
