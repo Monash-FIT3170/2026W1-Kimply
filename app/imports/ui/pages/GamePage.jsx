@@ -4,6 +4,7 @@ import { useTracker } from 'meteor/react-meteor-data';
 import { RoundsCollection } from '../../api/rounds';
 import { PlayersCollection } from '../../api/players';
 import { ColourSequence } from '../ColourSequence.jsx';
+import { Leaderboard } from '../Leaderboard.jsx';
 
 export const GamePage = () => {
     const [playerId, setPlayerId] = useState(null);
@@ -12,6 +13,7 @@ export const GamePage = () => {
     const [message, setMessage] = useState('');
     const [shake, setShake] = useState(false);
     const [correctGlow, setCorrectGlow] = useState(false);
+    const [completedRoundId, setCompletedRoundId] = useState(null);
 
     useEffect(() => {
         const roundsSub = Meteor.subscribe('rounds');
@@ -50,6 +52,7 @@ export const GamePage = () => {
         setPlayerCanInput(false);
         setAttemptedSequence([]);
         setMessage('');
+        setCompletedRoundId(null);
     }, [round?._id]);
 
     const handleColourClick = (colour) => {
@@ -80,6 +83,7 @@ export const GamePage = () => {
 
         if (result.success) {
             setMessage('Correct sequence! Please wait for other players to finish.');
+            setCompletedRoundId(round._id);
             setCorrectGlow(true);
             setTimeout(() => setCorrectGlow(false), 800);
             setPlayerCanInput(false);
@@ -281,6 +285,9 @@ boxShadow: correctGlow ? 'inset 0 0 80px #00aaff' : 'none',
                         SUBMIT
                     </button>
                 </div>
+                {completedRoundId && (
+                    <Leaderboard roundId={completedRoundId} />
+                )}
             </div>
         </div>
     );
