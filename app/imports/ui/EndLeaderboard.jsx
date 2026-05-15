@@ -90,6 +90,15 @@ export const EndLeaderboard = () => {
                                         ? `${group[0].name} & ${group[1].name}`
                                         : `${group[0].name}${group.length > 1 ? ` +${group.length - 1}` : ''}`}
                                 </span>
+                                <span
+                                    className="font-mono text-[10px] uppercase tracking-widest text-center"
+                                    style={{
+                                        color: FG2,
+                                        animation: `avatarPop 0.4s cubic-bezier(0.34,1.56,0.64,1) ${avatarDelay + 0.1}s both`,
+                                    }}
+                                >
+                                    {`Rd ${group[0].eliminatedRound}`}
+                                </span>
                                 <div
                                     className="w-full rounded-t-xl flex items-center justify-center font-outfit font-extrabold text-lg"
                                     style={{
