@@ -45,23 +45,32 @@ Meteor.methods({
 
         // if correct update player values 
         if (correct) {
-            await PlayersCollection.updateAsync(playerId, {
-                $set: {
-                    attemptedSequence,
-                    completeRound: true,
-                },
-            });
 
-            // add to leaderboard
-            await LeaderboardCollection.insertAsync({
-                playerId,
-                name: player.name,
-                lives: player.lives,
-                roundId: player.roundId,
-                completedAt: new Date(),
-            });
-        } else {
-            const newLives = player.lives - 1;
+    // mark player as completed
+    await PlayersCollection.updateAsync(playerId, {
+        $set: {
+            attemptedSequence,
+            completeRound: true,
+        },
+    });
+
+    // store successful completion in leaderboard
+    await LeaderboardCollection.insertAsync({
+        playerId,
+        name: player.name,
+        lives: player.lives,
+        roundId: player.roundId,
+        completedAt: new Date(),
+    });
+
+    // return completion state to client
+    return {
+        success: true,
+        sequenceComplete: true,
+    };
+}
+            ;
+        
             await PlayersCollection.updateAsync(playerId, {
                 $set: {
                     attemptedSequence,
@@ -70,7 +79,10 @@ Meteor.methods({
                 },
             });
         }
-
+            return {
+        success: false,
+        sequenceComplete: false,
+    };
         const playersInRound = await PlayersCollection.find({
             roundId: player.roundId,
         }).fetchAsync();
