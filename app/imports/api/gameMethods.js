@@ -91,6 +91,7 @@ Meteor.methods({
             return {
                 success: false,
                 sequenceComplete: false,
+                remainingLives: newLives,
             };
         }
 

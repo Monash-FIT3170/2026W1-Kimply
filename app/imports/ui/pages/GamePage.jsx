@@ -14,7 +14,7 @@ export const GamePage = () => {
     const [shake, setShake] = useState(false);
     const [correctGlow, setCorrectGlow] = useState(false);
     const [completedRoundId, setCompletedRoundId] = useState(null);
-    const [lives, setLives] = useState(3);
+
 
     useEffect(() => {
         const roundsSub = Meteor.subscribe('rounds');
@@ -82,11 +82,17 @@ export const GamePage = () => {
                 setTimeout(() => setCorrectGlow(false), 800);
                 setPlayerCanInput(false);
             } else {
-                setMessage('Wrong sequence. Try again.');
-                setShake(true);
-                setTimeout(() => setShake(false), 400);
-                setAttemptedSequence([]);
-                setPlayerCanInput(true);
+                const remainingLives = result.remainingLives ?? (player?.lives ?? 3) - 1;
+                if (remainingLives <= 0) {
+                    setMessage('No lives left. You have been eliminated!');
+                    setPlayerCanInput(false);
+                } else {
+                    setMessage(`Wrong sequence! ${remainingLives} ${remainingLives === 1 ? 'life' : 'lives'} remaining.`);
+                    setShake(true);
+                    setTimeout(() => setShake(false), 400);
+                    setAttemptedSequence([]);
+                    setPlayerCanInput(true);
+                }
             }
         });
     };
@@ -141,13 +147,13 @@ export const GamePage = () => {
                     <div key={heart} style={{
                         width: '44px',
                         height: '44px',
-                        backgroundColor: heart <= lives ? '#e03030' : '#333',
+                        backgroundColor: heart <= (player?.lives ?? 3) ? '#e03030' : '#333',
                         borderRadius: '50%',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         fontSize: '20px',
-                        boxShadow: heart <= lives ? '0 0 10px #e0303088' : 'none',
+                        boxShadow: heart <= (player?.lives ?? 3) ? '0 0 10px #e0303088' : 'none',
                         transition: 'all 0.3s ease',
                     }}>
                         {'\u2764'}
@@ -173,7 +179,6 @@ export const GamePage = () => {
                         fontSize: '0.9rem',
                     }}
                 >
-                    Lives: {player?.lives ?? 3}
                 </p>
                 <div
                     style={{

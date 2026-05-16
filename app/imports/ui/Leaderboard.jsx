@@ -47,7 +47,7 @@ export const Leaderboard = ({ roundId }) => {
                     Waiting for players to finish...
                 </p>
             ) : (
-                
+
                 leaderboard.map((entry, index) => {
                     const isAlive = entry.lives > 0;
                     return (
