@@ -302,7 +302,7 @@ export function PlayerLobby() {
   const room = useTracker(() => RoomsCollection.findOne({ pin }));
 
   useEffect(()=>{
-    if (room === undefined){
+    if (room === undefined && !isLoading){
       navigate('/play', {replace: true});
     }
   }, [room]);
