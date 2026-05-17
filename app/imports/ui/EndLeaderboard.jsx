@@ -41,16 +41,18 @@ export const EndLeaderboard = () => {
     const podiumHeights = [72, 100, 56];
 
     return (
-        <div className="relative w-full min-h-screen flex flex-col overflow-hidden" style={{ background: BG, color: 'oklch(0.93 0.01 270)' }}>
-            <TileLattice opacity={0.09} />
+        <div className="relative w-full min-h-screen flex flex-col" style={{ background: BG, color: 'oklch(0.93 0.01 270)' }}>
+            <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 0 }}>
+                <TileLattice opacity={0.09} />
+            </div>
             <div
-                className="absolute inset-0 pointer-events-none"
-                style={{ background: `radial-gradient(ellipse at center, ${BG} 0%, ${BG} 22%, transparent 70%)` }}
+                className="fixed inset-0 pointer-events-none"
+                style={{ background: `radial-gradient(ellipse at center, ${BG} 0%, ${BG} 22%, transparent 70%)`, zIndex: 0 }}
             />
 
-            <TopBar onBack={() => navigate('/')} />
+            <div className="relative z-10"><TopBar onBack={() => navigate('/')} /></div>
 
-            <div className="relative flex-1 flex flex-col items-center px-6 pb-12">
+            <div className="relative z-10 flex-1 flex flex-col items-center px-6 pb-12">
                 <h1 className="font-outfit font-extrabold text-5xl tracking-tight mb-2">Leaderboard</h1>
                 <p className="font-mono text-[13px] uppercase tracking-widest mb-8" style={{ color: FG2 }}>Final Results</p>
 
