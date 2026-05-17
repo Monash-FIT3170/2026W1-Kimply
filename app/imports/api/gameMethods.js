@@ -12,6 +12,21 @@ function generateSequence(length) {
     );
 }
 
+async function checkWinner(roundId) {
+    const players = await PlayersCollection.find({ roundId }).fetchAsync();
+
+    const active = players.filter(p => !p.eliminated);
+
+    const alreadyWinner = players.some(p => p.winner);
+    if (alreadyWinner) return;
+
+    if (active.length === 1) {
+        await PlayersCollection.updateAsync(active[0]._id, {
+            $set: { winner: true }
+        });
+    }
+}
+
 Meteor.methods({
 
     // Generate a new round with a colour sequence
@@ -38,7 +53,7 @@ Meteor.methods({
             attemptedSequence: [],
             eliminated: false,
             winner: false,
-            completeRound: false,
+            completeRound: false
         });
     },
 
@@ -65,6 +80,8 @@ Meteor.methods({
                 },
             });
 
+            await checkWinner(player.roundId);
+
             // add successful completion to leaderboard
             await LeaderboardCollection.insertAsync({
                 playerId,
@@ -73,7 +90,7 @@ Meteor.methods({
                 roundId: player.roundId,
                 completedAt: new Date(),
             });
-
+        
         } else {
 
             // remove one life for wrong sequence
@@ -83,9 +100,11 @@ Meteor.methods({
                 $set: {
                     attemptedSequence,
                     lives: newLives,
-                    eliminated: newLives <= 0,
+                    eliminated: newLives <= 0
                 },
             });
+
+            await checkWinner(player.roundId);
 
             // return failed attempt to client
             return {
@@ -109,8 +128,10 @@ Meteor.methods({
             activePlayers.length > 0 &&
             activePlayers.every(p => p.completeRound);
 
+        const hasWinner = playersInRound.some(p => p.winner);
+
         // move to next round if everyone finished
-        if (!round.advanced && allFinished) {
+        if (!round.advanced && allFinished && !hasWinner) {
             await Meteor.callAsync(
                 'rounds.advance',
                 player.roundId
