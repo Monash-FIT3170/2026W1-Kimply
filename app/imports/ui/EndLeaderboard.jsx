@@ -19,6 +19,15 @@ export const EndLeaderboard = () => {
         { name: "Yusuf",   eliminatedRound: 2 },
         { name: "Mia",     eliminatedRound: 2 },
         { name: "Noah",    eliminatedRound: 1 },
+        { name: "Priya",   eliminatedRound: 1 },
+        { name: "Luca",    eliminatedRound: 1 },
+        { name: "Amara",   eliminatedRound: 2 },
+        { name: "Tobias",  eliminatedRound: 3 },
+        { name: "Sienna",  eliminatedRound: 4 },
+        { name: "Kwame",   eliminatedRound: 4 },
+        { name: "Ingrid",  eliminatedRound: 5 },
+        { name: "Remy",    eliminatedRound: 5 },
+        { name: "Bashir",  eliminatedRound: 6 },
         ...Array.from({ length: 100 }, (_, i) => ({ name: `Player${i + 1}`, eliminatedRound: 3 })),
     ]);
 
@@ -42,8 +51,8 @@ export const EndLeaderboard = () => {
             <TopBar onBack={() => navigate('/')} />
 
             <div className="relative flex-1 flex flex-col items-center px-6 pb-12">
-                <h1 className="font-outfit font-extrabold text-3xl tracking-tight mb-1">Leaderboard</h1>
-                <p className="font-mono text-[11px] uppercase tracking-widest mb-8" style={{ color: FG2 }}>Final Results</p>
+                <h1 className="font-outfit font-extrabold text-5xl tracking-tight mb-2">Leaderboard</h1>
+                <p className="font-mono text-[13px] uppercase tracking-widest mb-8" style={{ color: FG2 }}>Final Results</p>
 
                 {/* Podium */}
                 <div className="w-full max-w-md flex items-end justify-center gap-3 mb-10 overflow-hidden">
