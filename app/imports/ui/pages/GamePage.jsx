@@ -128,6 +128,45 @@ export const GamePage = () => {
         );
     }
 
+    if (!player) return null;
+
+    if (player?.winner) {
+        return (
+            <div style={{
+                minHeight: '100vh',
+                background: 'linear-gradient(135deg, #0f0c29, #302b63, #24243e)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexDirection: 'column',
+                color: 'white',
+                textAlign: 'center'
+            }}>
+                <h1 style={{ fontSize: '3rem', marginBottom: '10px' }}>
+                    🏆 YOU WON THE GAME
+                </h1>
+            </div>
+        );
+    }
+
+    if (player?.eliminated) {
+        return (
+            <div style={{
+                minHeight: '100vh',
+                background: '#000',
+                color: 'white',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '2rem'
+            }}>
+                <h1 style={{ fontSize: '3rem', marginBottom: '10px' }}>
+                    💀 GAME OVER
+                </h1>
+            </div>
+        );
+    }
+
     return (
         <div
             style={{
