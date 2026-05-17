@@ -52,17 +52,18 @@ jobs:
           MONGO_URL: mongodb://localhost:27017/kimply_test
           ROOT_URL: http://localhost:3000
           METEOR_ALLOW_SUPERUSER: "1"
-          COVERAGE: "1"
-          COVERAGE_OUT_HTML: ".coverage/html"
-          COVERAGE_OUT_LCOV: ".coverage/lcov.info"
+          COVERAGE_DIR: ${{ github.workspace }}/app/.nyc_output
         run: meteor test --once --full-app --driver-package meteortesting:mocha
         timeout-minutes: 20
 
       - name: Enforce coverage threshold
         working-directory: app
         run: |
-          npx nyc report --reporter=text \
-            --temp-dir=.coverage \
+          npx nyc report \
+            --reporter=text \
+            --temp-dir=.nyc_output \
+            --include='imports/**/*.js' \
+            --check-coverage \
             --branches=50 --lines=50 --functions=50 --statements=50
 
       - name: Upload coverage report
@@ -70,4 +71,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: app/.coverage/html
+          path: app/coverage
