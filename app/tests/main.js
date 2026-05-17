@@ -1,4 +1,5 @@
 import assert from "assert";
+import "./rooms.test";
 
 describe("2026W1-Kimply", function () {
   it("package.json has correct name", async function () {
