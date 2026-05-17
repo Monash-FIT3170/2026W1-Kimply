@@ -15,7 +15,8 @@ function generatePin() {
   return Array.from({ length: 5 }, () => PIN_CHARS[Math.floor(Math.random() * PIN_CHARS.length)]).join('');
 }
 
-if (Meteor.isServer) {
+if (Meteor.isServer && !global._roomsServerInitialized) {
+  global._roomsServerInitialized = true;
   Meteor.publish('rooms.lobby', function (pin) {
     if (typeof pin !== 'string') return this.ready();
     return RoomsCollection.find(
