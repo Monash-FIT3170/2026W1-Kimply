@@ -246,7 +246,7 @@ function JoinedView({ room, playerName, onBack, navigate }) {
           <div className="flex items-baseline justify-between flex-wrap gap-2">
             <div>
               <p className="font-mono text-[11px] text-fg3 uppercase tracking-[0.18em] mb-1">You're in</p>
-              <h1 className="font-outfit font-extrabold text-4xl text-fg tracking-tight leading-none">Your Lobby</h1>
+              <h1 className="font-outfit font-extrabold text-4xl text-fg tracking-tight leading-none">{room.gameName}</h1>
             </div>
             <div className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-[10px] bg-surface border border-hairline">
               <span className="font-mono text-[10px] text-fg3 uppercase tracking-widest">Room</span>
@@ -329,7 +329,7 @@ export function PlayerLobby() {
         isOpen = {showExitPopup}
         onConfirm ={() => {
           setShowExitPopup(false);
-          Meteor.call('rooms.disconnect', pin, ) //TODO How do i get playerID here
+          Meteor.call('rooms.disconnect', pin, playerName) //TODO Is this fine with player name or should use player ID?
           navigate('/play', {replace: true});
 
         }}
