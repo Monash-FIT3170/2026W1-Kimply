@@ -1,55 +1,31 @@
 import { Meteor } from "meteor/meteor";
 import { LinksCollection } from "/imports/api/links";
 import { Random } from "meteor/random";
-import "/imports/api/rooms";
+import { generateSequence } from "/imports/api/sequence";
+import { RoundsCollection } from "../imports/api/rounds";
+import { PlayersCollection } from "../imports/api/players";
+import { LeaderboardCollection } from "../imports/api/leaderboard";
+import '../imports/api/gameMethods';
 
-async function insertLink({ title, url }) {
-  await LinksCollection.insertAsync({ title, url, createdAt: new Date() });
-}
 
 Meteor.startup(async () => {
-  // If the Links collection is empty, add some data.
-  if ((await LinksCollection.find().countAsync()) === 0) {
-    await insertLink({
-      title: "Do the Tutorial",
-      url: "https://docs.meteor.com/tutorials/react/",
-    });
+  await RoundsCollection.removeAsync({});
+  let existingRound = await RoundsCollection.findOneAsync({ isCurrent: true });
 
-    await insertLink({
-      title: "Follow the Guide",
-      url: "https://docs.meteor.com/tutorials/application-structure/",
-    });
+  if (!existingRound) {
+    const sequence = generateSequence(4);
 
-    await insertLink({
-      title: "Read the Docs",
-      url: "https://docs.meteor.com",
-    });
-
-    await insertLink({
-      title: "Discussions",
-      url: "https://forums.meteor.com",
-    });
-
-    await insertLink({
-      title: "Join us on Discord",
-      url: "https://discord.gg/6mS3wHNg",
-    });
-
-    await insertLink({
-      title: "Deploying in Galaxy",
-      url: "https://www.meteor.com/hosting",
+    await RoundsCollection.insertAsync({
+      lengthOfSequence: 4,
+      sequence,
+      createdAt: new Date(),
+      advanced: false,
+      isCurrent: true
     });
   }
-
-  // We publish the entire Links collection to all clients.
-  // In order to be fetched in real-time to the clients
-  Meteor.publish("links", function () {
-    return LinksCollection.find();
-  });
 });
 
-Meteor.methods({
-  about() {
-    return `This is a Meteor application running React with React Router. this is a generated id: ${Random.id()}`;
-  },
-});
+// Pulish collections
+Meteor.publish('rounds', () => RoundsCollection.find());
+Meteor.publish('players', () => PlayersCollection.find());
+Meteor.publish('leaderboard', () => LeaderboardCollection.find());

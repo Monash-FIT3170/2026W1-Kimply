@@ -40,3 +40,8 @@
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.4; }
 }
+
+html, body, #react-target {
+    height: 100%;
+    background: #1a0533;
+}
