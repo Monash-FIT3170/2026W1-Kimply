@@ -16,10 +16,10 @@ export const GamePage = () => {
     const [correctGlow, setCorrectGlow] = useState(false);
     const [completedRoundId, setCompletedRoundId] = useState(null);
 
+
     useEffect(() => {
         const roundsSub = Meteor.subscribe('rounds');
         const playersSub = Meteor.subscribe('players');
-
         return () => {
             roundsSub.stop();
             playersSub.stop();
@@ -37,14 +37,12 @@ export const GamePage = () => {
 
     useEffect(() => {
         if (!round?._id || playerId) return;
-
         Meteor.call('players.join', round._id, 'Demo Player', (error, result) => {
             if (error) {
                 console.error(error);
                 setMessage('Could not join the game.');
                 return;
             }
-
             setPlayerId(result);
         });
     }, [round?._id, playerId]);
@@ -60,43 +58,45 @@ export const GamePage = () => {
         if (!playerCanInput) return;
         if (!round?.sequence) return;
         if (attemptedSequence.length >= round.sequence.length) return;
-
         setAttemptedSequence([...attemptedSequence, colour]);
     };
 
     const handleSubmit = () => {
-    if (!playerId) {
-        setMessage('Player is not ready yet.');
-        return;
-    }
-
-    if (attemptedSequence.length !== round.sequence.length) {
-        setMessage(`Choose ${round.sequence.length} colours before submitting.`);
-        return;
-    }
-
-    Meteor.call('players.submitSequence', playerId, attemptedSequence, (error, result) => {
-        if (error) {
-            console.error(error);
-            setMessage('Something went wrong while submitting.');
+        if (!playerId) {
+            setMessage('Player is not ready yet.');
             return;
         }
-
-        if (result.success) {
-            setMessage('Correct sequence! Please wait for other players to finish.');
-            setCompletedRoundId(round._id);
-            setCorrectGlow(true);
-            setTimeout(() => setCorrectGlow(false), 800);
-            setPlayerCanInput(false);
-        } else {
-            setMessage('Wrong sequence. Try again.');
-            setShake(true);
-            setTimeout(() => setShake(false), 400);
-            setAttemptedSequence([]);
-            setPlayerCanInput(true);
+        if (attemptedSequence.length !== round.sequence.length) {
+            setMessage(`Choose ${round.sequence.length} colours before submitting.`);
+            return;
         }
-    });
-};
+        Meteor.call('players.submitSequence', playerId, attemptedSequence, (error, result) => {
+            if (error) {
+                console.error(error);
+                setMessage('Something went wrong while submitting.');
+                return;
+            }
+            if (result.success) {
+                setMessage('Correct sequence! Please wait for other players to finish.');
+                setCompletedRoundId(round._id);
+                setCorrectGlow(true);
+                setTimeout(() => setCorrectGlow(false), 800);
+                setPlayerCanInput(false);
+            } else {
+                const remainingLives = result.remainingLives ?? (player?.lives ?? 3) - 1;
+                if (remainingLives <= 0) {
+                    setMessage('No lives left. You have been eliminated!');
+                    setPlayerCanInput(false);
+                } else {
+                    setMessage(`Wrong sequence! ${remainingLives} ${remainingLives === 1 ? 'life' : 'lives'} remaining.`);
+                    setShake(true);
+                    setTimeout(() => setShake(false), 400);
+                    setAttemptedSequence([]);
+                    setPlayerCanInput(true);
+                }
+            }
+        });
+    };
 
     const handleClear = () => {
         setAttemptedSequence([]);
@@ -154,20 +154,38 @@ export const GamePage = () => {
     }
 
     return (
-        <div
-            style={{
-                minHeight: '100vh',
-                background: 'linear-gradient(135deg, #1a0533 0%, #0d1b4b 100%)',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '20px',
-                transform: shake ? 'translateX(-6px)' : 'translateX(0)',
-transition: 'transform 0.1s ease',
-boxShadow: correctGlow ? 'inset 0 0 80px #00aaff' : 'none',
-            }}
-        >
+        <div style={{
+            minHeight: '100vh',
+            background: 'linear-gradient(135deg, #1a0533 0%, #0d1b4b 100%)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+            transform: shake ? 'translateX(-6px)' : 'translateX(0)',
+            transition: 'transform 0.1s ease',
+            boxShadow: correctGlow ? 'inset 0 0 80px #00aaff' : 'none',
+        }}>
+            {/* Lives display */}
+            <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '8px', marginBottom: '16px' }}>
+                {[1, 2, 3].map((heart) => (
+                    <div key={heart} style={{
+                        width: '44px',
+                        height: '44px',
+                        backgroundColor: heart <= (player?.lives ?? 3) ? '#e03030' : '#333',
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '20px',
+                        boxShadow: heart <= (player?.lives ?? 3) ? '0 0 10px #e0303088' : 'none',
+                        transition: 'all 0.3s ease',
+                    }}>
+                        {'\u2764'}
+                    </div>
+                ))}
+            </div>
+
             <div style={{ textAlign: 'center' }}>
                 <p
                     style={{
@@ -179,7 +197,6 @@ boxShadow: correctGlow ? 'inset 0 0 80px #00aaff' : 'none',
                 >
                     LEVEL {round.lengthOfSequence - 3}
                 </p>
-
                 <p
                     style={{
                         color: '#ccc',
@@ -187,9 +204,7 @@ boxShadow: correctGlow ? 'inset 0 0 80px #00aaff' : 'none',
                         fontSize: '0.9rem',
                     }}
                 >
-                    Lives: {player?.lives ?? 3}
                 </p>
-
                 <div
                     style={{
                         display: 'flex',
@@ -210,7 +225,6 @@ boxShadow: correctGlow ? 'inset 0 0 80px #00aaff' : 'none',
                         />
                     ))}
                 </div>
-
                 <ColourSequence
                     roundId={round._id}
                     sequence={round.sequence}
@@ -221,7 +235,6 @@ boxShadow: correctGlow ? 'inset 0 0 80px #00aaff' : 'none',
                     }}
                     onColourClick={handleColourClick}
                 />
-
                 <p
                     style={{
                         color: 'white',
@@ -232,7 +245,6 @@ boxShadow: correctGlow ? 'inset 0 0 80px #00aaff' : 'none',
                 >
                     Selected: {attemptedSequence.length}/{round.sequence.length}
                 </p>
-
                 <p
                     style={{
                         color: '#ffd369',
@@ -243,7 +255,6 @@ boxShadow: correctGlow ? 'inset 0 0 80px #00aaff' : 'none',
                 >
                     {message}
                 </p>
-
                 <div
                     style={{
                         display: 'flex',
@@ -275,7 +286,6 @@ boxShadow: correctGlow ? 'inset 0 0 80px #00aaff' : 'none',
                     >
                         CLEAR
                     </button>
-
                     <button
                         onClick={handleSubmit}
                         disabled={
