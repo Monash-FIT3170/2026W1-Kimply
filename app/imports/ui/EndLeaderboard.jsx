@@ -19,6 +19,15 @@ export const EndLeaderboard = () => {
         { name: "Yusuf",   eliminatedRound: 2 },
         { name: "Mia",     eliminatedRound: 2 },
         { name: "Noah",    eliminatedRound: 1 },
+        { name: "Priya",   eliminatedRound: 1 },
+        { name: "Luca",    eliminatedRound: 1 },
+        { name: "Amara",   eliminatedRound: 2 },
+        { name: "Tobias",  eliminatedRound: 3 },
+        { name: "Sienna",  eliminatedRound: 4 },
+        { name: "Kwame",   eliminatedRound: 4 },
+        { name: "Ingrid",  eliminatedRound: 5 },
+        { name: "Remy",    eliminatedRound: 5 },
+        { name: "Bashir",  eliminatedRound: 6 },
         ...Array.from({ length: 100 }, (_, i) => ({ name: `Player${i + 1}`, eliminatedRound: 3 })),
     ]);
 
@@ -32,18 +41,20 @@ export const EndLeaderboard = () => {
     const podiumHeights = [72, 100, 56];
 
     return (
-        <div className="relative w-full min-h-screen flex flex-col overflow-hidden" style={{ background: BG, color: 'oklch(0.93 0.01 270)' }}>
-            <TileLattice opacity={0.09} />
+        <div className="relative w-full min-h-screen flex flex-col" style={{ background: BG, color: 'oklch(0.93 0.01 270)' }}>
+            <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 0 }}>
+                <TileLattice opacity={0.09} />
+            </div>
             <div
-                className="absolute inset-0 pointer-events-none"
-                style={{ background: `radial-gradient(ellipse at center, ${BG} 0%, ${BG} 22%, transparent 70%)` }}
+                className="fixed inset-0 pointer-events-none"
+                style={{ background: `radial-gradient(ellipse at center, ${BG} 0%, ${BG} 22%, transparent 70%)`, zIndex: 0 }}
             />
 
-            <TopBar onBack={() => navigate('/')} />
+            <div className="relative z-10"><TopBar onBack={() => navigate('/')} /></div>
 
-            <div className="relative flex-1 flex flex-col items-center px-6 pb-12">
-                <h1 className="font-outfit font-extrabold text-3xl tracking-tight mb-1">Leaderboard</h1>
-                <p className="font-mono text-[11px] uppercase tracking-widest mb-8" style={{ color: FG2 }}>Final Results</p>
+            <div className="relative z-10 flex-1 flex flex-col items-center px-6 pb-12">
+                <h1 className="font-outfit font-extrabold text-5xl tracking-tight mb-2">Leaderboard</h1>
+                <p className="font-mono text-[13px] uppercase tracking-widest mb-8" style={{ color: FG2 }}>Final Results</p>
 
                 {/* Podium */}
                 <div className="w-full max-w-md flex items-end justify-center gap-3 mb-10 overflow-hidden">
@@ -89,6 +100,24 @@ export const EndLeaderboard = () => {
                                     {group.length === 2
                                         ? `${group[0].name} & ${group[1].name}`
                                         : `${group[0].name}${group.length > 1 ? ` +${group.length - 1}` : ''}`}
+                                </span>
+                                <span
+                                    className="font-mono text-[10px] uppercase tracking-widest text-center px-2 py-1 rounded-full"
+                                    style={{
+                                        color: medal.color,
+                                        background: `color-mix(in oklab, ${medal.color} ${medalIndex === 0 ? 22 : medalIndex === 1 ? 14 : 18}%, transparent)`,
+                                        border: `1px solid color-mix(in oklab, ${medal.color} ${medalIndex === 0 ? 45 : medalIndex === 1 ? 28 : 36}%, transparent)`,
+                                        boxShadow: medalIndex === 0
+                                            ? `0 0 18px color-mix(in oklab, ${medal.color} 24%, transparent)`
+                                            : 'none',
+                                        animation: `avatarPop 0.4s cubic-bezier(0.34,1.56,0.64,1) ${avatarDelay + 0.1}s both`,
+                                    }}
+                                >
+                                    {medalIndex === 0
+                                        ? `Winner · Rd ${group[0].eliminatedRound}`
+                                        : medalIndex === 1
+                                            ? `Runner-up · Rd ${group[0].eliminatedRound}`
+                                            : `Third · Rd ${group[0].eliminatedRound}`}
                                 </span>
                                 <div
                                     className="w-full rounded-t-xl flex items-center justify-center font-outfit font-extrabold text-lg"

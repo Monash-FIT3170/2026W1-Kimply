@@ -5,6 +5,7 @@ import { RoundsCollection } from '../../api/rounds';
 import { PlayersCollection } from '../../api/players';
 import { ColourSequence } from '../ColourSequence.jsx';
 import { Leaderboard } from '../Leaderboard.jsx';
+import { EndLeaderboard } from '../EndLeaderboard.jsx'
 
 export const GamePage = () => {
     const [playerId, setPlayerId] = useState(null);
@@ -131,22 +132,7 @@ export const GamePage = () => {
     if (!player) return null;
 
     if (player?.winner) {
-        return (
-            <div style={{
-                minHeight: '100vh',
-                background: 'linear-gradient(135deg, #0f0c29, #302b63, #24243e)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexDirection: 'column',
-                color: 'white',
-                textAlign: 'center'
-            }}>
-                <h1 style={{ fontSize: '3rem', marginBottom: '10px' }}>
-                    🏆 YOU WON THE GAME
-                </h1>
-            </div>
-        );
+        return (<EndLeaderboard/>);
     }
 
     if (player?.eliminated) {
