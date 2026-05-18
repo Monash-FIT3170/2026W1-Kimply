@@ -163,6 +163,14 @@ export function PlayRoute() {
         {!hasName && (
           <p className="font-manrope text-[13px] text-fg3 text-center">Enter a username above to continue</p>
         )}
+
+        <button
+          onClick={() => navigate('/')}
+          className="font-outfit font-bold text-[13px] uppercase tracking-[0.16em] px-5 py-3 rounded-full border border-hairline text-fg2 hover:text-fg transition-colors"
+          style={{ background: 'color-mix(in oklab, oklch(0.20 0.02 270) 72%, transparent)' }}
+        >
+          Back to Home
+        </button>
       </div>
     </div>
   );
