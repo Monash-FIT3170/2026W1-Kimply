@@ -1,4 +1,7 @@
 import assert from "assert";
+import '../imports/api/gameMethods.js';
+import './roundAdvance.test.js';
+import './updateWinner.test.js';
 
 describe("2026W1-Kimply", function () {
   it("package.json has correct name", async function () {
