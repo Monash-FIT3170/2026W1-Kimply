@@ -1,6 +1,11 @@
-node_modules
 .meteor/local
+node_modules
 .git
 _build
-dist
+npm-debug.log*
+.npm
+.cache
 coverage
+dist
+build
+.DS_Store

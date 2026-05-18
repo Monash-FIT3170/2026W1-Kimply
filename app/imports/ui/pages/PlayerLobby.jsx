@@ -63,8 +63,29 @@ function EmptySlot() {
 function SharePanel({ link }) {
   const [copied, setCopied] = useState(false);
 
-  const copy = () => {
-    navigator.clipboard?.writeText(link);
+  const copy = async () => {
+    const fallbackCopy = () => {
+      const textarea = document.createElement('textarea');
+      textarea.value = link;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    };
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(link);
+      } else {
+        fallbackCopy();
+      }
+    } catch {
+      fallbackCopy();
+    }
+
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };

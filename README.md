@@ -174,6 +174,10 @@ docker compose restart backend    # restart just the Meteor app
 docker compose down -v            # stop everything AND wipe the database
 ```
 
+## Hosting Remotely
+
+The production Docker Compose setup is documented in [docs/digitalocean-deploy.md](docs/digitalocean-deploy.md). This is intended for the GitHub Student Developer Pack DigitalOcean credit: deploy the app to a Droplet, set `ROOT_URL` to the public Droplet URL or domain, and copied room invite links will work from other devices.
+
 ### Adding an npm package
 
 Run this inside the container — do not run `npm install` directly:
