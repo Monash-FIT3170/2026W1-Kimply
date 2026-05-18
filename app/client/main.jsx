@@ -6,6 +6,7 @@ import { PlayRoute } from "/imports/ui/pages/PlayRoute";
 import { JoinRoom } from "/imports/ui/pages/JoinRoom";
 import { PlayerLobby } from "/imports/ui/pages/PlayerLobby";
 import { EndLeaderboard } from "/imports/ui/EndLeaderboard";
+import { GamePage } from "/imports/ui/pages/GamePage";
 import "/imports/ui/styles.css";
 
 Meteor.startup(() => {
@@ -15,6 +16,7 @@ Meteor.startup(() => {
     <BrowserRouter>
       <Routes>
         <Route path="/"          element={<Splash />} />
+        <Route path="/game"      element={<GamePage />} />
         <Route path="/play"      element={<PlayRoute />} />
         <Route path="/play/join" element={<JoinRoom />} />
         <Route path="/play/:pin" element={<PlayerLobby />} />
