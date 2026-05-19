@@ -5,6 +5,7 @@ import { RoundsCollection } from '../../api/rounds';
 import { PlayersCollection } from '../../api/players';
 import { ColourSequence } from '../ColourSequence.jsx';
 import { Leaderboard } from '../Leaderboard.jsx';
+import { useLocation } from 'react-router-dom';
 
 export const GamePage = () => {
     const [playerId, setPlayerId] = useState(null);
@@ -15,6 +16,9 @@ export const GamePage = () => {
     const [correctGlow, setCorrectGlow] = useState(false);
     const [completedRoundId, setCompletedRoundId] = useState(null);
     const [replayKey, setReplayKey] = useState(0);
+    const location = useLocation();
+    const playerNameFromLobby = location.state?.playerName || 'Demo Player';
+    const roomPin = location.state?.pin;
 
 
     useEffect(() => {
@@ -37,7 +41,7 @@ export const GamePage = () => {
 
     useEffect(() => {
         if (!round?._id || playerId) return;
-        Meteor.call('players.join', round._id, 'Demo Player', (error, result) => {
+        Meteor.call('players.join', round._id, playerNameFromLobby, (error, result) => {
             if (error) {
                 console.error(error);
                 setMessage('Could not join the game.');
