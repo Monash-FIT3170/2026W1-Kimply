@@ -2,7 +2,12 @@ import { Mongo } from 'meteor/mongo';
 import { Meteor } from 'meteor/meteor';
 import { Random } from 'meteor/random';
 
-export const RoomsCollection = new Mongo.Collection('rooms');
+// Guard against --full-app test mode evaluating this module twice
+// (app bundle + test bundle both load it; global is shared across both).
+if (!global._RoomsCollection) {
+  global._RoomsCollection = new Mongo.Collection('rooms');
+}
+export const RoomsCollection = global._RoomsCollection;
 
 const PIN_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -10,7 +15,8 @@ function generatePin() {
   return Array.from({ length: 5 }, () => PIN_CHARS[Math.floor(Math.random() * PIN_CHARS.length)]).join('');
 }
 
-if (Meteor.isServer) {
+if (Meteor.isServer && !global._roomsServerInitialized) {
+  global._roomsServerInitialized = true;
   Meteor.publish('rooms.lobby', function (pin) {
     if (typeof pin !== 'string') return this.ready();
     return RoomsCollection.find(
@@ -30,7 +36,10 @@ if (Meteor.isServer) {
       for (let i = 0; i < 10; i++) {
         const candidate = generatePin();
         const exists = await RoomsCollection.findOneAsync({ pin: candidate });
-        if (!exists) { pin = candidate; break; }
+        if (!exists) {
+          pin = candidate;
+          break;
+        }
       }
       if (!pin) throw new Meteor.Error('server-error', 'Could not generate a unique PIN');
 
@@ -53,13 +62,10 @@ if (Meteor.isServer) {
       if (!room) throw new Meteor.Error('not-found', 'Room not found');
       if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
 
-      const isHost = (room.players || []).find(p => p.id === playerId)?.name === room.hostName;
+      const isHost = (room.players || []).find((p) => p.id === playerId)?.name === room.hostName;
       if (isHost) throw new Meteor.Error('invalid', 'Cannot kick the host');
 
-      await RoomsCollection.updateAsync(
-        { _id: room._id },
-        { $pull: { players: { id: playerId } } }
-      );
+      await RoomsCollection.updateAsync({ _id: room._id }, { $pull: { players: { id: playerId } } });
     },
 
     async 'rooms.join'(pin, playerName) {
@@ -74,9 +80,7 @@ if (Meteor.isServer) {
       if (!room) throw new Meteor.Error('not-found', 'Room not found');
       if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
 
-      const nameTaken = (room.players || []).some(
-        (p) => p.name.toLowerCase() === playerName.trim().toLowerCase()
-      );
+      const nameTaken = (room.players || []).some((p) => p.name.toLowerCase() === playerName.trim().toLowerCase());
       if (nameTaken) throw new Meteor.Error('name-taken', 'Name already taken');
 
       await RoomsCollection.updateAsync(
