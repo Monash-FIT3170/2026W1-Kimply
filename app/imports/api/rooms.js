@@ -36,7 +36,10 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       for (let i = 0; i < 10; i++) {
         const candidate = generatePin();
         const exists = await RoomsCollection.findOneAsync({ pin: candidate });
-        if (!exists) { pin = candidate; break; }
+        if (!exists) {
+          pin = candidate;
+          break;
+        }
       }
       if (!pin) throw new Meteor.Error('server-error', 'Could not generate a unique PIN');
 
@@ -59,13 +62,10 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       if (!room) throw new Meteor.Error('not-found', 'Room not found');
       if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
 
-      const isHost = (room.players || []).find(p => p.id === playerId)?.name === room.hostName;
+      const isHost = (room.players || []).find((p) => p.id === playerId)?.name === room.hostName;
       if (isHost) throw new Meteor.Error('invalid', 'Cannot kick the host');
 
-      await RoomsCollection.updateAsync(
-        { _id: room._id },
-        { $pull: { players: { id: playerId } } }
-      );
+      await RoomsCollection.updateAsync({ _id: room._id }, { $pull: { players: { id: playerId } } });
     },
 
     async 'rooms.join'(pin, playerName) {
@@ -80,9 +80,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       if (!room) throw new Meteor.Error('not-found', 'Room not found');
       if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
 
-      const nameTaken = (room.players || []).some(
-        (p) => p.name.toLowerCase() === playerName.trim().toLowerCase()
-      );
+      const nameTaken = (room.players || []).some((p) => p.name.toLowerCase() === playerName.trim().toLowerCase());
       if (nameTaken) throw new Meteor.Error('name-taken', 'Name already taken');
 
       await RoomsCollection.updateAsync(

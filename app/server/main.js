@@ -1,2 +1,1 @@
-import { Meteor } from "meteor/meteor";
-import "/imports/api/rooms";
+import '/imports/api/rooms';
