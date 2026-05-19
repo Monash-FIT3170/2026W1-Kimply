@@ -1,0 +1,73 @@
+name: Test
+
+on:
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Meteor installation
+        uses: actions/cache@v4
+        with:
+          path: ~/.meteor
+          key: ${{ runner.os }}-meteor-${{ hashFiles('app/.meteor/release') }}
+
+      - name: Install Meteor
+        run: |
+          if ! command -v meteor &>/dev/null; then
+            curl https://install.meteor.com/ | sh
+          fi
+          echo "$HOME/.meteor" >> $GITHUB_PATH
+
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: app/node_modules
+          key: ${{ runner.os }}-npm-${{ hashFiles('app/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      - name: Install npm dependencies
+        working-directory: app
+        env:
+          METEOR_ALLOW_SUPERUSER: "1"
+        run: meteor npm install
+
+      - name: Run tests with coverage
+        working-directory: app
+        env:
+          MONGO_URL: mongodb://localhost:27017/kimply_test
+          ROOT_URL: http://localhost:3000
+          METEOR_ALLOW_SUPERUSER: "1"
+          COVERAGE_DIR: ${{ github.workspace }}/app/.nyc_output
+        run: meteor test --once --driver-package meteortesting:mocha --port 3100
+        timeout-minutes: 20
+
+      - name: Enforce coverage threshold
+        working-directory: app
+        run: |
+          npx nyc report \
+            --reporter=text \
+            --temp-dir=.nyc_output \
+            --include='imports/**/*.js' \
+            --check-coverage \
+            --branches=50 --lines=50 --functions=50 --statements=50
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: app/coverage
