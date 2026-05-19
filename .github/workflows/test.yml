@@ -55,19 +55,28 @@ jobs:
         run: meteor test --once --full-app --driver-package meteortesting:mocha
         timeout-minutes: 20
 
-      - name: Enforce coverage threshold
+      - name: Generate coverage report
         working-directory: app
         run: |
           npx nyc report \
             --reporter=text \
+            --reporter=html \
+            --reporter=lcov \
+            --temp-dir=.nyc_output \
+            --report-dir=coverage \
+            --include='imports/**/*.js'
+
+      - name: Enforce coverage threshold
+        working-directory: app
+        run: |
+          npx nyc check-coverage \
             --temp-dir=.nyc_output \
             --include='imports/**/*.js' \
-            --check-coverage \
             --branches=50 --lines=50 --functions=50 --statements=50
 
       - name: Upload coverage report
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: app/coverage
+          if-no-files-found: error
