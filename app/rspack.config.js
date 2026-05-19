@@ -1,12 +1,12 @@
-const { defineConfig } = require("@meteorjs/rspack");
-const path = require("path");
+const { defineConfig } = require('@meteorjs/rspack');
+const path = require('path');
 
 module.exports = defineConfig((Meteor) => {
   const rules = [
     {
       test: /\.css$/,
-      use: ["postcss-loader"],
-      type: "css",
+      use: ['postcss-loader'],
+      type: 'css',
     },
   ];
 
@@ -15,12 +15,13 @@ module.exports = defineConfig((Meteor) => {
   if (!Meteor.isProduction) {
     rules.push({
       test: /\.(js|jsx)$/,
-      include: path.resolve(__dirname, "imports"),
+      include: path.resolve(__dirname, 'imports'),
       use: [
         {
-          loader: "babel-loader",
+          loader: 'babel-loader',
           options: {
-            plugins: [["istanbul", { include: ["imports/**"] }]],
+            presets: [['@babel/preset-react', { runtime: 'automatic' }]],
+            plugins: [['istanbul', { include: ['imports/**'] }]],
           },
         },
       ],

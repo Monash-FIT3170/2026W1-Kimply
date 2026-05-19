@@ -1,0 +1,10 @@
+{
+  "name": "kimply-workspace",
+  "private": true,
+  "scripts": {
+    "format": "npm --prefix app run format",
+    "format:check": "npm --prefix app run format:check",
+    "test": "npm --prefix app run test",
+    "test-app": "npm --prefix app run test-app"
+  }
+}

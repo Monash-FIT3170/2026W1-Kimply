@@ -1,0 +1,7 @@
+.meteor/local
+_build
+node_modules
+coverage
+dist
+build
+package-lock.json

@@ -12,24 +12,15 @@ if (Meteor.isServer) {
 
     describe('rooms.create', function () {
       it('throws on empty hostName', async function () {
-        await assert.rejects(
-          Meteor.callAsync('rooms.create', ''),
-          (err) => err.error === 'invalid',
-        );
+        await assert.rejects(Meteor.callAsync('rooms.create', ''), (err) => err.error === 'invalid');
       });
 
       it('throws on whitespace-only hostName', async function () {
-        await assert.rejects(
-          Meteor.callAsync('rooms.create', '   '),
-          (err) => err.error === 'invalid',
-        );
+        await assert.rejects(Meteor.callAsync('rooms.create', '   '), (err) => err.error === 'invalid');
       });
 
       it('throws on non-string hostName', async function () {
-        await assert.rejects(
-          Meteor.callAsync('rooms.create', 42),
-          (err) => err.error === 'invalid',
-        );
+        await assert.rejects(Meteor.callAsync('rooms.create', 42), (err) => err.error === 'invalid');
       });
 
       it('returns a 5-character PIN', async function () {
@@ -71,46 +62,28 @@ if (Meteor.isServer) {
       });
 
       it('throws on empty PIN', async function () {
-        await assert.rejects(
-          Meteor.callAsync('rooms.join', '', 'Player'),
-          (err) => err.error === 'invalid',
-        );
+        await assert.rejects(Meteor.callAsync('rooms.join', '', 'Player'), (err) => err.error === 'invalid');
       });
 
       it('throws on empty playerName', async function () {
-        await assert.rejects(
-          Meteor.callAsync('rooms.join', testPin, ''),
-          (err) => err.error === 'invalid',
-        );
+        await assert.rejects(Meteor.callAsync('rooms.join', testPin, ''), (err) => err.error === 'invalid');
       });
 
       it('throws not-found for unknown PIN', async function () {
-        await assert.rejects(
-          Meteor.callAsync('rooms.join', 'ZZZZZ', 'Player'),
-          (err) => err.error === 'not-found',
-        );
+        await assert.rejects(Meteor.callAsync('rooms.join', 'ZZZZZ', 'Player'), (err) => err.error === 'not-found');
       });
 
       it('throws not-lobby when game is in progress', async function () {
         await RoomsCollection.updateAsync({ pin: testPin }, { $set: { status: 'in-progress' } });
-        await assert.rejects(
-          Meteor.callAsync('rooms.join', testPin, 'Player2'),
-          (err) => err.error === 'not-lobby',
-        );
+        await assert.rejects(Meteor.callAsync('rooms.join', testPin, 'Player2'), (err) => err.error === 'not-lobby');
       });
 
       it('throws name-taken when name is already used', async function () {
-        await assert.rejects(
-          Meteor.callAsync('rooms.join', testPin, 'Host'),
-          (err) => err.error === 'name-taken',
-        );
+        await assert.rejects(Meteor.callAsync('rooms.join', testPin, 'Host'), (err) => err.error === 'name-taken');
       });
 
       it('name-taken check is case-insensitive', async function () {
-        await assert.rejects(
-          Meteor.callAsync('rooms.join', testPin, 'host'),
-          (err) => err.error === 'name-taken',
-        );
+        await assert.rejects(Meteor.callAsync('rooms.join', testPin, 'host'), (err) => err.error === 'name-taken');
       });
 
       it('adds a new player to the room', async function () {
@@ -143,23 +116,17 @@ if (Meteor.isServer) {
       });
 
       it('throws on empty PIN', async function () {
-        await assert.rejects(
-          Meteor.callAsync('rooms.kick', '', nonHostPlayerId),
-          (err) => err.error === 'invalid',
-        );
+        await assert.rejects(Meteor.callAsync('rooms.kick', '', nonHostPlayerId), (err) => err.error === 'invalid');
       });
 
       it('throws on empty playerId', async function () {
-        await assert.rejects(
-          Meteor.callAsync('rooms.kick', testPin, ''),
-          (err) => err.error === 'invalid',
-        );
+        await assert.rejects(Meteor.callAsync('rooms.kick', testPin, ''), (err) => err.error === 'invalid');
       });
 
       it('throws not-found for unknown PIN', async function () {
         await assert.rejects(
           Meteor.callAsync('rooms.kick', 'ZZZZZ', nonHostPlayerId),
-          (err) => err.error === 'not-found',
+          (err) => err.error === 'not-found'
         );
       });
 
@@ -167,17 +134,14 @@ if (Meteor.isServer) {
         await RoomsCollection.updateAsync({ pin: testPin }, { $set: { status: 'in-progress' } });
         await assert.rejects(
           Meteor.callAsync('rooms.kick', testPin, nonHostPlayerId),
-          (err) => err.error === 'not-lobby',
+          (err) => err.error === 'not-lobby'
         );
       });
 
       it('throws when trying to kick the host', async function () {
         const room = await RoomsCollection.findOneAsync({ pin: testPin });
         const hostId = room.players.find((p) => p.name === 'Host').id;
-        await assert.rejects(
-          Meteor.callAsync('rooms.kick', testPin, hostId),
-          (err) => err.error === 'invalid',
-        );
+        await assert.rejects(Meteor.callAsync('rooms.kick', testPin, hostId), (err) => err.error === 'invalid');
       });
 
       it('removes a non-host player from the room', async function () {
