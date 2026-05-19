@@ -295,6 +295,7 @@ export function PlayerLobby() {
   const { state } = useLocation();
   const navigate = useNavigate();
   const playerName = state?.playerName || '';
+  const playerId = state?.playerId || '';
   const isHost = state?.isHost === true;
   const [showExitPopup, setShowExitPopup] = useState(false);
 
@@ -307,10 +308,6 @@ export function PlayerLobby() {
     }
   }, [room]);
 
-  if (!isLoading() && !room) {
-    navigate('/play', { replace: true });
-    return null;
-  }
 
   if (!room) {
     return (
@@ -329,7 +326,11 @@ export function PlayerLobby() {
         isOpen = {showExitPopup}
         onConfirm ={() => {
           setShowExitPopup(false);
-          Meteor.call('rooms.disconnect', pin, playerName) //TODO Is this fine with player name or should use player ID?
+          console.log(playerId)
+          Meteor.call('rooms.disconnect', pin, playerId) 
+
+          // removing session storage of reconnect data
+          localStorage.removeItem('reconnectData');
           navigate('/play', {replace: true});
 
         }}

@@ -33,7 +33,7 @@ export function JoinRoom() {
     if (code.length !== SLOTS || loading) return;
     setLoading(true);
     setError('');
-    Meteor.call('rooms.join', code, playerName, (err) => {
+    Meteor.call('rooms.join', code, playerName, (err, res) => {
       setLoading(false);
       if (err) {
         const msg = {
@@ -44,7 +44,14 @@ export function JoinRoom() {
         setError(msg);
         return;
       }
-      navigate(`/play/${code}`, { state: { playerName, isHost: false } });
+
+      const reconnectData = {
+        playerId : res.playerId,
+        gameId : res.gameId
+      }
+      
+      localStorage.setItem('reconnectData', JSON.stringify(reconnectData));
+      navigate(`/play/${code}`, { state: { playerName, isHost: false, playerId: res.playerId } });
     });
   };
 

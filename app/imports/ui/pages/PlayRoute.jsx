@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Meteor } from 'meteor/meteor';
 import { BG, PRIMARY, TILE, HAIRLINE, FG2, TileLattice, Wordmark, Avatar, avatarColor, ArrowIcon, PencilIcon} from '../components/design';
+import { ReconnectPopup } from '../components/ReconnectPopup';
 
 
 function RouteCard({ kind, title, blurb, color, primary, onClick, disabled }) {
@@ -75,6 +76,27 @@ export function PlayRoute() {
   const trimmedName = name.trim();
   const hasName = trimmedName.length > 0;
 
+  const [reconnectData, setReconnectData] = useState(null);
+
+  useEffect(() => {
+    const raw = localStorage.getItem('reconnectData');
+    if (raw) {
+      setReconnectData(JSON.parse(raw));
+    }
+  }, []);
+
+  const handleReconnect = () =>{
+    navigate('/')
+  }
+
+  const handleDismiss = () =>{
+    Meteor.call('rooms.disconnect', pin, playerId) 
+    localStorage.removeItem('reconnectData');
+    setReconnectData(null);
+
+    // ! Disconnect them from the game here 
+  }
+
   const handleCreate = () => {
     if (!hasName || loading) return;
     setLoading(true);
@@ -82,7 +104,7 @@ export function PlayRoute() {
     Meteor.call('rooms.create', trimmedName, (err, result) => {
       setLoading(false);
       if (err) { setError('Could not create room. Try again.'); return; }
-      navigate(`/play/${result.pin}`, { state: { playerName: trimmedName, isHost: true } });
+      navigate(`/play/${result.gameId}`, { state: { playerName: trimmedName, isHost: true, playerId: result.hostId } });
     });
   };
 
@@ -90,6 +112,7 @@ export function PlayRoute() {
     if (!hasName) return;
     navigate('/play/join', { state: { playerName: trimmedName } });
   };
+
 
   return (
     <div className="relative w-full h-full bg-bg text-fg overflow-hidden flex flex-col">
@@ -156,6 +179,13 @@ export function PlayRoute() {
           <p className="font-manrope text-[13px] text-fg3 text-center">Enter a username above to continue</p>
         )}
       </div>
+
+      <ReconnectPopup
+        isOpen={reconnectData}
+        gameId={reconnectData?.gameId}
+        onReconnect={handleReconnect}
+        onDismiss={handleDismiss}
+      />
     </div>
   );
 }

@@ -17,7 +17,7 @@ export const FG       = "oklch(0.96 0.01 270)";
 export const FG2      = 'oklch(0.72 0.01 270)';
 export const FG3      = "oklch(0.50 0.01 270)";
 export const DANGER   = 'oklch(0.68 0.22 22)';
-
+export const ACCENT   = 'oklch(0.72 0.18 195)';
 const TILE_COLORS = [TILE.pink, TILE.amber, TILE.teal, TILE.violet, PRIMARY];
 
 export function avatarColor(name = '') {

@@ -25,6 +25,7 @@ if (Meteor.isServer) {
         throw new Meteor.Error('invalid', 'Invalid name');
       }
       const name = hostName.trim();
+      const hostId = Random.id();
 
       let pin;
       for (let i = 0; i < 10; i++) {
@@ -39,11 +40,11 @@ if (Meteor.isServer) {
         hostName: name,
         gameName: `Game${pin}`,
         status: 'lobby',
-        players: [{ id: Random.id(), name }],
+        players: [{ id: hostId, name }],
         createdAt: new Date(),
       });
 
-      return { pin };
+      return { gameId: pin, hostId: hostId};
     },
 
     async 'rooms.kick'(pin, playerId) {
@@ -63,14 +64,14 @@ if (Meteor.isServer) {
       );
     },
 
-    async 'rooms.disconnect'(pin, playerName){
+    async 'rooms.disconnect'(pin, playerId){
       if (typeof pin !== 'string' || !pin.trim()) throw new Meteor.Error('invalid', 'Invalid PIN');
-      if (typeof playerName !== 'string' || !playerName.trim()) throw new Meteor.Error('invalid', 'Invalid player name');
+      if (typeof playerId !== 'string' || !playerId.trim()) throw new Meteor.Error('invalid', 'Invalid player ID');
 
       const room = await RoomsCollection.findOneAsync({ pin: pin.trim(), status: 'lobby' });
       if (!room) throw new Meteor.Error('not-found', 'Room not found');
       
-      const isHost = (room.players || []).find(p=> p.name=== playerName)?.name === room.hostName
+      const isHost = (room.players || []).find(p=> p.id=== playerId)?.name === room.hostName
 
       if (isHost){ // Delete room if host disconnects
         await RoomsCollection.removeAsync({ _id : room._id });
@@ -79,7 +80,7 @@ if (Meteor.isServer) {
 
       await RoomsCollection.updateAsync(
         {_id: room._id},
-        { $pull: { players: { name: playerName}}}
+        { $pull: { players: { id: playerId}}}
       );
     },
 
@@ -100,12 +101,14 @@ if (Meteor.isServer) {
       );
       if (nameTaken) throw new Meteor.Error('name-taken', 'Name already taken');
 
+      const playerId = Random.id()
+
       await RoomsCollection.updateAsync(
         { _id: room._id },
-        { $push: { players: { id: Random.id(), name: playerName.trim() } } }
+        { $push: { players: { id: playerId, name: playerName.trim() } } }
       );
 
-      return room._id;
+      return {roomId: room._id, playerId: playerId}
     },
 
     async 'rooms.updateGameName'(pin, gameName){
