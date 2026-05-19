@@ -14,6 +14,7 @@ export const GamePage = () => {
     const [shake, setShake] = useState(false);
     const [correctGlow, setCorrectGlow] = useState(false);
     const [completedRoundId, setCompletedRoundId] = useState(null);
+    const [replayKey, setReplayKey] = useState(0);
 
 
     useEffect(() => {
@@ -92,6 +93,7 @@ export const GamePage = () => {
                     setTimeout(() => setShake(false), 400);
                     setAttemptedSequence([]);
                     setPlayerCanInput(true);
+                    setReplayKey(prev => prev + 1);
                 }
             }
         });
@@ -203,6 +205,7 @@ export const GamePage = () => {
                 <ColourSequence
                     roundId={round._id}
                     sequence={round.sequence}
+                    replayKey={replayKey}
                     playerCanInput={playerCanInput}
                     onSequenceComplete={() => {
                         setPlayerCanInput(true);
