@@ -67,7 +67,7 @@ jobs:
             --reporter=html \
             --reporter=lcov \
             --temp-dir=.nyc_output \
-            --report-dir=coverage \
+            --report-dir=../coverage \
             --include='imports/**/*.js' \
             --include='imports/**/*.jsx'
 
@@ -84,5 +84,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: app/coverage
+          path: coverage
           if-no-files-found: error
