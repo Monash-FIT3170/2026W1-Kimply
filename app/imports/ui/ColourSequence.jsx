@@ -24,6 +24,7 @@ const TILE_ORDER = ['red', 'yellow', 'green', 'blue'];
 export const ColourSequence = ({
     roundId,
     sequence = [],
+    replayKey,
     onSequenceComplete,
     playerCanInput,
     onColourClick,
@@ -74,7 +75,7 @@ export const ColourSequence = ({
             cancelled = true;
             clearTimeout(startDelay);
         };
-    }, [roundId]);
+    }, [roundId, replayKey]);
     const playClickSound = () => {
         const audioContext = new AudioContext();
         const oscillator = audioContext.createOscillator();

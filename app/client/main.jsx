@@ -21,6 +21,7 @@ Meteor.startup(() => {
         <Route path="/play/join" element={<JoinRoom />} />
         <Route path="/play/:pin" element={<PlayerLobby />} />
         <Route path="/leaderboard" element={<EndLeaderboard />} />
+        <Route path="/game"      element={<GamePage />} />
         <Route path="*"          element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
