@@ -12,6 +12,7 @@ import {
   avatarColor,
   ArrowIcon,
 } from '../components/design';
+import { submitOnEnter } from '../keyboard';
 
 function PencilIcon({ size = 14 }) {
   return (
@@ -146,7 +147,7 @@ export function PlayRoute() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               onBlur={() => hasName && setEditing(false)}
-              onKeyDown={(e) => e.key === 'Enter' && hasName && setEditing(false)}
+              onKeyDown={submitOnEnter(() => setEditing(false), { when: () => hasName })}
               placeholder="Enter your username"
               maxLength={30}
               className="w-full rounded-[14px] border border-hairline bg-surface px-4 py-3.5 font-outfit text-lg font-semibold text-fg outline-none placeholder:text-fg3"
@@ -166,16 +167,11 @@ export function PlayRoute() {
           )}
 
           {signedInAccount ? (
-            <p className="font-manrope text-[13px] text-fg3 text-center mt-3">
-              Signed in as {signedInAccount.email}
-            </p>
+            <p className="mt-3 text-center font-manrope text-[13px] text-fg3">Signed in as {signedInAccount.email}</p>
           ) : (
-            <p className="font-manrope text-[13px] text-fg3 text-center mt-3">
+            <p className="mt-3 text-center font-manrope text-[13px] text-fg3">
               Want to save your stats?{' '}
-              <Link
-                to="/account"
-                className="font-outfit font-bold text-fg"
-              >
+              <Link to="/account" className="font-outfit font-bold text-fg">
                 Sign up
               </Link>
             </p>
