@@ -2,7 +2,12 @@ import { Mongo } from 'meteor/mongo';
 import { Meteor } from 'meteor/meteor';
 import { Random } from 'meteor/random';
 
-export const RoomsCollection = new Mongo.Collection('rooms');
+// Guard against --full-app test mode evaluating this module twice
+// (app bundle + test bundle both load it; global is shared across both).
+if (!global._RoomsCollection) {
+  global._RoomsCollection = new Mongo.Collection('rooms');
+}
+export const RoomsCollection = global._RoomsCollection;
 
 const PIN_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -10,7 +15,8 @@ function generatePin() {
   return Array.from({ length: 5 }, () => PIN_CHARS[Math.floor(Math.random() * PIN_CHARS.length)]).join('');
 }
 
-if (Meteor.isServer) {
+if (Meteor.isServer && !global._roomsServerInitialized) {
+  global._roomsServerInitialized = true;
   Meteor.publish('rooms.lobby', function (pin) {
     if (typeof pin !== 'string') return this.ready();
     return RoomsCollection.find(
