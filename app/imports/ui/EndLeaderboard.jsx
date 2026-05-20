@@ -43,6 +43,14 @@ export const EndLeaderboard = () => {
   const podiumOrder = [byRank[1], byRank[0], byRank[2]];
   const podiumHeights = [72, 100, 56];
 
+  if (players.length === 0) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-bg text-fg">
+        <p className="font-mono text-sm uppercase tracking-widest">No leaderboard results yet</p>
+      </div>
+    );
+  }
+
   return (
     <div
       className="relative flex min-h-screen w-full flex-col"
@@ -122,11 +130,13 @@ export const EndLeaderboard = () => {
                     animation: `avatarPop 0.4s cubic-bezier(0.34,1.56,0.64,1) ${avatarDelay + 0.1}s both`,
                   }}
                 >
-                  {medalIndex === 0
-                    ? `Winner · Rd ${group[0].eliminatedRound}`
+                  {group[0].isWinner
+                    ? 'Winner · Last Standing'
                     : medalIndex === 1
                       ? `Runner-up · Rd ${group[0].eliminatedRound}`
-                      : `Third · Rd ${group[0].eliminatedRound}`}
+                      : medalIndex === 2
+                        ? `Third · Rd ${group[0].eliminatedRound}`
+                        : `Rd ${group[0].eliminatedRound}`}
                 </span>
                 <div
                   className="flex w-full items-center justify-center rounded-t-xl font-outfit text-lg font-extrabold"
@@ -148,17 +158,19 @@ export const EndLeaderboard = () => {
 
         <div className="flex w-full max-w-md flex-col gap-2">
           {/* header */}
-          <div className="mb-1 flex px-3">
-            <span className="w-12 font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
-              Rank
-            </span>
-            <span className="flex-1 font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
-              Player
-            </span>
-            <span className="w-24 text-right font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
-              Round
-            </span>
-          </div>
+          {sorted.some((player) => uniqueRanks.indexOf(rankKey(player)) > 2) && (
+            <div className="mb-1 flex px-3">
+              <span className="w-12 font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
+                Rank
+              </span>
+              <span className="flex-1 font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
+                Player
+              </span>
+              <span className="w-24 text-right font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
+                Round
+              </span>
+            </div>
+          )}
 
           {sorted
             .filter((player) => uniqueRanks.indexOf(rankKey(player)) > 2)
@@ -205,7 +217,7 @@ export const EndLeaderboard = () => {
                   </span>
 
                   <span className="w-24 text-right font-mono text-sm" style={{ color: FG2 }}>
-                    {rank === 0 ? '—' : `Rd ${player.eliminatedRound}`}
+                    {player.isWinner ? 'Winner' : `Rd ${player.eliminatedRound}`}
                   </span>
                 </div>
               );
