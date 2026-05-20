@@ -15,7 +15,7 @@ export const EndLeaderboard = () => {
         { name: "Fred",    eliminatedRound: 8 },
         { name: "Gordon",  eliminatedRound: 7 },
         { name: "Hannah",  eliminatedRound: 7 },
-        { name: "Zara",    eliminatedRound: 2 },
+        { name: "Zara",    eliminatedRound: null },
         { name: "Yusuf",   eliminatedRound: 2 },
         { name: "Mia",     eliminatedRound: 2 },
         { name: "Noah",    eliminatedRound: 1 },
@@ -28,17 +28,29 @@ export const EndLeaderboard = () => {
         { name: "Ingrid",  eliminatedRound: 5 },
         { name: "Remy",    eliminatedRound: 5 },
         { name: "Bashir",  eliminatedRound: 6 },
-        ...Array.from({ length: 100 }, (_, i) => ({ name: `Player${i + 1}`, eliminatedRound: 3 })),
+        ...Array.from({ length: 20 }, (_, i) => ({ name: `Player${i + 1}`, eliminatedRound: 3 })),
     ]);
 
-    const sorted = [...players].sort((a, b) => b.eliminatedRound - a.eliminatedRound);
-    const uniqueRounds = [...new Set(sorted.map(p => p.eliminatedRound))].sort((a, b) => b - a);
+    // null eliminatedRound = never eliminated = winner; sort them first, then by round descending
+    const sorted = [...players].sort((a, b) => {
+        if (a.eliminatedRound === null && b.eliminatedRound === null) return 0;
+        if (a.eliminatedRound === null) return -1;
+        if (b.eliminatedRound === null) return 1;
+        return b.eliminatedRound - a.eliminatedRound;
+    });
+    // null gets its own unique rank entry, sorted before any round number
+    const uniqueRounds = [...new Set(sorted.map(p => p.eliminatedRound))].sort((a, b) => {
+        if (a === null && b === null) return 0;
+        if (a === null) return -1;
+        if (b === null) return 1;
+        return b - a;
+    });
     const ranks = sorted.map(player => uniqueRounds.indexOf(player.eliminatedRound));
 
     // Group top-3 ranks into podium blocks, displayed as 2nd | 1st | 3rd
     const byRank = [0, 1, 2].map(rank => sorted.filter(p => ranks[sorted.indexOf(p)] === rank));
     const podiumOrder = [byRank[1], byRank[0], byRank[2]];
-    const podiumHeights = [72, 100, 56];
+    const podiumHeights = [90, 120, 72];
 
     return (
         <div className="relative w-full min-h-screen flex flex-col" style={{ background: BG, color: 'oklch(0.93 0.01 270)' }}>
@@ -57,7 +69,7 @@ export const EndLeaderboard = () => {
                 <p className="font-mono text-[13px] uppercase tracking-widest mb-8" style={{ color: FG2 }}>Final Results</p>
 
                 {/* Podium */}
-                <div className="w-full max-w-md flex items-end justify-center gap-3 mb-10 overflow-hidden">
+                <div className="w-full max-w-md flex items-end justify-center gap-3 mb-10">
                     {podiumOrder.map((group, i) => {
                         const medalIndex = i === 0 ? 1 : i === 1 ? 0 : 2;
                         const medal = MEDAL[medalIndex];
@@ -114,7 +126,7 @@ export const EndLeaderboard = () => {
                                     }}
                                 >
                                     {medalIndex === 0
-                                        ? `Winner · Rd ${group[0].eliminatedRound}`
+                                        ? (group[0].eliminatedRound === null ? 'Winner · Last Standing' : `Winner · Rd ${group[0].eliminatedRound}`)
                                         : medalIndex === 1
                                             ? `Runner-up · Rd ${group[0].eliminatedRound}`
                                             : `Third · Rd ${group[0].eliminatedRound}`}
@@ -138,12 +150,14 @@ export const EndLeaderboard = () => {
                 </div>
 
                 <div className="w-full max-w-md flex flex-col gap-2">
-                    {/* header */}
-                    <div className="flex px-3 mb-1">
-                        <span className="w-12 font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>Rank</span>
-                        <span className="flex-1 font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>Player</span>
-                        <span className="w-24 text-right font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>Round</span>
-                    </div>
+                    {/* header — only shown when there are players outside the podium */}
+                    {sorted.some(p => uniqueRounds.indexOf(p.eliminatedRound) > 2) && (
+                        <div className="flex px-3 mb-1">
+                            <span className="w-12 font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>Rank</span>
+                            <span className="flex-1 font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>Player</span>
+                            <span className="w-24 text-right font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>Round</span>
+                        </div>
+                    )}
 
                     {sorted.filter((player) => uniqueRounds.indexOf(player.eliminatedRound) > 2).map((player, index) => {
                         const rank = uniqueRounds.indexOf(player.eliminatedRound);
@@ -192,7 +206,7 @@ export const EndLeaderboard = () => {
                                 </span>
 
                                 <span className="w-24 text-right font-mono text-sm" style={{ color: FG2 }}>
-                                    {rank === 0 ? '—' : `Rd ${player.eliminatedRound}`}
+                                    {rank === 0 || player.eliminatedRound === null ? '—' : `Rd ${player.eliminatedRound}`}
                                 </span>
                             </div>
                         );
