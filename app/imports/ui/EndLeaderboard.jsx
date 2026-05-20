@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { Meteor } from 'meteor/meteor';
+import { useTracker } from 'meteor/react-meteor-data';
+import { PlayersCollection } from '../api/players';
 import { useNavigate } from 'react-router-dom';
 import { BG, PRIMARY, TILE, HAIRLINE, FG2, TileLattice, Avatar, TopBar, avatarColor } from './components/design';
 
@@ -11,29 +13,30 @@ const MEDAL = [
 export const EndLeaderboard = () => {
   const navigate = useNavigate();
 
-  const [players] = useState([
-    { name: 'Fred', eliminatedRound: 8 },
-    { name: 'Gordon', eliminatedRound: 7 },
-    { name: 'Hannah', eliminatedRound: 7 },
-    { name: 'Zara', eliminatedRound: 2 },
-    { name: 'Yusuf', eliminatedRound: 2 },
-    { name: 'Mia', eliminatedRound: 2 },
-    { name: 'Noah', eliminatedRound: 1 },
-    { name: 'Priya', eliminatedRound: 1 },
-    { name: 'Luca', eliminatedRound: 1 },
-    { name: 'Amara', eliminatedRound: 2 },
-    { name: 'Tobias', eliminatedRound: 3 },
-    { name: 'Sienna', eliminatedRound: 4 },
-    { name: 'Kwame', eliminatedRound: 4 },
-    { name: 'Ingrid', eliminatedRound: 5 },
-    { name: 'Remy', eliminatedRound: 5 },
-    { name: 'Bashir', eliminatedRound: 6 },
-    ...Array.from({ length: 100 }, (_, i) => ({ name: `Player${i + 1}`, eliminatedRound: 3 })),
-  ]);
+  const players = useTracker(() => {
+    const sub = Meteor.subscribe('players');
 
-  const sorted = [...players].sort((a, b) => b.eliminatedRound - a.eliminatedRound);
-  const uniqueRounds = [...new Set(sorted.map((p) => p.eliminatedRound))].sort((a, b) => b - a);
-  const ranks = sorted.map((player) => uniqueRounds.indexOf(player.eliminatedRound));
+    if (!sub.ready()) {
+      return [];
+    }
+
+    return PlayersCollection.find({}).fetch().map((player) => ({
+      id: player._id,
+      name: player.name,
+      eliminatedRound: player.eliminatedRound ?? null,
+      isWinner: !!player.winner,
+    }));
+  }, []);
+
+  const sorted = [...players].sort((a, b) => {
+    if (a.isWinner && !b.isWinner) return -1;
+    if (!a.isWinner && b.isWinner) return 1;
+    return (b.eliminatedRound ?? 0) - (a.eliminatedRound ?? 0);
+  });
+
+  const rankKey = (player) => (player.isWinner ? 'winner' : player.eliminatedRound);
+  const uniqueRanks = [...new Set(sorted.map(rankKey))];
+  const ranks = sorted.map((player) => uniqueRanks.indexOf(rankKey(player)));
 
   // Group top-3 ranks into podium blocks, displayed as 2nd | 1st | 3rd
   const byRank = [0, 1, 2].map((rank) => sorted.filter((p) => ranks[sorted.indexOf(p)] === rank));
@@ -158,10 +161,10 @@ export const EndLeaderboard = () => {
           </div>
 
           {sorted
-            .filter((player) => uniqueRounds.indexOf(player.eliminatedRound) > 2)
+            .filter((player) => uniqueRanks.indexOf(rankKey(player)) > 2)
             .map((player, index) => {
-              const rank = uniqueRounds.indexOf(player.eliminatedRound);
-              const tied = sorted.filter((p) => p.eliminatedRound === player.eliminatedRound).length > 1;
+              const rank = uniqueRanks.indexOf(rankKey(player));
+              const tied = sorted.filter((p) => rankKey(p) === rankKey(player)).length > 1;
               const medal = MEDAL[rank];
               const rowColor = medal ? medal.color : 'oklch(0.93 0.01 270)';
               const rowDelay = 1.5 + index * 0.04;
