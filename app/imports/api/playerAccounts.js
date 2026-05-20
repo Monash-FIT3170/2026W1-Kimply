@@ -2,7 +2,12 @@ import { Meteor } from 'meteor/meteor';
 import { Mongo } from 'meteor/mongo';
 import { createHash, randomBytes } from 'crypto';
 
-export const PlayerAccountsCollection = new Mongo.Collection('playerAccounts');
+// Guard against --full-app test mode evaluating this module twice
+// (app bundle + test bundle both load it; global is shared across both).
+if (!global._PlayerAccountsCollection) {
+  global._PlayerAccountsCollection = new Mongo.Collection('playerAccounts');
+}
+export const PlayerAccountsCollection = global._PlayerAccountsCollection;
 
 function cleanText(value) {
   return String(value || '').trim();
@@ -20,7 +25,8 @@ function validateEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-if (Meteor.isServer) {
+if (Meteor.isServer && !global._playerAccountsServerInitialized) {
+  global._playerAccountsServerInitialized = true;
   Meteor.methods({
     async 'playerAccounts.register'(account) {
       const displayName = cleanText(account?.displayName);

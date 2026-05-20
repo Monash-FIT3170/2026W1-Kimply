@@ -1,5 +1,7 @@
 import assert from 'assert';
+import './playerAccounts.test';
 import './rooms.test';
+import './uiHelpers.test';
 import './coverage-writer';
 
 describe('2026W1-Kimply', function () {
