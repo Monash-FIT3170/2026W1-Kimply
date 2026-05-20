@@ -7,7 +7,5 @@ export const COLOURS = ['red', 'blue', 'green', 'yellow'];
  * @returns {Array} array of colour objects
  */
 export function generateSequence(length = 4) {
-    return Array.from({ length }, () =>
-        COLOURS[Math.floor(Math.random() * COLOURS.length)]
-    );
+  return Array.from({ length }, () => COLOURS[Math.floor(Math.random() * COLOURS.length)]);
 }

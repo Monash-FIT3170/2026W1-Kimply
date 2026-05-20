@@ -1,12 +1,12 @@
-import { Meteor } from "meteor/meteor";
-import { Random } from "meteor/random";
-import { generateSequence } from "/imports/api/sequence";
-import { RoundsCollection } from "../imports/api/rounds";
-import { PlayersCollection } from "../imports/api/players";
-import { LeaderboardCollection } from "../imports/api/leaderboard";
+import { Meteor } from 'meteor/meteor';
+import { Random } from 'meteor/random';
+import { generateSequence } from '/imports/api/sequence';
+import { RoundsCollection } from '../imports/api/rounds';
+import { PlayersCollection } from '../imports/api/players';
+import { LeaderboardCollection } from '../imports/api/leaderboard';
 import '../imports/api/gameMethods';
 
-import "/imports/api/rooms";
+import '/imports/api/rooms';
 
 Meteor.startup(async () => {
   await RoundsCollection.removeAsync({});
@@ -18,7 +18,7 @@ Meteor.startup(async () => {
       sequence,
       createdAt: new Date(),
       advanced: false,
-      isCurrent: true
+      isCurrent: true,
     });
   }
 });

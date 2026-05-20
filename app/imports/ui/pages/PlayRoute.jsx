@@ -221,7 +221,7 @@ export function PlayRoute() {
 
         <button
           onClick={() => navigate('/')}
-          className="font-outfit font-bold text-[13px] uppercase tracking-[0.16em] px-5 py-3 rounded-full border border-hairline text-fg2 hover:text-fg transition-colors"
+          className="rounded-full border border-hairline px-5 py-3 font-outfit text-[13px] font-bold uppercase tracking-[0.16em] text-fg2 transition-colors hover:text-fg"
           style={{ background: 'color-mix(in oklab, oklch(0.20 0.02 270) 72%, transparent)' }}
         >
           Back to Home

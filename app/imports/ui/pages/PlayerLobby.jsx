@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { Meteor } from 'meteor/meteor';
 import { useSubscribe, useTracker } from 'meteor/react-meteor-data';
@@ -210,13 +210,14 @@ function HostView({ room, playerName, onBack, navigate }) {
         <button
           onClick={handleStart}
           disabled={players.length < 1}
-          className="w-full max-w-lg font-outfit font-extrabold text-sm uppercase tracking-[0.14em] px-7 py-4 rounded-xl transition-all"
+          className="w-full max-w-lg rounded-xl px-7 py-4 font-outfit text-sm font-extrabold uppercase tracking-[0.14em] transition-all"
           style={{
             background: players.length >= 1 ? PRIMARY : `color-mix(in oklab, ${PRIMARY} 30%, oklch(0.14 0.02 270))`,
             color: 'oklch(0.14 0.02 270)',
             cursor: players.length >= 1 ? 'pointer' : 'not-allowed',
             border: 'none',
-            boxShadow: players.length >= 1 ? `0 12px 40px -10px color-mix(in oklab, ${PRIMARY} 70%, transparent)` : 'none',
+            boxShadow:
+              players.length >= 1 ? `0 12px 40px -10px color-mix(in oklab, ${PRIMARY} 70%, transparent)` : 'none',
           }}
         >
           Start Game
@@ -229,7 +230,7 @@ function HostView({ room, playerName, onBack, navigate }) {
 function JoinedView({ room, playerName, onBack, navigate }) {
   const players = room.players || [];
   const emptySlots = Math.max(0, MAX_PLAYERS - players.length);
-  const stillInRoom = players.some(p => p.name === playerName);
+  const stillInRoom = players.some((p) => p.name === playerName);
 
   useEffect(() => {
     if (!stillInRoom) navigate('/play', { replace: true, state: { kicked: true } });

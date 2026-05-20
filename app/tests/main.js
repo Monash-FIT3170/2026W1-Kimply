@@ -1,8 +1,8 @@
-import assert from "assert";
+import assert from 'assert';
 import '../imports/api/gameMethods.js';
 import './roundAdvance.test.js';
 import './updateWinner.test.js';
-import "./lifeDeduction.test.js";
+import './lifeDeduction.test.js';
 import assert from 'assert';
 import './playerAccounts.test';
 import './rooms.test';
