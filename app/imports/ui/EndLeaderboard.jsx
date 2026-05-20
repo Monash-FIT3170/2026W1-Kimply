@@ -2,7 +2,7 @@ import { Meteor } from 'meteor/meteor';
 import { useTracker } from 'meteor/react-meteor-data';
 import { PlayersCollection } from '../api/players';
 import { useNavigate } from 'react-router-dom';
-import { BG, PRIMARY, TILE, HAIRLINE, FG2, TileLattice, Avatar, TopBar, avatarColor } from './components/design';
+import { BG, PRIMARY, FG2, TileLattice, Avatar, TopBar, ArrowIcon, avatarColor } from './components/design';
 
 const MEDAL = [
   { color: 'oklch(0.83 0.16 80)', label: '1st' },
@@ -42,6 +42,13 @@ export const EndLeaderboard = ({ gameId }) => {
   const byRank = [0, 1, 2].map((rank) => sorted.filter((p) => ranks[sorted.indexOf(p)] === rank));
   const podiumOrder = [byRank[1], byRank[0], byRank[2]];
   const podiumHeights = [72, 100, 56];
+  const winnerGroup = byRank[0] ?? [];
+  const highestEliminatedRound = Math.max(0, ...players.map((player) => player.eliminatedRound ?? 0));
+
+  const playerScore = (player) => {
+    if (player.isWinner) return Math.max(highestEliminatedRound, player.eliminatedRound ?? 0);
+    return player.eliminatedRound ?? 0;
+  };
 
   if (players.length === 0) {
     return (
@@ -69,13 +76,28 @@ export const EndLeaderboard = ({ gameId }) => {
       </div>
 
       <div className="relative z-10 flex flex-1 flex-col items-center px-6 pb-12">
-        <h1 className="mb-2 font-outfit text-5xl font-extrabold tracking-tight">Leaderboard</h1>
-        <p className="mb-8 font-mono text-[13px] uppercase tracking-widest" style={{ color: FG2 }}>
-          Final Results
-        </p>
+        <div className="mb-7 flex flex-col items-center text-center" style={{ animation: 'leaderboardTitleIn 0.7s ease both' }}>
+          <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.22em]" style={{ color: PRIMARY }}>
+            Final Results
+          </p>
+          <h1 className="font-outfit text-5xl font-extrabold tracking-tight">Leaderboard</h1>
+          {winnerGroup.length > 0 && (
+            <div
+              className="mt-4 rounded-full px-4 py-2 font-outfit text-sm font-extrabold"
+              style={{
+                color: BG,
+                background: `linear-gradient(135deg, ${MEDAL[0].color}, ${PRIMARY})`,
+                boxShadow: `0 0 34px color-mix(in oklab, ${MEDAL[0].color} 28%, transparent)`,
+                animation: 'winnerCrown 1.1s cubic-bezier(0.22,1,0.36,1) 0.35s both',
+              }}
+            >
+              Winner: {winnerGroup.map((player) => player.name).join(' & ')}
+            </div>
+          )}
+        </div>
 
         {/* Podium */}
-        <div className="mb-10 flex w-full max-w-md items-end justify-center gap-3 overflow-hidden">
+        <div className="mb-10 flex w-full max-w-md items-end justify-center gap-3 overflow-hidden px-1">
           {podiumOrder.map((group, i) => {
             const medalIndex = i === 0 ? 1 : i === 1 ? 0 : 2;
             const medal = MEDAL[medalIndex];
@@ -146,7 +168,11 @@ export const EndLeaderboard = ({ gameId }) => {
                     border: `1px solid color-mix(in oklab, ${medal.color} 35%, transparent)`,
                     borderBottom: 'none',
                     color: medal.color,
-                    animation: `podiumRise 0.6s cubic-bezier(0.22,1,0.36,1) ${riseDelay}s both`,
+                    boxShadow:
+                      medalIndex === 0
+                        ? `0 -16px 34px -22px color-mix(in oklab, ${medal.color} 60%, transparent)`
+                        : 'none',
+                    animation: `podiumRise 0.75s cubic-bezier(0.22,1,0.36,1) ${riseDelay}s both`,
                   }}
                 >
                   {group.length > 1 ? `=${medalIndex + 1}` : medalIndex + 1}
@@ -158,8 +184,10 @@ export const EndLeaderboard = ({ gameId }) => {
 
         <div className="flex w-full max-w-md flex-col gap-2">
           {/* header */}
-          {sorted.some((player) => uniqueRanks.indexOf(rankKey(player)) > 2) && (
-            <div className="mb-1 flex px-3">
+          <div
+            className="mb-1 flex px-3"
+            style={{ animation: 'rowSlideIn 0.45s ease 1.35s both' }}
+          >
               <span className="w-12 font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
                 Rank
               </span>
@@ -167,13 +195,11 @@ export const EndLeaderboard = ({ gameId }) => {
                 Player
               </span>
               <span className="w-24 text-right font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
-                Round
+                Score
               </span>
             </div>
-          )}
 
           {sorted
-            .filter((player) => uniqueRanks.indexOf(rankKey(player)) > 2)
             .map((player, index) => {
               const rank = uniqueRanks.indexOf(rankKey(player));
               const tied = sorted.filter((p) => rankKey(p) === rankKey(player)).length > 1;
@@ -186,7 +212,7 @@ export const EndLeaderboard = ({ gameId }) => {
                   key={player.name}
                   className="flex items-center gap-3 rounded-xl px-3 py-3"
                   style={{
-                    animation: `rowSlideIn 0.4s ease ${rowDelay}s both`,
+                    animation: `scoreboardRowIn 0.55s cubic-bezier(0.22,1,0.36,1) ${rowDelay}s both`,
                     background: medal
                       ? `color-mix(in oklab, ${medal.color} 12%, transparent)`
                       : 'color-mix(in oklab, white 4%, transparent)',
@@ -217,12 +243,26 @@ export const EndLeaderboard = ({ gameId }) => {
                   </span>
 
                   <span className="w-24 text-right font-mono text-sm" style={{ color: FG2 }}>
-                    {player.isWinner ? 'Winner' : `Rd ${player.eliminatedRound}`}
+                    {player.isWinner ? `Won Rd ${playerScore(player)}` : `Rd ${playerScore(player)}`}
                   </span>
                 </div>
               );
             })}
         </div>
+
+        <button
+          onClick={() => navigate('/play')}
+          className="mt-8 inline-flex items-center gap-2 rounded-full px-5 py-3 font-outfit text-[13px] font-extrabold uppercase tracking-[0.16em] transition-transform hover:scale-[1.02]"
+          style={{
+            background: `color-mix(in oklab, ${PRIMARY} 16%, transparent)`,
+            border: `1px solid color-mix(in oklab, ${PRIMARY} 48%, transparent)`,
+            color: PRIMARY,
+            animation: 'homeButtonIn 0.55s ease 1.8s both',
+          }}
+        >
+          Back to Home
+          <ArrowIcon size={14} stroke={PRIMARY} />
+        </button>
       </div>
     </div>
   );
