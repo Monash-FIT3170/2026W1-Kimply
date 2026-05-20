@@ -59,6 +59,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       if (!room) throw new Meteor.Error('not-found', 'Room not found');
       if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
       await RoomsCollection.updateAsync({ _id: room._id }, { $set: { status: 'in_progress' } });
+      await Meteor.callAsync('rounds.generate', 4, room.pin);
     },
 
     async 'rooms.kick'(pin, playerId) {

@@ -10,7 +10,7 @@ const MEDAL = [
   { color: 'oklch(0.72 0.14 55)', label: '3rd' },
 ];
 
-export const EndLeaderboard = () => {
+export const EndLeaderboard = ({ gameId }) => {
   const navigate = useNavigate();
 
   const players = useTracker(() => {
@@ -20,13 +20,13 @@ export const EndLeaderboard = () => {
       return [];
     }
 
-    return PlayersCollection.find({}).fetch().map((player) => ({
+    return PlayersCollection.find(gameId ? { gameId } : {}).fetch().map((player) => ({
       id: player._id,
       name: player.name,
       eliminatedRound: player.eliminatedRound ?? null,
       isWinner: !!player.winner,
     }));
-  }, []);
+  }, [gameId]);
 
   const sorted = [...players].sort((a, b) => {
     if (a.isWinner && !b.isWinner) return -1;

@@ -10,8 +10,8 @@ function generateSequence(length) {
   return Array.from({ length }, () => COLOURS[Math.floor(Math.random() * COLOURS.length)]);
 }
 
-async function checkWinner(roundId) {
-  const players = await PlayersCollection.find({ roundId }).fetchAsync();
+async function checkWinner(gameId) {
+  const players = await PlayersCollection.find({ gameId }).fetchAsync();
 
   const alreadyFinished = players.some((p) => p.gameFinished);
   if (alreadyFinished) return;
@@ -26,7 +26,7 @@ async function checkWinner(roundId) {
     });
 
     await PlayersCollection.updateAsync(
-      { roundId },
+      { gameId },
       {
         $set: {
           gameFinished: true,
@@ -41,7 +41,7 @@ async function checkWinner(roundId) {
 
     await PlayersCollection.updateAsync(
       {
-        roundId,
+        gameId,
         eliminatedRound: highestRound,
       },
       {
@@ -53,7 +53,7 @@ async function checkWinner(roundId) {
     );
 
     await PlayersCollection.updateAsync(
-      { roundId },
+      { gameId },
       {
         $set: {
           gameFinished: true,
@@ -71,7 +71,10 @@ async function advanceRoundIfReady(round) {
 
   const activePlayers = playersInRound.filter((p) => !p.eliminated);
   const allFinished = activePlayers.length > 0 && activePlayers.every((p) => p.completeRound);
-  const hasWinner = playersInRound.some((p) => p.winner);
+  const hasWinner = await PlayersCollection.findOneAsync({
+    gameId: round.gameId,
+    winner: true,
+  });
 
   if (!round.advanced && allFinished && !hasWinner) {
     await Meteor.callAsync('rounds.advance', round._id);
@@ -82,10 +85,11 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
   global._gameMethodsInitialized = true;
   Meteor.methods({
     // Generate a new round with a colour sequence
-    'rounds.generate'(length = 4) {
+    'rounds.generate'(length = 4, gameId = null) {
       const sequence = generateSequence(length);
 
       return RoundsCollection.insertAsync({
+        gameId,
         lengthOfSequence: length,
         sequence,
         createdAt: new Date(),
@@ -95,8 +99,9 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
     },
 
     // Add a player to a round
-    'players.join'(roundId, playerName) {
+    'players.join'(roundId, playerName, gameId = null) {
       return PlayersCollection.insertAsync({
+        gameId,
         roundId,
         name: playerName,
         lives: 3,
@@ -128,10 +133,11 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
           },
         });
 
-        await checkWinner(player.roundId);
+        await checkWinner(player.gameId);
 
         // add successful completion to leaderboard
         await LeaderboardCollection.insertAsync({
+          gameId: player.gameId,
           playerId,
           name: player.name,
           lives: player.lives,
@@ -152,11 +158,11 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
           },
         });
 
-        await checkWinner(player.roundId);
+        await checkWinner(player.gameId);
         
         const updatedRound = await RoundsCollection.findOneAsync(player.roundId);
         await advanceRoundIfReady(updatedRound);
-        
+
         // return failed attempt to client
         return {
           success: false,
@@ -217,6 +223,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
 
       // create next round
       const nextRoundId = await RoundsCollection.insertAsync({
+        gameId: currentRound.gameId,
         lengthOfSequence: nextLength,
         sequence: nextSequence,
         createdAt: new Date(),

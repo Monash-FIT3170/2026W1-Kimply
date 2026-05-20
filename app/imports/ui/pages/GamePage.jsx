@@ -20,6 +20,7 @@ export const GamePage = () => {
   const location = useLocation();
   const playerNameFromLobby = location.state?.playerName || 'Demo Player';
   const roomPin = location.state?.pin;
+  const gameId = roomPin || 'demo';
 
   useEffect(() => {
     const roundsSub = Meteor.subscribe('rounds');
@@ -31,8 +32,8 @@ export const GamePage = () => {
   }, []);
 
   const round = useTracker(() => {
-    return RoundsCollection.findOne({ isCurrent: true });
-  });
+    return RoundsCollection.findOne({ gameId, isCurrent: true });
+  }, [gameId]);
 
   const player = useTracker(() => {
     if (!playerId) return null;
@@ -41,7 +42,7 @@ export const GamePage = () => {
 
   useEffect(() => {
     if (!round?._id || playerId) return;
-    Meteor.call('players.join', round._id, playerNameFromLobby, (error, result) => {
+    Meteor.call('players.join', round._id, playerNameFromLobby, gameId, (error, result) => {
       if (error) {
         console.error(error);
         setMessage('Could not join the game.');
@@ -137,7 +138,7 @@ export const GamePage = () => {
   if (!player) return null;
 
   if (player?.gameFinished) {
-    return <EndLeaderboard />;
+    return <EndLeaderboard gameId={player.gameId} />;
   }
 
   if (player?.eliminated) {
