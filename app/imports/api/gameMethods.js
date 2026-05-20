@@ -48,6 +48,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         name: playerName,
         lives: 3,
         attemptedSequence: [],
+        eliminatedRound: null,
         eliminated: false,
         winner: false,
         completeRound: false,
@@ -86,12 +87,14 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       } else {
         // remove one life for wrong sequence
         const newLives = player.lives - 1;
+        const eliminated = newLives <= 0;
 
         await PlayersCollection.updateAsync(playerId, {
           $set: {
             attemptedSequence,
             lives: newLives,
-            eliminated: newLives <= 0,
+            eliminated,
+            eliminatedRound: eliminated ? round.lengthOfSequence - 3 : player.eliminatedRound,
           },
         });
 
