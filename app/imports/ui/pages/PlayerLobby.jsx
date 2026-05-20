@@ -227,7 +227,10 @@ function JoinedView({ room, playerName, onBack, navigate }) {
 
   const stillInRoom = players.some(p => p.name === playerName);
   useEffect(() => {
-    if (!stillInRoom) navigate('/play', { replace: true, state: { kicked: true } });
+    if (!stillInRoom) {
+      localStorage.removeItem('reconnectData');
+      navigate('/play', { replace: true, state: { kicked: true } });
+    }
   }, [stillInRoom]);
   const progress = (players.length / MAX_PLAYERS) * 100;
 
