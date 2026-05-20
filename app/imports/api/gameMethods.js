@@ -13,15 +13,54 @@ function generateSequence(length) {
 async function checkWinner(roundId) {
   const players = await PlayersCollection.find({ roundId }).fetchAsync();
 
-  const active = players.filter((p) => !p.eliminated);
+  const alreadyFinished = players.some((p) => p.gameFinished);
+  if (alreadyFinished) return;
 
-  const alreadyWinner = players.some((p) => p.winner);
-  if (alreadyWinner) return;
+  const active = players.filter((p) => !p.eliminated);
 
   if (active.length === 1) {
     await PlayersCollection.updateAsync(active[0]._id, {
-      $set: { winner: true },
+      $set: {
+        winner: true,
+      },
     });
+
+    await PlayersCollection.updateAsync(
+      { roundId },
+      {
+        $set: {
+          gameFinished: true,
+        },
+      },
+      { multi: true }
+    );
+  }
+
+  if (active.length === 0 && players.length > 0) {
+    const highestRound = Math.max(...players.map((p) => p.eliminatedRound ?? 0));
+
+    await PlayersCollection.updateAsync(
+      {
+        roundId,
+        eliminatedRound: highestRound,
+      },
+      {
+        $set: {
+          winner: true,
+        },
+      },
+      { multi: true }
+    );
+
+    await PlayersCollection.updateAsync(
+      { roundId },
+      {
+        $set: {
+          gameFinished: true,
+        },
+      },
+      { multi: true }
+    );
   }
 }
 
@@ -52,6 +91,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         eliminated: false,
         winner: false,
         completeRound: false,
+        gameFinished: false,
       });
     },
 
