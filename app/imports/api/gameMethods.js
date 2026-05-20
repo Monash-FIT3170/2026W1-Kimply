@@ -64,6 +64,20 @@ async function checkWinner(roundId) {
   }
 }
 
+async function advanceRoundIfReady(round) {
+  const playersInRound = await PlayersCollection.find({
+    roundId: round._id,
+  }).fetchAsync();
+
+  const activePlayers = playersInRound.filter((p) => !p.eliminated);
+  const allFinished = activePlayers.length > 0 && activePlayers.every((p) => p.completeRound);
+  const hasWinner = playersInRound.some((p) => p.winner);
+
+  if (!round.advanced && allFinished && !hasWinner) {
+    await Meteor.callAsync('rounds.advance', round._id);
+  }
+}
+
 if (Meteor.isServer && !global._gameMethodsInitialized) {
   global._gameMethodsInitialized = true;
   Meteor.methods({
@@ -139,7 +153,10 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         });
 
         await checkWinner(player.roundId);
-
+        
+        const updatedRound = await RoundsCollection.findOneAsync(player.roundId);
+        await advanceRoundIfReady(updatedRound);
+        
         // return failed attempt to client
         return {
           success: false,
