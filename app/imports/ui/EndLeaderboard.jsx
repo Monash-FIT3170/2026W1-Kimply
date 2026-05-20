@@ -260,7 +260,7 @@ export const EndLeaderboard = ({ gameId }) => {
             animation: 'homeButtonIn 0.55s ease 1.8s both',
           }}
         >
-          Back to Home
+          New Game
           <ArrowIcon size={14} stroke={PRIMARY} />
         </button>
       </div>
