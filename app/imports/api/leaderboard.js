@@ -1,3 +1,8 @@
 import { Mongo } from 'meteor/mongo';
 
-export const LeaderboardCollection = new Mongo.Collection('leaderboard');
+// Guard against --full-app test mode evaluating this module twice
+// (app bundle + test bundle both load it; global is shared across both).
+if (!global._LeaderboardCollection) {
+  global._LeaderboardCollection = new Mongo.Collection('leaderboard');
+}
+export const LeaderboardCollection = global._LeaderboardCollection;

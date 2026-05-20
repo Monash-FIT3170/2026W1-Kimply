@@ -19,9 +19,9 @@ if (Meteor.isServer) {
         isCurrent: true,
       });
 
-      await Meteor.callAsync('rounds.advance', roundId);
+      const nextRoundId = await Meteor.callAsync('rounds.advance', roundId);
 
-      const nextRound = await RoundsCollection.findOneAsync({ isCurrent: true });
+      const nextRound = await RoundsCollection.findOneAsync(nextRoundId);
       assert.equal(nextRound.lengthOfSequence, 5);
       assert.equal(nextRound.sequence.length, 5);
     });

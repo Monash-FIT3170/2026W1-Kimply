@@ -25,159 +25,162 @@ async function checkWinner(roundId) {
   }
 }
 
-Meteor.methods({
-  // Generate a new round with a colour sequence
-  'rounds.generate'(length = 4) {
-    const sequence = generateSequence(length);
+if (Meteor.isServer && !global._gameMethodsInitialized) {
+  global._gameMethodsInitialized = true;
+  Meteor.methods({
+    // Generate a new round with a colour sequence
+    'rounds.generate'(length = 4) {
+      const sequence = generateSequence(length);
 
-    return RoundsCollection.insertAsync({
-      lengthOfSequence: length,
-      sequence,
-      createdAt: new Date(),
-      advanced: false,
-      isCurrent: true,
-    });
-  },
-
-  // Add a player to a round
-  'players.join'(roundId, playerName) {
-    return PlayersCollection.insertAsync({
-      roundId,
-      name: playerName,
-      lives: 3,
-      attemptedSequence: [],
-      eliminated: false,
-      winner: false,
-      completeRound: false,
-    });
-  },
-
-  // Submit a player's attempted sequence
-  async 'players.submitSequence'(playerId, attemptedSequence) {
-    // get player and current round
-    const player = await PlayersCollection.findOneAsync(playerId);
-    const round = await RoundsCollection.findOneAsync(player.roundId);
-
-    // compare submitted sequence with actual sequence
-    const correct = JSON.stringify(attemptedSequence) === JSON.stringify(round.sequence);
-
-    // if correct update player values
-    if (correct) {
-      // mark player as completed
-      await PlayersCollection.updateAsync(playerId, {
-        $set: {
-          attemptedSequence,
-          completeRound: true,
-        },
+      return RoundsCollection.insertAsync({
+        lengthOfSequence: length,
+        sequence,
+        createdAt: new Date(),
+        advanced: false,
+        isCurrent: true,
       });
+    },
 
-      await checkWinner(player.roundId);
-
-      // add successful completion to leaderboard
-      await LeaderboardCollection.insertAsync({
-        playerId,
-        name: player.name,
-        lives: player.lives,
-        roundId: player.roundId,
-        completedAt: new Date(),
-      });
-    } else {
-      // remove one life for wrong sequence
-      const newLives = player.lives - 1;
-
-      await PlayersCollection.updateAsync(playerId, {
-        $set: {
-          attemptedSequence,
-          lives: newLives,
-          eliminated: newLives <= 0,
-        },
-      });
-
-      await checkWinner(player.roundId);
-
-      // return failed attempt to client
-      return {
-        success: false,
-        sequenceComplete: false,
-        remainingLives: newLives,
-      };
-    }
-
-    // check all players in current round
-    const playersInRound = await PlayersCollection.find({
-      roundId: player.roundId,
-    }).fetchAsync();
-
-    // only active players
-    const activePlayers = playersInRound.filter((p) => !p.eliminated);
-
-    // check if all active players finished
-    const allFinished = activePlayers.length > 0 && activePlayers.every((p) => p.completeRound);
-
-    const hasWinner = playersInRound.some((p) => p.winner);
-
-    // move to next round if everyone finished
-    if (!round.advanced && allFinished && !hasWinner) {
-      await Meteor.callAsync('rounds.advance', player.roundId);
-    }
-
-    // return successful completion
-    return {
-      success: true,
-      sequenceComplete: true,
-    };
-  },
-
-  // advance game to next round
-  async 'rounds.advance'(currentRoundId) {
-    // get current round
-    const currentRound = await RoundsCollection.findOneAsync(currentRoundId);
-
-    if (!currentRound) {
-      throw new Meteor.Error('round-not-found', 'Current round does not exist');
-    }
-
-    // prevent duplicate advancement
-    if (currentRound.advanced) return;
-
-    // mark current round as completed
-    await RoundsCollection.updateAsync(currentRoundId, {
-      $set: {
-        advanced: true,
-        isCurrent: false,
-      },
-    });
-
-    // increase sequence size for next round
-    const nextLength = currentRound.lengthOfSequence + 1;
-
-    const nextSequence = generateSequence(nextLength);
-
-    // create next round
-    const nextRoundId = await RoundsCollection.insertAsync({
-      lengthOfSequence: nextLength,
-      sequence: nextSequence,
-      createdAt: new Date(),
-      advanced: false,
-      isCurrent: true,
-    });
-
-    // move active players into next round
-    await PlayersCollection.updateAsync(
-      {
-        roundId: currentRoundId,
+    // Add a player to a round
+    'players.join'(roundId, playerName) {
+      return PlayersCollection.insertAsync({
+        roundId,
+        name: playerName,
+        lives: 3,
+        attemptedSequence: [],
         eliminated: false,
-      },
-      {
-        $set: {
-          roundId: nextRoundId,
-          completeRound: false,
-          attemptedSequence: [],
-        },
-      },
-      { multi: true }
-    );
+        winner: false,
+        completeRound: false,
+      });
+    },
 
-    return nextRoundId;
-  },
-});
+    // Submit a player's attempted sequence
+    async 'players.submitSequence'(playerId, attemptedSequence) {
+      // get player and current round
+      const player = await PlayersCollection.findOneAsync(playerId);
+      const round = await RoundsCollection.findOneAsync(player.roundId);
+
+      // compare submitted sequence with actual sequence
+      const correct = JSON.stringify(attemptedSequence) === JSON.stringify(round.sequence);
+
+      // if correct update player values
+      if (correct) {
+        // mark player as completed
+        await PlayersCollection.updateAsync(playerId, {
+          $set: {
+            attemptedSequence,
+            completeRound: true,
+          },
+        });
+
+        await checkWinner(player.roundId);
+
+        // add successful completion to leaderboard
+        await LeaderboardCollection.insertAsync({
+          playerId,
+          name: player.name,
+          lives: player.lives,
+          roundId: player.roundId,
+          completedAt: new Date(),
+        });
+      } else {
+        // remove one life for wrong sequence
+        const newLives = player.lives - 1;
+
+        await PlayersCollection.updateAsync(playerId, {
+          $set: {
+            attemptedSequence,
+            lives: newLives,
+            eliminated: newLives <= 0,
+          },
+        });
+
+        await checkWinner(player.roundId);
+
+        // return failed attempt to client
+        return {
+          success: false,
+          sequenceComplete: false,
+          remainingLives: newLives,
+        };
+      }
+
+      // check all players in current round
+      const playersInRound = await PlayersCollection.find({
+        roundId: player.roundId,
+      }).fetchAsync();
+
+      // only active players
+      const activePlayers = playersInRound.filter((p) => !p.eliminated);
+
+      // check if all active players finished
+      const allFinished = activePlayers.length > 0 && activePlayers.every((p) => p.completeRound);
+
+      const hasWinner = playersInRound.some((p) => p.winner);
+
+      // move to next round if everyone finished
+      if (!round.advanced && allFinished && !hasWinner) {
+        await Meteor.callAsync('rounds.advance', player.roundId);
+      }
+
+      // return successful completion
+      return {
+        success: true,
+        sequenceComplete: true,
+      };
+    },
+
+    // advance game to next round
+    async 'rounds.advance'(currentRoundId) {
+      // get current round
+      const currentRound = await RoundsCollection.findOneAsync(currentRoundId);
+
+      if (!currentRound) {
+        throw new Meteor.Error('round-not-found', 'Current round does not exist');
+      }
+
+      // prevent duplicate advancement
+      if (currentRound.advanced) return;
+
+      // mark current round as completed
+      await RoundsCollection.updateAsync(currentRoundId, {
+        $set: {
+          advanced: true,
+          isCurrent: false,
+        },
+      });
+
+      // increase sequence size for next round
+      const nextLength = currentRound.lengthOfSequence + 1;
+
+      const nextSequence = generateSequence(nextLength);
+
+      // create next round
+      const nextRoundId = await RoundsCollection.insertAsync({
+        lengthOfSequence: nextLength,
+        sequence: nextSequence,
+        createdAt: new Date(),
+        advanced: false,
+        isCurrent: true,
+      });
+
+      // move active players into next round
+      await PlayersCollection.updateAsync(
+        {
+          roundId: currentRoundId,
+          eliminated: false,
+        },
+        {
+          $set: {
+            roundId: nextRoundId,
+            completeRound: false,
+            attemptedSequence: [],
+          },
+        },
+        { multi: true }
+      );
+
+      return nextRoundId;
+    },
+  });
+}
