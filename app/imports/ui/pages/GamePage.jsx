@@ -136,7 +136,7 @@ export const GamePage = () => {
 
   if (!player) return null;
 
-  if (player?.winner) {
+  if (player?.gameFinished) {
     return <EndLeaderboard />;
   }
 
