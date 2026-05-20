@@ -86,24 +86,53 @@ export function PlayRoute() {
   }, []);
 
   const handleReconnect = () =>{
-    navigate('/')
+    const reconnectData = localStorage.getItem('reconnectData');
+    if (!reconnectData) return;
+    
+    const {gameId, playerId} = JSON.parse(reconnectData);
+
+    Meteor.call('rooms.reconnect', gameId, playerId, (err, result)=>{
+      if (err){
+        localStorage.removeItem('reconnectData');
+        return;
+      }
+
+      navigate(`/play/${gameId}`, { state: { 
+        playerName: result.playerName, 
+        isHost: result.isHost, 
+        playerId: result.playerId 
+      }});
+    })
   }
 
   const handleDismiss = () =>{
-    Meteor.call('rooms.disconnect', pin, playerId) 
+    //  Get recconnect data for game 
+    const reconnectData = JSON.parse(localStorage.getItem('reconnectData'))
+
+    const gamePin = reconnectData?.gameId;
+    const playerId = reconnectData?.playerId;
+
+    Meteor.call('rooms.disconnect', gamePin, playerId) 
     localStorage.removeItem('reconnectData');
     setReconnectData(null);
-
-    // ! Disconnect them from the game here 
   }
 
   const handleCreate = () => {
     if (!hasName || loading) return;
     setLoading(true);
     setError('');
+
     Meteor.call('rooms.create', trimmedName, (err, result) => {
       setLoading(false);
       if (err) { setError('Could not create room. Try again.'); return; }
+
+      //! For host reconnection
+      // const reconnectData = {
+      //   playerId : result.hostId,
+      //   gameId : result.gameId
+      // };
+      
+      // localStorage.setItem('reconnectData', JSON.stringify(reconnectData));
       navigate(`/play/${result.gameId}`, { state: { playerName: trimmedName, isHost: true, playerId: result.hostId } });
     });
   };

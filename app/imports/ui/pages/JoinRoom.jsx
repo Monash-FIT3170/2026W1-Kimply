@@ -47,7 +47,7 @@ export function JoinRoom() {
 
       const reconnectData = {
         playerId : res.playerId,
-        gameId : res.gameId
+        gameId : res.roomId
       }
       
       localStorage.setItem('reconnectData', JSON.stringify(reconnectData));

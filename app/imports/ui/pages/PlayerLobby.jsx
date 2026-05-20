@@ -326,7 +326,6 @@ export function PlayerLobby() {
         isOpen = {showExitPopup}
         onConfirm ={() => {
           setShowExitPopup(false);
-          console.log(playerId)
           Meteor.call('rooms.disconnect', pin, playerId) 
 
           // removing session storage of reconnect data
