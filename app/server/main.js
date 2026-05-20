@@ -1,5 +1,4 @@
 import { Meteor } from "meteor/meteor";
-import { LinksCollection } from "/imports/api/links";
 import { Random } from "meteor/random";
 import { generateSequence } from "/imports/api/sequence";
 import { RoundsCollection } from "../imports/api/rounds";

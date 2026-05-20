@@ -7,7 +7,9 @@ import { JoinRoom } from '/imports/ui/pages/JoinRoom';
 import { PlayerLobby } from '/imports/ui/pages/PlayerLobby';
 import { EndLeaderboard } from "/imports/ui/EndLeaderboard";
 import { GamePage } from "/imports/ui/pages/GamePage";
+import { Account } from "/imports/ui/pages/Account";
 import '/imports/ui/styles.css';
+
 
 Meteor.startup(() => {
   const container = document.getElementById('react-target');
@@ -21,6 +23,8 @@ Meteor.startup(() => {
         <Route path="/play/join" element={<JoinRoom />} />
         <Route path="/play/:pin" element={<PlayerLobby />} />
         <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="/account"   element={<Account />} />
+        <Route path="*"          element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Meteor } from 'meteor/meteor';
 import {
   BG,
@@ -12,6 +12,7 @@ import {
   avatarColor,
   ArrowIcon,
 } from '../components/design';
+import { submitOnEnter } from '../keyboard';
 
 function PencilIcon({ size = 14 }) {
   return (
@@ -92,13 +93,15 @@ function RouteCard({ kind, title, blurb, color, primary, onClick, disabled }) {
 }
 
 export function PlayRoute() {
-  const [name, setName] = useState('');
-  const [editing, setEditing] = useState(true);
+  const { state } = useLocation();
+  const signedInAccount = state?.playerAccount;
+
+  const [name, setName] = useState(signedInAccount?.displayName || '');
+  const [editing, setEditing] = useState(!signedInAccount?.displayName);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const { state } = useLocation();
   const wasKicked = state?.kicked === true;
 
   const trimmedName = name.trim();
@@ -120,7 +123,7 @@ export function PlayRoute() {
 
   const handleJoin = () => {
     if (!hasName) return;
-    navigate('/play/join', { state: { playerName: trimmedName } });
+    navigate('/play/join', { state: { playerName: trimmedName, playerAccount: signedInAccount } });
   };
 
   return (
@@ -144,7 +147,7 @@ export function PlayRoute() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               onBlur={() => hasName && setEditing(false)}
-              onKeyDown={(e) => e.key === 'Enter' && hasName && setEditing(false)}
+              onKeyDown={submitOnEnter(() => setEditing(false), { when: () => hasName })}
               placeholder="Enter your username"
               maxLength={30}
               className="w-full rounded-[14px] border border-hairline bg-surface px-4 py-3.5 font-outfit text-lg font-semibold text-fg outline-none placeholder:text-fg3"
@@ -161,6 +164,17 @@ export function PlayRoute() {
                 <PencilIcon size={14} />
               </button>
             </div>
+          )}
+
+          {signedInAccount ? (
+            <p className="mt-3 text-center font-manrope text-[13px] text-fg3">Signed in as {signedInAccount.email}</p>
+          ) : (
+            <p className="mt-3 text-center font-manrope text-[13px] text-fg3">
+              Want to save your stats?{' '}
+              <Link to="/account" className="font-outfit font-bold text-fg">
+                Sign up
+              </Link>
+            </p>
           )}
         </div>
 

@@ -2,15 +2,14 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { Meteor } from 'meteor/meteor';
 import { PRIMARY, TILE, HAIRLINE, TileLattice, Wordmark, ArrowIcon, BackChevron, FG2 } from '../components/design';
+import { combineKeyHandlers, removeOnBackspace, submitOnEnter } from '../keyboard';
+import { appendRoomCodeInput, clearCapturedInput, roomCodeFromSearchParams } from '../roomCode';
 
 const SLOTS = 5;
 
 export function JoinRoom() {
   const [searchParams] = useSearchParams();
-  const prefill = (searchParams.get('code') || '')
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, '')
-    .slice(0, SLOTS);
+  const prefill = roomCodeFromSearchParams(searchParams, 'code', SLOTS);
   const [code, setCode] = useState(prefill);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -23,18 +22,15 @@ export function JoinRoom() {
     inputRef.current?.focus();
   }, []);
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Backspace') {
-      setCode((prev) => prev.slice(0, -1));
-      setError('');
-    }
+  const removeLastCodeCharacter = () => {
+    setCode((prev) => prev.slice(0, -1));
+    setError('');
   };
 
   const handleInput = (e) => {
-    const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    setCode((prev) => (prev + val).slice(0, SLOTS));
+    setCode((prev) => appendRoomCodeInput(prev, e.target.value, SLOTS));
     setError('');
-    e.target.value = '';
+    clearCapturedInput(e);
   };
 
   const handleJoin = () => {
@@ -57,6 +53,8 @@ export function JoinRoom() {
     });
   };
 
+  const handleCodeKeyDown = combineKeyHandlers(removeOnBackspace(removeLastCodeCharacter), submitOnEnter(handleJoin));
+
   const canJoin = code.length === SLOTS && playerName.trim().length > 0 && !loading;
 
   return (
@@ -78,7 +76,7 @@ export function JoinRoom() {
       <input
         ref={inputRef}
         onInput={handleInput}
-        onKeyDown={handleKeyDown}
+        onKeyDown={handleCodeKeyDown}
         className="pointer-events-none absolute h-px w-px opacity-0"
         autoComplete="off"
         autoCapitalize="characters"
@@ -137,6 +135,7 @@ export function JoinRoom() {
             <input
               value={playerName}
               onChange={(e) => setPlayerName(e.target.value)}
+              onKeyDown={submitOnEnter(handleJoin)}
               placeholder="Enter your username"
               maxLength={30}
               className="w-full rounded-[14px] border border-hairline bg-surface px-4 py-3 font-outfit text-base font-semibold text-fg outline-none placeholder:text-fg3"
