@@ -41,7 +41,7 @@ export const EndLeaderboard = ({ gameId }) => {
   // Group top-3 ranks into podium blocks, displayed as 2nd | 1st | 3rd
   const byRank = [0, 1, 2].map((rank) => sorted.filter((p) => ranks[sorted.indexOf(p)] === rank));
   const podiumOrder = [byRank[1], byRank[0], byRank[2]];
-  const podiumHeights = [72, 100, 56];
+  const podiumHeights = [90, 120, 72];
   const winnerGroup = byRank[0] ?? [];
   const highestEliminatedRound = Math.max(0, ...players.map((player) => player.eliminatedRound ?? 0));
 
@@ -97,7 +97,7 @@ export const EndLeaderboard = ({ gameId }) => {
         </div>
 
         {/* Podium */}
-        <div className="mb-10 flex w-full max-w-md items-end justify-center gap-3 overflow-hidden px-1">
+        <div className="w-full max-w-md flex items-end justify-center gap-3 mb-10">
           {podiumOrder.map((group, i) => {
             const medalIndex = i === 0 ? 1 : i === 1 ? 0 : 2;
             const medal = MEDAL[medalIndex];
