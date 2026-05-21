@@ -106,6 +106,8 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         name: playerName,
         lives: 3,
         attemptedSequence: [],
+        currentStreak: 0,
+        longestStreak: 0,
         eliminatedRound: null,
         eliminated: false,
         winner: false,
@@ -125,10 +127,15 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
 
       // if correct update player values
       if (correct) {
+        const currentStreak = (player.currentStreak ?? 0) + 1;
+        const longestStreak = Math.max(player.longestStreak ?? 0, currentStreak);
+
         // mark player as completed
         await PlayersCollection.updateAsync(playerId, {
           $set: {
             attemptedSequence,
+            currentStreak,
+            longestStreak,
             completeRound: true,
           },
         });
@@ -148,18 +155,21 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         // remove one life for wrong sequence
         const newLives = player.lives - 1;
         const eliminated = newLives <= 0;
+        const longestStreak = Math.max(player.longestStreak ?? 0, player.currentStreak ?? 0);
 
         await PlayersCollection.updateAsync(playerId, {
           $set: {
             attemptedSequence,
             lives: newLives,
+            currentStreak: 0,
+            longestStreak,
             eliminated,
             eliminatedRound: eliminated ? round.lengthOfSequence - 3 : player.eliminatedRound,
           },
         });
 
         await checkWinner(player.gameId);
-        
+
         const updatedRound = await RoundsCollection.findOneAsync(player.roundId);
         await advanceRoundIfReady(updatedRound);
 

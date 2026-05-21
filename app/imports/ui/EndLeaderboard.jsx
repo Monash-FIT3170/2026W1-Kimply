@@ -20,12 +20,15 @@ export const EndLeaderboard = ({ gameId }) => {
       return [];
     }
 
-    return PlayersCollection.find(gameId ? { gameId } : {}).fetch().map((player) => ({
-      id: player._id,
-      name: player.name,
-      eliminatedRound: player.eliminatedRound ?? null,
-      isWinner: !!player.winner,
-    }));
+    return PlayersCollection.find(gameId ? { gameId } : {})
+      .fetch()
+      .map((player) => ({
+        id: player._id,
+        name: player.name,
+        eliminatedRound: player.eliminatedRound ?? null,
+        longestStreak: player.longestStreak ?? 0,
+        isWinner: !!player.winner,
+      }));
   }, [gameId]);
 
   const sorted = [...players].sort((a, b) => {
@@ -76,7 +79,10 @@ export const EndLeaderboard = ({ gameId }) => {
       </div>
 
       <div className="relative z-10 flex flex-1 flex-col items-center px-6 pb-12">
-        <div className="mb-7 flex flex-col items-center text-center" style={{ animation: 'leaderboardTitleIn 0.7s ease both' }}>
+        <div
+          className="mb-7 flex flex-col items-center text-center"
+          style={{ animation: 'leaderboardTitleIn 0.7s ease both' }}
+        >
           <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.22em]" style={{ color: PRIMARY }}>
             Final Results
           </p>
@@ -97,7 +103,7 @@ export const EndLeaderboard = ({ gameId }) => {
         </div>
 
         {/* Podium */}
-        <div className="w-full max-w-md flex items-end justify-center gap-3 mb-10">
+        <div className="mb-10 flex w-full max-w-md items-end justify-center gap-3">
           {podiumOrder.map((group, i) => {
             const medalIndex = i === 0 ? 1 : i === 1 ? 0 : 2;
             const medal = MEDAL[medalIndex];
@@ -184,70 +190,73 @@ export const EndLeaderboard = ({ gameId }) => {
 
         <div className="flex w-full max-w-md flex-col gap-2">
           {/* header */}
-          <div
-            className="mb-1 flex px-3"
-            style={{ animation: 'rowSlideIn 0.45s ease 1.35s both' }}
-          >
-              <span className="w-12 font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
-                Rank
-              </span>
-              <span className="flex-1 font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
-                Player
-              </span>
-              <span className="w-24 text-right font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
-                Score
-              </span>
-            </div>
+          <div className="mb-1 flex px-3" style={{ animation: 'rowSlideIn 0.45s ease 1.35s both' }}>
+            <span className="w-12 font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
+              Rank
+            </span>
+            <span className="flex-1 font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
+              Player
+            </span>
+            <span className="w-24 text-right font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
+              Score
+            </span>
+            <span className="w-24 text-right font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
+              Streak
+            </span>
+          </div>
 
-          {sorted
-            .map((player, index) => {
-              const rank = uniqueRanks.indexOf(rankKey(player));
-              const tied = sorted.filter((p) => rankKey(p) === rankKey(player)).length > 1;
-              const medal = MEDAL[rank];
-              const rowColor = medal ? medal.color : 'oklch(0.93 0.01 270)';
-              const rowDelay = 1.5 + index * 0.04;
+          {sorted.map((player, index) => {
+            const rank = uniqueRanks.indexOf(rankKey(player));
+            const tied = sorted.filter((p) => rankKey(p) === rankKey(player)).length > 1;
+            const medal = MEDAL[rank];
+            const rowColor = medal ? medal.color : 'oklch(0.93 0.01 270)';
+            const rowDelay = 1.5 + index * 0.04;
 
-              return (
-                <div
-                  key={player.name}
-                  className="flex items-center gap-3 rounded-xl px-3 py-3"
-                  style={{
-                    animation: `scoreboardRowIn 0.55s cubic-bezier(0.22,1,0.36,1) ${rowDelay}s both`,
-                    background: medal
-                      ? `color-mix(in oklab, ${medal.color} 12%, transparent)`
-                      : 'color-mix(in oklab, white 4%, transparent)',
-                    border: `1px solid ${
-                      medal
-                        ? `color-mix(in oklab, ${medal.color} 30%, transparent)`
-                        : `color-mix(in oklab, white 8%, transparent)`
-                    }`,
-                  }}
-                >
-                  <span className="w-12 shrink-0 font-outfit text-sm font-extrabold" style={{ color: rowColor }}>
-                    {tied ? '=' : ''}
-                    {rank + 1}
-                  </span>
+            return (
+              <div
+                key={player.name}
+                className="flex items-center gap-3 rounded-xl px-3 py-3"
+                style={{
+                  animation: `scoreboardRowIn 0.55s cubic-bezier(0.22,1,0.36,1) ${rowDelay}s both`,
+                  background: medal
+                    ? `color-mix(in oklab, ${medal.color} 12%, transparent)`
+                    : 'color-mix(in oklab, white 4%, transparent)',
+                  border: `1px solid ${
+                    medal
+                      ? `color-mix(in oklab, ${medal.color} 30%, transparent)`
+                      : `color-mix(in oklab, white 8%, transparent)`
+                  }`,
+                }}
+              >
+                <span className="w-12 shrink-0 font-outfit text-sm font-extrabold" style={{ color: rowColor }}>
+                  {tied ? '=' : ''}
+                  {rank + 1}
+                </span>
 
-                  <Avatar letter={player.name[0]} color={avatarColor(player.name)} size={32} />
+                <Avatar letter={player.name[0]} color={avatarColor(player.name)} size={32} />
 
-                  <span className="flex-1 font-outfit text-[15px] font-semibold" style={{ color: rowColor }}>
-                    {player.name}
-                    {rank === 0 && (
-                      <span
-                        className="ml-2 font-mono text-[10px] uppercase tracking-widest"
-                        style={{ color: PRIMARY, animation: 'winnerPulse 1.5s ease-in-out infinite' }}
-                      >
-                        Winner
-                      </span>
-                    )}
-                  </span>
+                <span className="flex-1 font-outfit text-[15px] font-semibold" style={{ color: rowColor }}>
+                  {player.name}
+                  {rank === 0 && (
+                    <span
+                      className="ml-2 font-mono text-[10px] uppercase tracking-widest"
+                      style={{ color: PRIMARY, animation: 'winnerPulse 1.5s ease-in-out infinite' }}
+                    >
+                      Winner
+                    </span>
+                  )}
+                </span>
 
-                  <span className="w-24 text-right font-mono text-sm" style={{ color: FG2 }}>
-                    {player.isWinner ? `Won Rd ${playerScore(player)}` : `Rd ${playerScore(player)}`}
-                  </span>
-                </div>
-              );
-            })}
+                <span className="w-24 text-right font-mono text-sm" style={{ color: FG2 }}>
+                  {player.isWinner ? `Won Rd ${playerScore(player)}` : `Rd ${playerScore(player)}`}
+                </span>
+
+                <span className="w-24 text-right font-mono text-sm" style={{ color: FG2 }}>
+                  {player.longestStreak}
+                </span>
+              </div>
+            );
+          })}
         </div>
 
         <button

@@ -142,6 +142,8 @@ export const GamePage = () => {
   }
 
   if (player?.eliminated) {
+    const longestStreak = player.longestStreak ?? 0;
+
     return (
       <div
         style={{
@@ -149,12 +151,40 @@ export const GamePage = () => {
           background: '#000',
           color: 'white',
           display: 'flex',
+          flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: '2rem',
+          textAlign: 'center',
+          padding: '24px',
         }}
       >
-        <h1 style={{ fontSize: '3rem', marginBottom: '10px' }}>💀 GAME OVER</h1>
+        <h1 style={{ fontSize: '3rem', marginBottom: '18px' }}>GAME OVER</h1>
+        <div
+          style={{
+            border: '1px solid rgba(255,255,255,0.18)',
+            borderRadius: '14px',
+            padding: '18px 24px',
+            background: 'rgba(255,255,255,0.08)',
+            minWidth: '220px',
+          }}
+        >
+          <p
+            style={{
+              color: '#aaa',
+              fontSize: '0.75rem',
+              fontWeight: 'bold',
+              letterSpacing: '3px',
+              marginBottom: '8px',
+              textTransform: 'uppercase',
+            }}
+          >
+            Longest Streak
+          </p>
+          <p style={{ color: '#ffd369', fontSize: '3rem', fontWeight: 'bold', lineHeight: 1 }}>{longestStreak}</p>
+          <p style={{ color: '#ccc', fontSize: '0.9rem', marginTop: '8px' }}>
+            {longestStreak === 1 ? 'round correct in a row' : 'rounds correct in a row'}
+          </p>
+        </div>
       </div>
     );
   }
