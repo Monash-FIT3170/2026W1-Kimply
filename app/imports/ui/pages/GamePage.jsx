@@ -143,6 +143,9 @@ export const GamePage = () => {
 
   if (player?.eliminated) {
     const longestStreak = player.longestStreak ?? 0;
+    const totalGuesses = player.totalGuesses ?? 0;
+    const correctGuesses = player.correctGuesses ?? 0;
+    const accuracy = totalGuesses > 0 ? Math.round((correctGuesses / totalGuesses) * 100) : 0;
 
     return (
       <div
@@ -183,6 +186,29 @@ export const GamePage = () => {
           <p style={{ color: '#ffd369', fontSize: '3rem', fontWeight: 'bold', lineHeight: 1 }}>{longestStreak}</p>
           <p style={{ color: '#ccc', fontSize: '0.9rem', marginTop: '8px' }}>
             {longestStreak === 1 ? 'round correct in a row' : 'rounds correct in a row'}
+          </p>
+          <div
+            style={{
+              height: '1px',
+              background: 'rgba(255,255,255,0.12)',
+              margin: '16px 0 14px',
+            }}
+          />
+          <p
+            style={{
+              color: '#aaa',
+              fontSize: '0.75rem',
+              fontWeight: 'bold',
+              letterSpacing: '3px',
+              marginBottom: '8px',
+              textTransform: 'uppercase',
+            }}
+          >
+            Accuracy
+          </p>
+          <p style={{ color: '#9ce8ff', fontSize: '2rem', fontWeight: 'bold', lineHeight: 1 }}>{accuracy}%</p>
+          <p style={{ color: '#ccc', fontSize: '0.9rem', marginTop: '8px' }}>
+            {correctGuesses}/{totalGuesses} correct guesses
           </p>
         </div>
       </div>

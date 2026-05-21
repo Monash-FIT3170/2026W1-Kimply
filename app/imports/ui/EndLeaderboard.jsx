@@ -15,6 +15,11 @@ function ordinal(rank) {
   return `${rank}${suffix}`;
 }
 
+function accuracyPercent(player) {
+  if (!player.totalGuesses) return 0;
+  return Math.round((player.correctGuesses / player.totalGuesses) * 100);
+}
+
 export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
   const navigate = useNavigate();
 
@@ -32,6 +37,8 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
         name: player.name,
         eliminatedRound: player.eliminatedRound ?? null,
         longestStreak: player.longestStreak ?? 0,
+        totalGuesses: player.totalGuesses ?? 0,
+        correctGuesses: player.correctGuesses ?? 0,
         isWinner: !!player.winner,
       }));
   }, [gameId]);
@@ -99,15 +106,29 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
           <h1 className="font-outfit text-5xl font-extrabold tracking-tight">Leaderboard</h1>
           {currentRank && (
             <div
-              className="mt-4 rounded-full px-4 py-2 font-outfit text-sm font-extrabold"
-              style={{
-                color: PRIMARY,
-                background: `color-mix(in oklab, ${PRIMARY} 16%, transparent)`,
-                border: `1px solid color-mix(in oklab, ${PRIMARY} 42%, transparent)`,
-                animation: 'winnerCrown 1.1s cubic-bezier(0.22,1,0.36,1) 0.2s both',
-              }}
+              className="mt-4 flex flex-col items-center gap-2"
+              style={{ animation: 'winnerCrown 1.1s cubic-bezier(0.22,1,0.36,1) 0.2s both' }}
             >
-              {currentRankIsTied ? `You tied for ${ordinal(currentRank)}` : `You came ${ordinal(currentRank)}`}
+              <div
+                className="rounded-full px-4 py-2 font-outfit text-sm font-extrabold"
+                style={{
+                  color: PRIMARY,
+                  background: `color-mix(in oklab, ${PRIMARY} 16%, transparent)`,
+                  border: `1px solid color-mix(in oklab, ${PRIMARY} 42%, transparent)`,
+                }}
+              >
+                {currentRankIsTied ? `You tied for ${ordinal(currentRank)}` : `You came ${ordinal(currentRank)}`}
+              </div>
+              <div
+                className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest"
+                style={{ color: FG2 }}
+              >
+                <span>Accuracy {accuracyPercent(currentPlayer)}%</span>
+                <span style={{ color: 'oklch(0.42 0.02 270)' }}>·</span>
+                <span>
+                  {currentPlayer.correctGuesses}/{currentPlayer.totalGuesses} correct
+                </span>
+              </div>
             </div>
           )}
           {winnerGroup.length > 0 && (
@@ -226,6 +247,9 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
             <span className="w-24 text-right font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
               Streak
             </span>
+            <span className="w-20 text-right font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
+              Acc
+            </span>
           </div>
 
           {sorted.map((player, index) => {
@@ -294,6 +318,10 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
 
                 <span className="w-24 text-right font-mono text-sm" style={{ color: FG2 }}>
                   {player.longestStreak}
+                </span>
+
+                <span className="w-20 text-right font-mono text-sm" style={{ color: FG2 }}>
+                  {accuracyPercent(player)}%
                 </span>
               </div>
             );
