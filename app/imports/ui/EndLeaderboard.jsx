@@ -10,7 +10,12 @@ const MEDAL = [
   { color: 'oklch(0.72 0.14 55)', label: '3rd' },
 ];
 
-export const EndLeaderboard = ({ gameId }) => {
+function ordinal(rank) {
+  const suffix = rank % 100 >= 11 && rank % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][rank % 10] || 'th';
+  return `${rank}${suffix}`;
+}
+
+export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
   const navigate = useNavigate();
 
   const players = useTracker(() => {
@@ -40,6 +45,11 @@ export const EndLeaderboard = ({ gameId }) => {
   const rankKey = (player) => (player.isWinner ? 'winner' : player.eliminatedRound);
   const uniqueRanks = [...new Set(sorted.map(rankKey))];
   const ranks = sorted.map((player) => uniqueRanks.indexOf(rankKey(player)));
+  const currentPlayer = sorted.find((player) => player.id === currentPlayerId);
+  const currentRank = currentPlayer ? uniqueRanks.indexOf(rankKey(currentPlayer)) + 1 : null;
+  const currentRankIsTied = currentPlayer
+    ? sorted.filter((player) => rankKey(player) === rankKey(currentPlayer)).length > 1
+    : false;
 
   // Group top-3 ranks into podium blocks, displayed as 2nd | 1st | 3rd
   const byRank = [0, 1, 2].map((rank) => sorted.filter((p) => ranks[sorted.indexOf(p)] === rank));
@@ -87,9 +97,22 @@ export const EndLeaderboard = ({ gameId }) => {
             Final Results
           </p>
           <h1 className="font-outfit text-5xl font-extrabold tracking-tight">Leaderboard</h1>
-          {winnerGroup.length > 0 && (
+          {currentRank && (
             <div
               className="mt-4 rounded-full px-4 py-2 font-outfit text-sm font-extrabold"
+              style={{
+                color: PRIMARY,
+                background: `color-mix(in oklab, ${PRIMARY} 16%, transparent)`,
+                border: `1px solid color-mix(in oklab, ${PRIMARY} 42%, transparent)`,
+                animation: 'winnerCrown 1.1s cubic-bezier(0.22,1,0.36,1) 0.2s both',
+              }}
+            >
+              {currentRankIsTied ? `You tied for ${ordinal(currentRank)}` : `You came ${ordinal(currentRank)}`}
+            </div>
+          )}
+          {winnerGroup.length > 0 && (
+            <div
+              className="mt-3 rounded-full px-4 py-2 font-outfit text-sm font-extrabold"
               style={{
                 color: BG,
                 background: `linear-gradient(135deg, ${MEDAL[0].color}, ${PRIMARY})`,

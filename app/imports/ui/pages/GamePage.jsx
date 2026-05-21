@@ -138,7 +138,7 @@ export const GamePage = () => {
   if (!player) return null;
 
   if (player?.gameFinished) {
-    return <EndLeaderboard gameId={player.gameId} />;
+    return <EndLeaderboard gameId={player.gameId} currentPlayerId={player._id} />;
   }
 
   if (player?.eliminated) {
