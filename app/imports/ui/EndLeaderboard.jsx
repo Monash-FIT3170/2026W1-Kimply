@@ -234,6 +234,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
             const medal = MEDAL[rank];
             const rowColor = medal ? medal.color : 'oklch(0.93 0.01 270)';
             const rowDelay = 1.5 + index * 0.04;
+            const isCurrentPlayer = player.id === currentPlayerId;
 
             return (
               <div
@@ -243,12 +244,17 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
                   animation: `scoreboardRowIn 0.55s cubic-bezier(0.22,1,0.36,1) ${rowDelay}s both`,
                   background: medal
                     ? `color-mix(in oklab, ${medal.color} 12%, transparent)`
-                    : 'color-mix(in oklab, white 4%, transparent)',
+                    : isCurrentPlayer
+                      ? `color-mix(in oklab, ${PRIMARY} 14%, transparent)`
+                      : 'color-mix(in oklab, white 4%, transparent)',
                   border: `1px solid ${
-                    medal
-                      ? `color-mix(in oklab, ${medal.color} 30%, transparent)`
-                      : `color-mix(in oklab, white 8%, transparent)`
+                    isCurrentPlayer
+                      ? `color-mix(in oklab, ${PRIMARY} 48%, transparent)`
+                      : medal
+                        ? `color-mix(in oklab, ${medal.color} 30%, transparent)`
+                        : `color-mix(in oklab, white 8%, transparent)`
                   }`,
+                  boxShadow: isCurrentPlayer ? `0 0 22px color-mix(in oklab, ${PRIMARY} 18%, transparent)` : 'none',
                 }}
               >
                 <span className="w-12 shrink-0 font-outfit text-sm font-extrabold" style={{ color: rowColor }}>
@@ -266,6 +272,18 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
                       style={{ color: PRIMARY, animation: 'winnerPulse 1.5s ease-in-out infinite' }}
                     >
                       Winner
+                    </span>
+                  )}
+                  {isCurrentPlayer && (
+                    <span
+                      className="ml-2 rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest"
+                      style={{
+                        color: PRIMARY,
+                        background: `color-mix(in oklab, ${PRIMARY} 16%, transparent)`,
+                        border: `1px solid color-mix(in oklab, ${PRIMARY} 38%, transparent)`,
+                      }}
+                    >
+                      You
                     </span>
                   )}
                 </span>
