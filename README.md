@@ -220,3 +220,7 @@ Make sure Docker Desktop is installed and running. On older Docker versions the 
 
 **Port 3000 is already in use**
 Another app is using port 3000. Stop that app, or run `docker compose down` first to clean up any leftover containers.
+
+
+## Licence
+See the LICENSE file in the root of the Repository for the project's MIT license.
