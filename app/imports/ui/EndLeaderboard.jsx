@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { Meteor } from 'meteor/meteor';
+import { useTracker } from 'meteor/react-meteor-data';
+import { PlayersCollection } from '../api/players';
 import { useNavigate } from 'react-router-dom';
-import { BG, PRIMARY, TILE, HAIRLINE, FG2, TileLattice, Avatar, TopBar, avatarColor } from './components/design';
+import { BG, PRIMARY, FG2, TileLattice, Avatar, TopBar, ArrowIcon, avatarColor } from './components/design';
 
 const MEDAL = [
   { color: 'oklch(0.83 0.16 80)', label: '1st' },
@@ -8,37 +10,73 @@ const MEDAL = [
   { color: 'oklch(0.72 0.14 55)', label: '3rd' },
 ];
 
-export const EndLeaderboard = () => {
+function ordinal(rank) {
+  const suffix = rank % 100 >= 11 && rank % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][rank % 10] || 'th';
+  return `${rank}${suffix}`;
+}
+
+function accuracyPercent(player) {
+  if (!player.totalGuesses) return 0;
+  return Math.round((player.correctGuesses / player.totalGuesses) * 100);
+}
+
+export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
   const navigate = useNavigate();
 
-  const [players] = useState([
-    { name: 'Fred', eliminatedRound: 8 },
-    { name: 'Gordon', eliminatedRound: 7 },
-    { name: 'Hannah', eliminatedRound: 7 },
-    { name: 'Zara', eliminatedRound: 2 },
-    { name: 'Yusuf', eliminatedRound: 2 },
-    { name: 'Mia', eliminatedRound: 2 },
-    { name: 'Noah', eliminatedRound: 1 },
-    { name: 'Priya', eliminatedRound: 1 },
-    { name: 'Luca', eliminatedRound: 1 },
-    { name: 'Amara', eliminatedRound: 2 },
-    { name: 'Tobias', eliminatedRound: 3 },
-    { name: 'Sienna', eliminatedRound: 4 },
-    { name: 'Kwame', eliminatedRound: 4 },
-    { name: 'Ingrid', eliminatedRound: 5 },
-    { name: 'Remy', eliminatedRound: 5 },
-    { name: 'Bashir', eliminatedRound: 6 },
-    ...Array.from({ length: 100 }, (_, i) => ({ name: `Player${i + 1}`, eliminatedRound: 3 })),
-  ]);
+  const players = useTracker(() => {
+    const sub = Meteor.subscribe('players');
 
-  const sorted = [...players].sort((a, b) => b.eliminatedRound - a.eliminatedRound);
-  const uniqueRounds = [...new Set(sorted.map((p) => p.eliminatedRound))].sort((a, b) => b - a);
-  const ranks = sorted.map((player) => uniqueRounds.indexOf(player.eliminatedRound));
+    if (!sub.ready()) {
+      return [];
+    }
+
+    return PlayersCollection.find(gameId ? { gameId } : {})
+      .fetch()
+      .map((player) => ({
+        id: player._id,
+        name: player.name,
+        eliminatedRound: player.eliminatedRound ?? null,
+        longestStreak: player.longestStreak ?? 0,
+        totalGuesses: player.totalGuesses ?? 0,
+        correctGuesses: player.correctGuesses ?? 0,
+        isWinner: !!player.winner,
+      }));
+  }, [gameId]);
+
+  const sorted = [...players].sort((a, b) => {
+    if (a.isWinner && !b.isWinner) return -1;
+    if (!a.isWinner && b.isWinner) return 1;
+    return (b.eliminatedRound ?? 0) - (a.eliminatedRound ?? 0);
+  });
+
+  const rankKey = (player) => (player.isWinner ? 'winner' : player.eliminatedRound);
+  const uniqueRanks = [...new Set(sorted.map(rankKey))];
+  const ranks = sorted.map((player) => uniqueRanks.indexOf(rankKey(player)));
+  const currentPlayer = sorted.find((player) => player.id === currentPlayerId);
+  const currentRank = currentPlayer ? uniqueRanks.indexOf(rankKey(currentPlayer)) + 1 : null;
+  const currentRankIsTied = currentPlayer
+    ? sorted.filter((player) => rankKey(player) === rankKey(currentPlayer)).length > 1
+    : false;
 
   // Group top-3 ranks into podium blocks, displayed as 2nd | 1st | 3rd
   const byRank = [0, 1, 2].map((rank) => sorted.filter((p) => ranks[sorted.indexOf(p)] === rank));
   const podiumOrder = [byRank[1], byRank[0], byRank[2]];
-  const podiumHeights = [72, 100, 56];
+  const podiumHeights = [90, 120, 72];
+  const winnerGroup = byRank[0] ?? [];
+  const highestEliminatedRound = Math.max(0, ...players.map((player) => player.eliminatedRound ?? 0));
+
+  const playerScore = (player) => {
+    if (player.isWinner) return Math.max(highestEliminatedRound, player.eliminatedRound ?? 0);
+    return player.eliminatedRound ?? 0;
+  };
+
+  if (players.length === 0) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-bg text-fg">
+        <p className="font-mono text-sm uppercase tracking-widest">No leaderboard results yet</p>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -58,13 +96,58 @@ export const EndLeaderboard = () => {
       </div>
 
       <div className="relative z-10 flex flex-1 flex-col items-center px-6 pb-12">
-        <h1 className="mb-2 font-outfit text-5xl font-extrabold tracking-tight">Leaderboard</h1>
-        <p className="mb-8 font-mono text-[13px] uppercase tracking-widest" style={{ color: FG2 }}>
-          Final Results
-        </p>
+        <div
+          className="mb-7 flex flex-col items-center text-center"
+          style={{ animation: 'leaderboardTitleIn 0.7s ease both' }}
+        >
+          <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.22em]" style={{ color: PRIMARY }}>
+            Final Results
+          </p>
+          <h1 className="font-outfit text-5xl font-extrabold tracking-tight">Leaderboard</h1>
+          {currentRank && (
+            <div
+              className="mt-4 flex flex-col items-center gap-2"
+              style={{ animation: 'winnerCrown 1.1s cubic-bezier(0.22,1,0.36,1) 0.2s both' }}
+            >
+              <div
+                className="rounded-full px-4 py-2 font-outfit text-sm font-extrabold"
+                style={{
+                  color: PRIMARY,
+                  background: `color-mix(in oklab, ${PRIMARY} 16%, transparent)`,
+                  border: `1px solid color-mix(in oklab, ${PRIMARY} 42%, transparent)`,
+                }}
+              >
+                {currentRankIsTied ? `You tied for ${ordinal(currentRank)}` : `You came ${ordinal(currentRank)}`}
+              </div>
+              <div
+                className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest"
+                style={{ color: FG2 }}
+              >
+                <span>Accuracy {accuracyPercent(currentPlayer)}%</span>
+                <span style={{ color: 'oklch(0.42 0.02 270)' }}>·</span>
+                <span>
+                  {currentPlayer.correctGuesses}/{currentPlayer.totalGuesses} correct
+                </span>
+              </div>
+            </div>
+          )}
+          {winnerGroup.length > 0 && (
+            <div
+              className="mt-3 rounded-full px-4 py-2 font-outfit text-sm font-extrabold"
+              style={{
+                color: BG,
+                background: `linear-gradient(135deg, ${MEDAL[0].color}, ${PRIMARY})`,
+                boxShadow: `0 0 34px color-mix(in oklab, ${MEDAL[0].color} 28%, transparent)`,
+                animation: 'winnerCrown 1.1s cubic-bezier(0.22,1,0.36,1) 0.35s both',
+              }}
+            >
+              Winner: {winnerGroup.map((player) => player.name).join(' & ')}
+            </div>
+          )}
+        </div>
 
         {/* Podium */}
-        <div className="mb-10 flex w-full max-w-md items-end justify-center gap-3 overflow-hidden">
+        <div className="mb-10 flex w-full max-w-md items-end justify-center gap-3">
           {podiumOrder.map((group, i) => {
             const medalIndex = i === 0 ? 1 : i === 1 ? 0 : 2;
             const medal = MEDAL[medalIndex];
@@ -119,11 +202,13 @@ export const EndLeaderboard = () => {
                     animation: `avatarPop 0.4s cubic-bezier(0.34,1.56,0.64,1) ${avatarDelay + 0.1}s both`,
                   }}
                 >
-                  {medalIndex === 0
-                    ? `Winner · Rd ${group[0].eliminatedRound}`
+                  {group[0].isWinner
+                    ? 'Winner · Last Standing'
                     : medalIndex === 1
                       ? `Runner-up · Rd ${group[0].eliminatedRound}`
-                      : `Third · Rd ${group[0].eliminatedRound}`}
+                      : medalIndex === 2
+                        ? `Third · Rd ${group[0].eliminatedRound}`
+                        : `Rd ${group[0].eliminatedRound}`}
                 </span>
                 <div
                   className="flex w-full items-center justify-center rounded-t-xl font-outfit text-lg font-extrabold"
@@ -133,7 +218,11 @@ export const EndLeaderboard = () => {
                     border: `1px solid color-mix(in oklab, ${medal.color} 35%, transparent)`,
                     borderBottom: 'none',
                     color: medal.color,
-                    animation: `podiumRise 0.6s cubic-bezier(0.22,1,0.36,1) ${riseDelay}s both`,
+                    boxShadow:
+                      medalIndex === 0
+                        ? `0 -16px 34px -22px color-mix(in oklab, ${medal.color} 60%, transparent)`
+                        : 'none',
+                    animation: `podiumRise 0.75s cubic-bezier(0.22,1,0.36,1) ${riseDelay}s both`,
                   }}
                 >
                   {group.length > 1 ? `=${medalIndex + 1}` : medalIndex + 1}
@@ -145,7 +234,7 @@ export const EndLeaderboard = () => {
 
         <div className="flex w-full max-w-md flex-col gap-2">
           {/* header */}
-          <div className="mb-1 flex px-3">
+          <div className="mb-1 flex px-3" style={{ animation: 'rowSlideIn 0.45s ease 1.35s both' }}>
             <span className="w-12 font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
               Rank
             </span>
@@ -153,61 +242,105 @@ export const EndLeaderboard = () => {
               Player
             </span>
             <span className="w-24 text-right font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
-              Round
+              Score
+            </span>
+            <span className="w-24 text-right font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
+              Streak
+            </span>
+            <span className="w-20 text-right font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
+              Acc
             </span>
           </div>
 
-          {sorted
-            .filter((player) => uniqueRounds.indexOf(player.eliminatedRound) > 2)
-            .map((player, index) => {
-              const rank = uniqueRounds.indexOf(player.eliminatedRound);
-              const tied = sorted.filter((p) => p.eliminatedRound === player.eliminatedRound).length > 1;
-              const medal = MEDAL[rank];
-              const rowColor = medal ? medal.color : 'oklch(0.93 0.01 270)';
-              const rowDelay = 1.5 + index * 0.04;
+          {sorted.map((player, index) => {
+            const rank = uniqueRanks.indexOf(rankKey(player));
+            const tied = sorted.filter((p) => rankKey(p) === rankKey(player)).length > 1;
+            const medal = MEDAL[rank];
+            const rowColor = medal ? medal.color : 'oklch(0.93 0.01 270)';
+            const rowDelay = 1.5 + index * 0.04;
+            const isCurrentPlayer = player.id === currentPlayerId;
 
-              return (
-                <div
-                  key={player.name}
-                  className="flex items-center gap-3 rounded-xl px-3 py-3"
-                  style={{
-                    animation: `rowSlideIn 0.4s ease ${rowDelay}s both`,
-                    background: medal
-                      ? `color-mix(in oklab, ${medal.color} 12%, transparent)`
+            return (
+              <div
+                key={player.name}
+                className="flex items-center gap-3 rounded-xl px-3 py-3"
+                style={{
+                  animation: `scoreboardRowIn 0.55s cubic-bezier(0.22,1,0.36,1) ${rowDelay}s both`,
+                  background: medal
+                    ? `color-mix(in oklab, ${medal.color} 12%, transparent)`
+                    : isCurrentPlayer
+                      ? `color-mix(in oklab, ${PRIMARY} 14%, transparent)`
                       : 'color-mix(in oklab, white 4%, transparent)',
-                    border: `1px solid ${
-                      medal
+                  border: `1px solid ${
+                    isCurrentPlayer
+                      ? `color-mix(in oklab, ${PRIMARY} 48%, transparent)`
+                      : medal
                         ? `color-mix(in oklab, ${medal.color} 30%, transparent)`
                         : `color-mix(in oklab, white 8%, transparent)`
-                    }`,
-                  }}
-                >
-                  <span className="w-12 shrink-0 font-outfit text-sm font-extrabold" style={{ color: rowColor }}>
-                    {tied ? '=' : ''}
-                    {rank + 1}
-                  </span>
+                  }`,
+                  boxShadow: isCurrentPlayer ? `0 0 22px color-mix(in oklab, ${PRIMARY} 18%, transparent)` : 'none',
+                }}
+              >
+                <span className="w-12 shrink-0 font-outfit text-sm font-extrabold" style={{ color: rowColor }}>
+                  {tied ? '=' : ''}
+                  {rank + 1}
+                </span>
 
-                  <Avatar letter={player.name[0]} color={avatarColor(player.name)} size={32} />
+                <Avatar letter={player.name[0]} color={avatarColor(player.name)} size={32} />
 
-                  <span className="flex-1 font-outfit text-[15px] font-semibold" style={{ color: rowColor }}>
-                    {player.name}
-                    {rank === 0 && (
-                      <span
-                        className="ml-2 font-mono text-[10px] uppercase tracking-widest"
-                        style={{ color: PRIMARY, animation: 'winnerPulse 1.5s ease-in-out infinite' }}
-                      >
-                        Winner
-                      </span>
-                    )}
-                  </span>
+                <span className="flex-1 font-outfit text-[15px] font-semibold" style={{ color: rowColor }}>
+                  {player.name}
+                  {rank === 0 && (
+                    <span
+                      className="ml-2 font-mono text-[10px] uppercase tracking-widest"
+                      style={{ color: PRIMARY, animation: 'winnerPulse 1.5s ease-in-out infinite' }}
+                    >
+                      Winner
+                    </span>
+                  )}
+                  {isCurrentPlayer && (
+                    <span
+                      className="ml-2 rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest"
+                      style={{
+                        color: PRIMARY,
+                        background: `color-mix(in oklab, ${PRIMARY} 16%, transparent)`,
+                        border: `1px solid color-mix(in oklab, ${PRIMARY} 38%, transparent)`,
+                      }}
+                    >
+                      You
+                    </span>
+                  )}
+                </span>
 
-                  <span className="w-24 text-right font-mono text-sm" style={{ color: FG2 }}>
-                    {rank === 0 ? '—' : `Rd ${player.eliminatedRound}`}
-                  </span>
-                </div>
-              );
-            })}
+                <span className="w-24 text-right font-mono text-sm" style={{ color: FG2 }}>
+                  {player.isWinner ? `Won Rd ${playerScore(player)}` : `Rd ${playerScore(player)}`}
+                </span>
+
+                <span className="w-24 text-right font-mono text-sm" style={{ color: FG2 }}>
+                  {player.longestStreak}
+                </span>
+
+                <span className="w-20 text-right font-mono text-sm" style={{ color: FG2 }}>
+                  {accuracyPercent(player)}%
+                </span>
+              </div>
+            );
+          })}
         </div>
+
+        <button
+          onClick={() => navigate('/play')}
+          className="mt-8 inline-flex items-center gap-2 rounded-full px-5 py-3 font-outfit text-[13px] font-extrabold uppercase tracking-[0.16em] transition-transform hover:scale-[1.02]"
+          style={{
+            background: `color-mix(in oklab, ${PRIMARY} 16%, transparent)`,
+            border: `1px solid color-mix(in oklab, ${PRIMARY} 48%, transparent)`,
+            color: PRIMARY,
+            animation: 'homeButtonIn 0.55s ease 1.8s both',
+          }}
+        >
+          New Game
+          <ArrowIcon size={14} stroke={PRIMARY} />
+        </button>
       </div>
     </div>
   );

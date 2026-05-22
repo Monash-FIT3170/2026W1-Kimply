@@ -24,6 +24,8 @@ describe('Life Deduction', () => {
       name: 'Test Player',
       lives: 3,
       attemptedSequence: [],
+      currentStreak: 0,
+      longestStreak: 0,
       eliminated: false,
       winner: false,
       completeRound: false,
@@ -54,6 +56,30 @@ describe('Life Deduction', () => {
       await Meteor.callAsync('players.submitSequence', playerId, correctSequence);
       const player = await PlayersCollection.findOneAsync(playerId);
       assert.strictEqual(player.lives, 3);
+    });
+
+    it('correct guess increases current and longest streak', async () => {
+      const correctSequence = ['red', 'blue', 'green', 'yellow'];
+      await Meteor.callAsync('players.submitSequence', playerId, correctSequence);
+      const player = await PlayersCollection.findOneAsync(playerId);
+      assert.strictEqual(player.currentStreak, 1);
+      assert.strictEqual(player.longestStreak, 1);
+    });
+
+    it('incorrect guess resets current streak and keeps longest streak', async () => {
+      await PlayersCollection.updateAsync(playerId, {
+        $set: {
+          currentStreak: 2,
+          longestStreak: 2,
+        },
+      });
+
+      const wrongSequence = ['blue', 'blue', 'blue', 'blue'];
+      await Meteor.callAsync('players.submitSequence', playerId, wrongSequence);
+
+      const player = await PlayersCollection.findOneAsync(playerId);
+      assert.strictEqual(player.currentStreak, 0);
+      assert.strictEqual(player.longestStreak, 2);
     });
   }
 });

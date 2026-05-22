@@ -61,15 +61,6 @@ export function Splash() {
       {/* top bar */}
       <div className="relative flex shrink-0 justify-between px-7 py-5">
         <span className="font-outfit text-2xl font-extrabold tracking-tight text-fg">KIMPLY</span>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            navigate('/leaderboard');
-          }}
-          className="font-mono text-[11px] uppercase tracking-widest text-fg3 transition-colors hover:text-fg"
-        >
-          Leaderboard
-        </button>
       </div>
 
       {/* hero */}
