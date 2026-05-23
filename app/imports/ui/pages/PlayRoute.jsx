@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Meteor } from 'meteor/meteor';
 import { BG, PRIMARY, TILE, HAIRLINE, FG2, TileLattice, Wordmark, Avatar, avatarColor, ArrowIcon, PencilIcon} from '../components/design';
 import { ReconnectPopup } from '../components/ReconnectPopup';
+import { submitOnEnter } from '../keyboard';
+
 
 
 function RouteCard({ kind, title, blurb, color, primary, onClick, disabled }) {
