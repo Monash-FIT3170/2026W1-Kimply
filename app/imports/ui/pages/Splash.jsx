@@ -61,7 +61,6 @@ export function Splash() {
       {/* top bar */}
       <div className="relative flex shrink-0 justify-between px-7 py-5">
         <span className="font-outfit text-2xl font-extrabold tracking-tight text-fg">KIMPLY</span>
-        <span className="font-mono text-[11px] uppercase tracking-widest text-fg3">v1.0.0</span>
       </div>
 
       {/* hero */}

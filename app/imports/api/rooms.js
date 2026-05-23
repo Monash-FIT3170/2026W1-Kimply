@@ -43,7 +43,6 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
         }
       }
       if (!pin) throw new Meteor.Error('server-error', 'Could not generate a unique PIN');
-
       await RoomsCollection.insertAsync({
         pin,
         hostName: name,
@@ -56,10 +55,20 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       return { gameId: pin, hostId: hostId};
     },
 
+    async 'rooms.start'(pin) {
+      if (typeof pin !== 'string' || !pin.trim()) {
+        throw new Meteor.Error('invalid', 'Invalid PIN');
+      }
+      const room = await RoomsCollection.findOneAsync({ pin: pin.trim() });
+      if (!room) throw new Meteor.Error('not-found', 'Room not found');
+      if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
+      await RoomsCollection.updateAsync({ _id: room._id }, { $set: { status: 'in_progress' } });
+      await Meteor.callAsync('rounds.generate', 4, room.pin);
+    },
+
     async 'rooms.kick'(pin, playerId) {
       if (typeof pin !== 'string' || !pin.trim()) throw new Meteor.Error('invalid', 'Invalid PIN');
       if (typeof playerId !== 'string' || !playerId.trim()) throw new Meteor.Error('invalid', 'Invalid player ID');
-
       const room = await RoomsCollection.findOneAsync({ pin: pin.trim() });
       if (!room) throw new Meteor.Error('not-found', 'Room not found');
       if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
@@ -97,7 +106,6 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       if (typeof playerName !== 'string' || !playerName.trim()) {
         throw new Meteor.Error('invalid', 'Invalid name');
       }
-
       const room = await RoomsCollection.findOneAsync({ pin: pin.trim() });
       if (!room) throw new Meteor.Error('not-found', 'Room not found');
       if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');

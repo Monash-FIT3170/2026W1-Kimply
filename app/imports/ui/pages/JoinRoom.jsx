@@ -165,7 +165,7 @@ export function JoinRoom() {
             boxShadow: canJoin ? `0 12px 40px -10px color-mix(in oklab, ${PRIMARY} 70%, transparent)` : 'none',
           }}
         >
-          {loading ? 'Joining…' : 'Join Room'}
+          {loading ? 'Joining...' : 'Join Room'}
           <ArrowIcon size={14} stroke="oklch(0.14 0.02 270)" />
         </button>
       </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { Meteor } from 'meteor/meteor';
 import { useSubscribe, useTracker } from 'meteor/react-meteor-data';
@@ -66,13 +66,11 @@ function EmptySlot() {
 
 function SharePanel({ link }) {
   const [copied, setCopied] = useState(false);
-
   const copy = () => {
     navigator.clipboard?.writeText(link);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-
   return (
     <div className="flex w-full items-center gap-2 rounded-xl border border-hairline bg-surface px-3 py-2">
       <span className="flex-1 select-all truncate font-mono text-[11px] text-fg3">{link}</span>
@@ -109,13 +107,23 @@ function SharePanel({ link }) {
   );
 }
 
-function HostView({ room, playerName, onBack }) {
+function HostView({ room, playerName, onBack, navigate }) {
   const players = room.players || [];
   const joinLink = `${window.location.origin}/play/join?code=${room.pin}`;
   const [editing, setEditing] = useState(true);
   const [gameName, setGameName] = useState('');
   const trimmedGameName = gameName.trim()
   const hasGameName = trimmedGameName.length > 0;
+
+  const handleStart = () => {
+    Meteor.call('rooms.start', room.pin, (err) => {
+      if (err) {
+        console.error(err);
+        return;
+      }
+      navigate('/game', { state: { playerName, pin: room.pin } });
+    });
+  };
 
   const kickPlayer = (playerId) => {
     Meteor.call('rooms.kick', room.pin, playerId);
@@ -216,7 +224,6 @@ function HostView({ room, playerName, onBack }) {
               Waiting for players
             </div>
           </div>
-
           <div className="flex flex-col gap-2">
             {players.map((p, i) => (
               <PlayerRow
@@ -228,6 +235,22 @@ function HostView({ room, playerName, onBack }) {
             ))}
           </div>
         </div>
+
+        <button
+          onClick={handleStart}
+          disabled={players.length < 1}
+          className="w-full max-w-lg rounded-xl px-7 py-4 font-outfit text-sm font-extrabold uppercase tracking-[0.14em] transition-all"
+          style={{
+            background: players.length >= 1 ? PRIMARY : `color-mix(in oklab, ${PRIMARY} 30%, oklch(0.14 0.02 270))`,
+            color: 'oklch(0.14 0.02 270)',
+            cursor: players.length >= 1 ? 'pointer' : 'not-allowed',
+            border: 'none',
+            boxShadow:
+              players.length >= 1 ? `0 12px 40px -10px color-mix(in oklab, ${PRIMARY} 70%, transparent)` : 'none',
+          }}
+        >
+          Start Game
+        </button>
       </div>
     </div>
   );
@@ -239,6 +262,10 @@ function JoinedView({ room, playerName, onBack, navigate }) {
 
   const stillInRoom = !playerName || players.some(p => p.name === playerName);
   useEffect(() => {
+    if (!stillInRoom) navigate('/play', { replace: true, state: { kicked: true } });
+  }, [stillInRoom]);
+
+  useEffect(() => {
     if (!playerName) {
       // State lost on refresh — let the reconnect popup handle it
       navigate('/play', { replace: true });
@@ -249,6 +276,13 @@ function JoinedView({ room, playerName, onBack, navigate }) {
       navigate('/play', { replace: true, state: { kicked: true } });
     }
   }, [stillInRoom, playerName]);
+
+  useEffect(() => {
+    if (room?.status === 'in_progress') {
+      navigate('/game', { state: { playerName, pin: room.pin } });
+    }
+  }, [room?.status]);
+
   const progress = (players.length / MAX_PLAYERS) * 100;
 
   return (
@@ -273,8 +307,6 @@ function JoinedView({ room, playerName, onBack, navigate }) {
               <span className="font-mono text-[13px] font-bold text-fg">{room.pin}</span>
             </div>
           </div>
-
-          {/* players header */}
           <div className="flex items-center justify-between">
             <p className="font-outfit text-sm font-bold uppercase tracking-widest text-fg2">
               Players{' '}
@@ -307,7 +339,6 @@ function JoinedView({ room, playerName, onBack, navigate }) {
               <EmptySlot key={`e${i}`} />
             ))}
           </div>
-
           <div className="mt-auto flex justify-center pt-3">
             <div
               className="inline-flex items-center gap-2 font-mono text-[12px] tracking-wide"
@@ -330,11 +361,22 @@ export function PlayerLobby() {
   const playerName = state?.playerName || '';
   const playerId = state?.playerId || '';
   const isHost = state?.isHost === true;
+  const gameStarted = useRef(false);  
   const [showExitPopup, setShowExitPopup] = useState(false);
-
   const isLoading = useSubscribe('rooms.lobby', pin);
   const room = useTracker(() => RoomsCollection.findOne({ pin }));
 
+  useEffect(() => {
+    if (room?.status === 'in_progress' && !gameStarted.current) {
+      gameStarted.current = true;
+      navigate('/game', { state: { playerName, pin: room.pin } });
+    }
+  }, [room?.status]);
+
+  if (!isLoading() && !room && !gameStarted.current) {
+    navigate('/play', { replace: true });
+    return null;
+  }
   useEffect(()=>{
     if (room === undefined && !isLoading){
       navigate('/play', {replace: true});

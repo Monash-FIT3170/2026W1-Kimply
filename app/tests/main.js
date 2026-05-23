@@ -1,8 +1,9 @@
 import assert from 'assert';
-import './playerAccounts.test';
-import './rooms.test';
-import './uiHelpers.test';
+import '../imports/api/gameMethods.js';
 import './coverage-writer';
+
+const context = require.context('.', false, /\.test\.js$/);
+context.keys().forEach(context);
 
 describe('2026W1-Kimply', function () {
   it('package.json has correct name', async function () {
