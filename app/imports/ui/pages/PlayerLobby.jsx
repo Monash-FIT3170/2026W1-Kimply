@@ -237,13 +237,18 @@ function JoinedView({ room, playerName, onBack, navigate }) {
   const players = room.players || [];
   const emptySlots = Math.max(0, MAX_PLAYERS - players.length);
 
-  const stillInRoom = players.some((p) => p.name === playerName);
+  const stillInRoom = !playerName || players.some(p => p.name === playerName);
   useEffect(() => {
+    if (!playerName) {
+      // State lost on refresh — let the reconnect popup handle it
+      navigate('/play', { replace: true });
+      return;
+    }
     if (!stillInRoom) {
       localStorage.removeItem('reconnectData');
       navigate('/play', { replace: true, state: { kicked: true } });
     }
-  }, [stillInRoom]);
+  }, [stillInRoom, playerName]);
   const progress = (players.length / MAX_PLAYERS) * 100;
 
   return (
