@@ -21,7 +21,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
     if (typeof pin !== 'string') return this.ready();
     return RoomsCollection.find(
       { pin },
-      { fields: { _id: 1, pin: 1, status: 1, hostName: 1, 'players.name': 1, 'players.id': 1 } }
+      { fields: { _id: 1, pin: 1, status: 1, gameName: 1, hostName: 1, 'players.name': 1, 'players.id': 1 } }
     );
   });
 
@@ -31,6 +31,8 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
         throw new Meteor.Error('invalid', 'Invalid name');
       }
       const name = hostName.trim();
+      const hostId = Random.id();
+
       let pin;
       for (let i = 0; i < 10; i++) {
         const candidate = generatePin();
@@ -44,11 +46,13 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       await RoomsCollection.insertAsync({
         pin,
         hostName: name,
+        gameName: `Game${pin}`,
         status: 'lobby',
-        players: [{ id: Random.id(), name }],
+        players: [{ id: hostId, name }],
         createdAt: new Date(),
       });
-      return { pin };
+
+      return { pin: pin, hostId: hostId};
     },
 
     async 'rooms.start'(pin) {
@@ -75,6 +79,26 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       await RoomsCollection.updateAsync({ _id: room._id }, { $pull: { players: { id: playerId } } });
     },
 
+    async 'rooms.disconnect'(pin, playerId){
+      if (typeof pin !== 'string' || !pin.trim()) throw new Meteor.Error('invalid', 'Invalid PIN');
+      if (typeof playerId !== 'string' || !playerId.trim()) throw new Meteor.Error('invalid', 'Invalid player ID');
+
+      const room = await RoomsCollection.findOneAsync({ pin: pin.trim(), status: 'lobby' });
+      if (!room) throw new Meteor.Error('not-found', 'Room not found');
+      
+      const isHost = (room.players || []).find(p=> p.id=== playerId)?.name === room.hostName
+
+      if (isHost){ // Delete room if host disconnects
+        await RoomsCollection.removeAsync({ _id : room._id });
+        return
+      }
+
+      await RoomsCollection.updateAsync(
+        {_id: room._id},
+        { $pull: { players: { id: playerId}}}
+      );
+    },
+
     async 'rooms.join'(pin, playerName) {
       if (typeof pin !== 'string' || !pin.trim()) {
         throw new Meteor.Error('invalid', 'Invalid PIN');
@@ -88,11 +112,67 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
 
       const nameTaken = (room.players || []).some((p) => p.name.toLowerCase() === playerName.trim().toLowerCase());
       if (nameTaken) throw new Meteor.Error('name-taken', 'Name already taken');
+
+      const playerId = Random.id()
+
       await RoomsCollection.updateAsync(
         { _id: room._id },
-        { $push: { players: { id: Random.id(), name: playerName.trim() } } }
+        { $push: { players: { id: playerId, name: playerName.trim() } } }
       );
-      return room._id;
+
+      return {roomId: room.pin, playerId: playerId}
+    },
+
+    async 'rooms.updateGameName'(pin, gameName){
+      if (typeof pin !== 'string' || !pin.trim()){
+        throw new Meteor.Error('invalid', "Invalid PIN");
+      }
+      if (typeof gameName !== 'string' || !gameName.trim()){
+        throw new Meteor.Error('invalid', 'Invalid name');
+      }
+
+      const room = await RoomsCollection.findOneAsync({ pin: pin.trim() });
+      if (!room) throw new Meteor.Error('not-found', 'Room not found');
+      if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
+
+      await RoomsCollection.updateAsync(
+        { _id: room._id },
+        { 
+          $set:{
+            gameName: gameName
+          }
+        }
+      )
+
+    },
+
+    async 'rooms.reconnect'(pin, playerId){
+
+      if (typeof pin !== 'string' || !pin.trim()){
+        throw new Meteor.Error('invalid', "Invalid PIN");
+      }
+      if (typeof playerId!== 'string' || !playerId.trim()){
+        throw new Meteor.Error('invalid', 'Invalid player ID');
+      }
+
+      const room = await RoomsCollection.findOneAsync({ pin: pin.trim() });
+      if (!room) throw new Meteor.Error('not-found', 'Room not found');
+      if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
+
+      const player= room.players.find(
+        p=> p.id === playerId
+      );
+
+      if (!player){
+        throw new Meteor.Error('player-not-found');
+      }
+
+      return{
+        playerName: player.name,
+        isHost: room.hostId === playerId,
+        playerId: playerId
+      }
+
     },
   });
 }

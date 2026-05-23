@@ -1,27 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Meteor } from 'meteor/meteor';
-import {
-  BG,
-  PRIMARY,
-  TILE,
-  HAIRLINE,
-  TileLattice,
-  Wordmark,
-  Avatar,
-  avatarColor,
-  ArrowIcon,
-} from '../components/design';
+import { BG, PRIMARY, TILE, HAIRLINE, FG2, TileLattice, Wordmark, Avatar, avatarColor, ArrowIcon, PencilIcon} from '../components/design';
+import { ReconnectPopup } from '../components/ReconnectPopup';
 import { submitOnEnter } from '../keyboard';
 
-function PencilIcon({ size = 14 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
-      <path d="m3 13 .5-2.5L10 4l2 2-6.5 6.5L3 13Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-      <path d="m9 5 2 2" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  );
-}
+
 
 function RouteCard({ kind, title, blurb, color, primary, onClick, disabled }) {
   return (
@@ -107,17 +91,64 @@ export function PlayRoute() {
   const trimmedName = name.trim();
   const hasName = trimmedName.length > 0;
 
+  const [reconnectData, setReconnectData] = useState(null);
+
+  useEffect(() => {
+    const raw = localStorage.getItem('reconnectData');
+    if (raw) {
+      setReconnectData(JSON.parse(raw));
+    }
+  }, []);
+
+  const handleReconnect = () =>{
+    const reconnectData = localStorage.getItem('reconnectData');
+    if (!reconnectData) return;
+    
+    const {gameId, playerId} = JSON.parse(reconnectData);
+
+    Meteor.call('rooms.reconnect', gameId, playerId, (err, result)=>{
+      if (err){
+        localStorage.removeItem('reconnectData');
+        return;
+      }
+
+      navigate(`/play/${gameId}`, { state: { 
+        playerName: result.playerName, 
+        isHost: result.isHost, 
+        playerId: result.playerId 
+      }});
+    })
+  }
+
+  const handleDismiss = () =>{
+    //  Get recconnect data for game 
+    const reconnectData = JSON.parse(localStorage.getItem('reconnectData'))
+
+    const gamePin = reconnectData?.gameId;
+    const playerId = reconnectData?.playerId;
+
+    Meteor.call('rooms.disconnect', gamePin, playerId) 
+    localStorage.removeItem('reconnectData');
+    setReconnectData(null);
+  }
+
   const handleCreate = () => {
     if (!hasName || loading) return;
     setLoading(true);
     setError('');
+
     Meteor.call('rooms.create', trimmedName, (err, result) => {
       setLoading(false);
-      if (err) {
-        setError('Could not create room. Try again.');
-        return;
-      }
-      navigate(`/play/${result.pin}`, { state: { playerName: trimmedName, isHost: true } });
+      if (err) { setError('Could not create room. Try again.'); return; }
+
+      //! For host reconnection
+      // const reconnectData = {
+      //   playerId : result.hostId,
+      //   gameId : result.gameId
+      // };
+      
+      // localStorage.setItem('reconnectData', JSON.stringify(reconnectData));
+      navigate(`/play/${result.pin}`, { state: { playerName: trimmedName, isHost: true, playerId: result.hostId } });
     });
   };
 
@@ -125,6 +156,7 @@ export function PlayRoute() {
     if (!hasName) return;
     navigate('/play/join', { state: { playerName: trimmedName, playerAccount: signedInAccount } });
   };
+
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden bg-bg text-fg">
@@ -227,6 +259,13 @@ export function PlayRoute() {
           Back to Home
         </button>
       </div>
+
+      <ReconnectPopup
+        isOpen={reconnectData}
+        gameId={reconnectData?.gameId}
+        onReconnect={handleReconnect}
+        onDismiss={handleDismiss}
+      />
     </div>
   );
 }
