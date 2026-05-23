@@ -52,7 +52,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
         createdAt: new Date(),
       });
 
-      return { gameId: pin, hostId: hostId};
+      return { pin: pin, hostId: hostId};
     },
 
     async 'rooms.start'(pin) {
