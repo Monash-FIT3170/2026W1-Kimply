@@ -3,7 +3,23 @@
 A real-time multiplayer color-sequence memory game (like Simon Says). Players join a room via PIN, wait in a lobby, then compete through color sequences.
 
 **Team members:**
-Dhruv Israni · Jeremy Lim · Owen Kolotsos · Ojaswi Pandey · Koby Crosby · Tan Ee Dhing · Trisha Bhagat · Layela Moyo · Ian Nguyen · Zeji Li · Ze Xiang Li · Benjamin Quan · Lachlan Shi · Ambrris Bushen
+
+| Name | Email |
+|---|---|
+| Dhruv Israni | dhruv.isr14@gmail.com |
+| Jeremy Lim | jeremylim.0304@gmail.com |
+| Owen Kolotsos | owenkolotsos@outlook.com |
+| Ojaswi Pandey | ojaswioj98@gmail.com |
+| Koby Crosby | crosbk01@gmail.com |
+| Tan Ee Dhing | joycetan613@gmail.com |
+| Trisha Bhagat | trisha.bhagat445@gmail.com |
+| Layela Moyo | layelaheart@gmail.com |
+| Ian Nguyen | mriannguyen352@gmail.com |
+| Zeji Li | jarrodlizeji@gmail.com |
+| Ze Xiang Li | lijefferson73@gmail.com |
+| Benjamin Quan | scientistquan@gmail.com |
+| Lachlan Shi | lshi0046@student.monash.edu |
+| Ambrris Bushen | ambrrisb2803@gmail.com |
 
 ---
 
@@ -167,6 +183,27 @@ docker compose exec backend meteor npm install <package-name>
 ```
 
 You don't need to rebuild the image after adding a package.
+
+## Formatting
+
+This project uses Prettier for code formatting. VS Code workspace settings are committed in `.vscode/` so installing the recommended Prettier extension enables format-on-save.
+
+```bash
+npm run format:check
+npm run format
+```
+
+These commands work from the repository root and forward to the Meteor app in `app/`. If you are already inside `app/`, the same commands work there too.
+
+If you edit through VS Code attached to the Docker container, install the extensions into that attached container:
+
+1. Start the app with `docker compose up`.
+2. In VS Code, run `Dev Containers: Attach to Running Container...`.
+3. Pick the Kimply `backend` container.
+4. Open `/kimply`.
+5. In the Extensions panel, install `Prettier - Code formatter` in the attached container.
+
+The tracked `.vscode/extensions.json` file recommends that extension, and `.vscode/settings.json` handles format-on-save.
 
 ---
 

@@ -30,6 +30,25 @@ services:
       - meteor_local:/kimply/app/.meteor/local
       - backend_node_modules:/kimply/app/node_modules
 
+  test:
+    profiles:
+      - test
+    build:
+      context: .
+      dockerfile: ./app/Dockerfile.dev
+    command: npm test
+    environment:
+      MONGO_URL: mongodb://mongodb:27017/kimply-test
+      ROOT_URL: http://localhost:3000
+      PORT: 3000
+      METEOR_ALLOW_SUPERUSER: 1
+    depends_on:
+      - mongodb
+    volumes:
+      - .:/kimply
+      - meteor_local:/kimply/app/.meteor/local
+      - backend_node_modules:/kimply/app/node_modules
+
 volumes:
   mongodb_data:
   meteor_local:
