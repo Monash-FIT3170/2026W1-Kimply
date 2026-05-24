@@ -98,8 +98,12 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       });
     },
 
-    // Add a player to a round
-    'players.join'(roundId, playerName, gameId = null) {
+    // Add a player to a round (or reattach if they already have a record for this game)
+    async 'players.join'(roundId, playerName, gameId = null) {
+      if (gameId) {
+        const existing = await PlayersCollection.findOneAsync({ gameId, name: playerName });
+        if (existing) return existing._id;
+      }
       return PlayersCollection.insertAsync({
         gameId,
         roundId,

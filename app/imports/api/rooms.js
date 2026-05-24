@@ -157,7 +157,6 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
 
       const room = await RoomsCollection.findOneAsync({ pin: pin.trim() });
       if (!room) throw new Meteor.Error('not-found', 'Room not found');
-      if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
 
       const player= room.players.find(
         p=> p.id === playerId
@@ -169,8 +168,9 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
 
       return{
         playerName: player.name,
-        isHost: room.hostId === playerId,
-        playerId: playerId
+        isHost: player.name === room.hostName,
+        playerId: playerId,
+        status: room.status,
       }
 
     },
