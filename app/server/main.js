@@ -1,5 +1,13 @@
 import { Meteor } from 'meteor/meteor';
-import { generateSequence, LeaderboardCollection, PlayersCollection, RoundsCollection } from '/imports/api';
+import { Random } from 'meteor/random';
+import { generateSequence } from '/imports/api/sequence';
+import { RoundsCollection } from '../imports/api/rounds';
+import { PlayersCollection } from '../imports/api/players';
+import { LeaderboardCollection } from '../imports/api/leaderboard';
+import '../imports/api/gameMethods';
+import '../imports/api/playerAccounts';
+
+import '/imports/api/rooms';
 
 Meteor.startup(async () => {
   await RoundsCollection.removeAsync({});
