@@ -1,0 +1,152 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #react-target {
+    @apply m-0 h-full bg-bg p-0;
+    font-family: 'Manrope', system-ui, sans-serif;
+  }
+}
+
+@keyframes kimplyPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.6);
+    opacity: 0.5;
+  }
+}
+
+@keyframes kimplyCaret {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes podiumRise {
+  0% {
+    transform: translateY(100%) scaleY(0.82);
+    opacity: 0;
+  }
+  70% {
+    transform: translateY(-8px) scaleY(1.04);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) scaleY(1);
+    opacity: 1;
+  }
+}
+
+@keyframes avatarPop {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.25);
+    opacity: 1;
+  }
+  80% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes rowSlideIn {
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes leaderboardTitleIn {
+  from {
+    transform: translateY(-14px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes winnerCrown {
+  0% {
+    transform: translateY(12px) scale(0.86);
+    opacity: 0;
+  }
+  60% {
+    transform: translateY(-4px) scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes scoreboardRowIn {
+  0% {
+    transform: translateX(-18px) scale(0.98);
+    opacity: 0;
+  }
+  65% {
+    transform: translateX(3px) scale(1.01);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes homeButtonIn {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes winnerPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+html,
+body,
+#react-target {
+  height: 100%;
+  background: #1a0533;
+}
+
+@keyframes ecm-backdrop-in  { from{opacity:0} to{opacity:1} }
+@keyframes ecm-backdrop-out { from{opacity:1} to{opacity:0} }
+@keyframes ecm-card-in  { from{opacity:0;transform:translateY(22px) scale(0.96)} to{opacity:1;transform:none} }
+@keyframes ecm-card-out { from{opacity:1;transform:none} to{opacity:0;transform:translateY(14px) scale(0.97)} }

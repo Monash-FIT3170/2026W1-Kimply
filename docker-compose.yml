@@ -1,0 +1,55 @@
+services:
+  mongodb:
+    image: mongo:7.0
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: kimply
+
+  backend:
+    build:
+      context: .
+      dockerfile: ./app/Dockerfile.dev
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      MONGO_URL: mongodb://mongodb:27017/kimply
+      ROOT_URL: http://localhost:3000
+      PORT: 3000
+      METEOR_ALLOW_SUPERUSER: 1
+      CHOKIDAR_USEPOLLING: 1
+      CHOKIDAR_INTERVAL: 500
+    depends_on:
+      - mongodb
+    volumes:
+      - .:/kimply
+      - meteor_local:/kimply/app/.meteor/local
+      - backend_node_modules:/kimply/app/node_modules
+
+  test:
+    profiles:
+      - test
+    build:
+      context: .
+      dockerfile: ./app/Dockerfile.dev
+    command: npm test
+    environment:
+      MONGO_URL: mongodb://mongodb:27017/kimply-test
+      ROOT_URL: http://localhost:3000
+      PORT: 3000
+      METEOR_ALLOW_SUPERUSER: 1
+    depends_on:
+      - mongodb
+    volumes:
+      - .:/kimply
+      - meteor_local:/kimply/app/.meteor/local
+      - backend_node_modules:/kimply/app/node_modules
+
+volumes:
+  mongodb_data:
+  meteor_local:
+  backend_node_modules:
