@@ -157,5 +157,74 @@ if (Meteor.isServer) {
         assert.ok(room.players.find((p) => p.name === 'Host'));
       });
     });
+
+    // ─── rooms.reconnect ─────────────────────────────────────────────────────
+
+    describe('rooms.reconnect', function () {
+      let testPin;
+      let hostId;
+      let playerId;
+
+      beforeEach(async function () {
+        ({ pin: testPin, hostId } = await Meteor.callAsync('rooms.create', 'Host'));
+        const joinResult = await Meteor.callAsync('rooms.join', testPin, 'Player2');
+        playerId = joinResult.playerId;
+      });
+
+      it('throws on empty PIN', async function () {
+        await assert.rejects(Meteor.callAsync('rooms.reconnect', '', playerId), (err) => err.error === 'invalid');
+      });
+
+      it('throws on empty playerId', async function () {
+        await assert.rejects(Meteor.callAsync('rooms.reconnect', testPin, ''), (err) => err.error === 'invalid');
+      });
+
+      it('throws not-found for unknown PIN', async function () {
+        await assert.rejects(
+          Meteor.callAsync('rooms.reconnect', 'ZZZZZ', playerId),
+          (err) => err.error === 'not-found'
+        );
+      });
+
+      it('throws player-not-found when playerId is not in the room', async function () {
+        await assert.rejects(
+          Meteor.callAsync('rooms.reconnect', testPin, 'bogus-id'),
+          (err) => err.error === 'player-not-found'
+        );
+      });
+
+      it('returns playerName, playerId, and status for a lobby reconnect', async function () {
+        const result = await Meteor.callAsync('rooms.reconnect', testPin, playerId);
+        assert.strictEqual(result.playerName, 'Player2');
+        assert.strictEqual(result.playerId, playerId);
+        assert.strictEqual(result.status, 'lobby');
+      });
+
+      it('reports isHost=false for a non-host player', async function () {
+        const result = await Meteor.callAsync('rooms.reconnect', testPin, playerId);
+        assert.strictEqual(result.isHost, false);
+      });
+
+      it('reports isHost=true for the host player', async function () {
+        const result = await Meteor.callAsync('rooms.reconnect', testPin, hostId);
+        assert.strictEqual(result.isHost, true);
+        assert.strictEqual(result.playerName, 'Host');
+      });
+
+      it('succeeds when the room is in_progress (no not-lobby gate)', async function () {
+        await RoomsCollection.updateAsync({ pin: testPin }, { $set: { status: 'in_progress' } });
+        const result = await Meteor.callAsync('rooms.reconnect', testPin, playerId);
+        assert.strictEqual(result.status, 'in_progress');
+        assert.strictEqual(result.playerName, 'Player2');
+      });
+
+      it('still throws player-not-found in_progress when the player was never in the room', async function () {
+        await RoomsCollection.updateAsync({ pin: testPin }, { $set: { status: 'in_progress' } });
+        await assert.rejects(
+          Meteor.callAsync('rooms.reconnect', testPin, 'bogus-id'),
+          (err) => err.error === 'player-not-found'
+        );
+      });
+    });
   });
 }
