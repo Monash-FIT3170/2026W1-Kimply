@@ -5,6 +5,7 @@ import { RoundsCollection } from '../imports/api/rounds.js';
 import { PlayersCollection } from '../imports/api/players.js';
 import { LeaderboardCollection } from '../imports/api/leaderboard.js';
 import '../imports/api/gameMethods';
+import '../imports/api/playerAccounts';
 
 import '/imports/api/rooms';
 
