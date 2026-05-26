@@ -168,7 +168,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
 
       return{
         playerName: player.name,
-        isHost: player.name === room.hostName,
+        isHost: room.hostId === playerId,
         playerId: playerId,
         status: room.status,
       }
