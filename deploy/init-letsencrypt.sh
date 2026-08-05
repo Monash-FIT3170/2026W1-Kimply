@@ -36,6 +36,15 @@ set -a; source "$ENV_FILE"; set +a
 
 : "${DOMAIN:?DOMAIN must be set in $ENV_FILE}"
 
+# Names to put on the certificate. Defaults to the apex alone; set CERT_DOMAINS in
+# the env file to a space-separated list to cover more, e.g.
+#   CERT_DOMAINS="kimply.online www.kimply.online"
+# The FIRST name becomes the certificate lineage name, which is what the nginx
+# ssl_certificate paths refer to, so it must stay $DOMAIN.
+CERT_DOMAINS="${CERT_DOMAINS:-$DOMAIN}"
+CERT_ARGS=()
+for d in $CERT_DOMAINS; do CERT_ARGS+=(-d "$d"); done
+
 SELF_SIGNED=0
 CERTBOT_EXTRA=()
 case "${1:-}" in
@@ -88,10 +97,11 @@ if [[ ${#CERTBOT_EXTRA[@]} -eq 0 ]]; then
   compose run --rm --entrypoint sh certbot -c "rm -rf '$CERT_DIR' '/etc/letsencrypt/archive/$DOMAIN' '/etc/letsencrypt/renewal/$DOMAIN.conf'"
 fi
 
-log "Requesting certificate from Let's Encrypt (webroot challenge)"
+log "Requesting certificate for: $CERT_DOMAINS"
 compose run --rm certbot certonly \
   --webroot -w /var/www/certbot \
-  -d "$DOMAIN" \
+  "${CERT_ARGS[@]}" \
+  --cert-name "$DOMAIN" \
   --email "$LETSENCRYPT_EMAIL" \
   --agree-tos --no-eff-email --non-interactive \
   "${CERTBOT_EXTRA[@]}"
