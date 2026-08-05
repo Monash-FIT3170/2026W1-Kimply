@@ -96,7 +96,8 @@ ws.addEventListener('message', async (event) => {
     case 'added':
     case 'changed': {
       const c = collections[m.collection];
-      if (c) c.set(m.id, { ...(c.get(m.id) || {}), ...(m.fields || {}) });
+      // _id arrives as the message's `id`, never inside `fields`.
+      if (c) c.set(m.id, { _id: m.id, ...(c.get(m.id) || {}), ...(m.fields || {}) });
       return;
     }
 
