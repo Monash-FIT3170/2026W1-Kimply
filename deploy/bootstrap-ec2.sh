@@ -12,7 +12,10 @@ set -Eeuo pipefail
 
 APP_DIR=/opt/kimply
 SWAP_FILE=/swapfile
-SWAP_SIZE_MB=4096
+# 2 GB on a 2 GB instance. Swap here is an OOM guard, not extra capacity: paging
+# on a burstable instance backed by gp3 is slow enough that sustained swapping
+# means you should resize rather than lean on it.
+SWAP_SIZE_MB=${SWAP_SIZE_MB:-2048}
 
 log() { printf '[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 die() { log "ERROR: $*" >&2; exit 1; }
