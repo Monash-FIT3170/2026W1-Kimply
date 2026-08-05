@@ -238,7 +238,12 @@ async function main() {
       room.members.map(async (c) => {
         try {
           await c.sub('rounds', [room.pin]);
-          await c.sub('players', [room.pin]);
+          // --no-player-sub halves the number of live cursors on the server.
+          // Meteor cannot use oplog tailing against an Atlas shared tier, so it
+          // falls back to poll-and-diff: every write re-polls every matching
+          // cursor. If observer work is the bottleneck, dropping this
+          // subscription should move latency noticeably.
+          if (!flag('no-player-sub')) await c.sub('players', [room.pin]);
           const round = c.currentRound(room.pin);
           if (!round) return errors.push(`no current round for ${room.pin}`);
           c.playerId = await c.call('players.join', [round._id, c.name, room.pin]);
