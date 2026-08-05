@@ -39,19 +39,33 @@ RUN meteor npm ci
 
 COPY . .
 
-# --exclude-archs web.browser.legacy is deliberate and matches entrypoint.sh, which
-# development has always used.
+RUN meteor build --directory /build --server-only
+
+# Serve the modern client to every browser.
 #
-# Without it, production built a legacy (ES5) bundle that development never ran, so
-# it was shipped completely untested - and it was broken. Meteor serves the legacy
-# bundle to any user agent its modern-browsers package cannot identify, and
-# Facebook Messenger's in-app browser on iOS is one of those: its UA has no
-# `Version/x Safari/y` token, only `Mobile/15E148 [FBAN/...]`. Anyone opening a
-# Kimply link from Messenger got a blank screen while every normal browser worked.
+# Meteor hands the web.browser.legacy (ES5) bundle to any user agent that its
+# modern-browsers package cannot identify. Facebook Messenger's in-app browser on
+# iOS is one of those - its UA carries no `Version/x Safari/y` token, only
+# `Mobile/15E148 [FBAN/...]` - so Messenger users were served the legacy bundle
+# and got a blank screen, while every normal browser worked fine.
 #
-# The legacy arch targets IE11-era browsers. Excluding it means every client gets
-# the modern bundle, halves the client build, and removes an untestable code path.
-RUN meteor build --directory /build --server-only --exclude-archs web.browser.legacy
+# That bundle was never exercised in development either: entrypoint.sh runs with
+# --exclude-archs web.browser.legacy,web.cordova, so the legacy arch existed only
+# in production, untested. It is missing app code relative to the modern build,
+# most likely because the rspack integration only compiles for web.browser.
+#
+# `meteor build` has no --exclude-archs flag (that is a `meteor run` option), and
+# deleting the arch outright would rely on undocumented fallback behaviour in
+# webapp. Overwriting it with the modern program is explicit and arch-agnostic:
+# whichever one Meteor selects, the client receives working code.
+#
+# The legacy arch targets IE11-era browsers, which are irrelevant here.
+RUN set -eux; \
+    cd /build/bundle/programs; \
+    test -d web.browser && test -d web.browser.legacy; \
+    rm -rf web.browser.legacy; \
+    cp -a web.browser web.browser.legacy; \
+    diff -q web.browser/program.json web.browser.legacy/program.json
 
 # Install the bundle's own server dependencies here, in the glibc builder that has
 # a compiler, so the runtime image needs neither build tools nor npm.
