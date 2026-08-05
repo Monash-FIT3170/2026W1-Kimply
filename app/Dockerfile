@@ -39,7 +39,19 @@ RUN meteor npm ci
 
 COPY . .
 
-RUN meteor build --directory /build --server-only
+# --exclude-archs web.browser.legacy is deliberate and matches entrypoint.sh, which
+# development has always used.
+#
+# Without it, production built a legacy (ES5) bundle that development never ran, so
+# it was shipped completely untested - and it was broken. Meteor serves the legacy
+# bundle to any user agent its modern-browsers package cannot identify, and
+# Facebook Messenger's in-app browser on iOS is one of those: its UA has no
+# `Version/x Safari/y` token, only `Mobile/15E148 [FBAN/...]`. Anyone opening a
+# Kimply link from Messenger got a blank screen while every normal browser worked.
+#
+# The legacy arch targets IE11-era browsers. Excluding it means every client gets
+# the modern bundle, halves the client build, and removes an untestable code path.
+RUN meteor build --directory /build --server-only --exclude-archs web.browser.legacy
 
 # Install the bundle's own server dependencies here, in the glibc builder that has
 # a compiler, so the runtime image needs neither build tools nor npm.
