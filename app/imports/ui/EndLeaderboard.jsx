@@ -24,13 +24,16 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
   const navigate = useNavigate();
 
   const players = useTracker(() => {
-    const sub = Meteor.subscribe('players');
+    // Without a gameId this used to fall back to find({}), rendering every player
+    // of every game in the deployment on the end screen.
+    if (!gameId) return [];
+    const sub = Meteor.subscribe('players', gameId);
 
     if (!sub.ready()) {
       return [];
     }
 
-    return PlayersCollection.find(gameId ? { gameId } : {})
+    return PlayersCollection.find({ gameId })
       .fetch()
       .map((player) => ({
         id: player._id,
