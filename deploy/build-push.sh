@@ -64,7 +64,17 @@ fi
 
 # --- Build -------------------------------------------------------------------
 log "Building"
-docker buildx build --platform "$PLATFORM" -t "$IMAGE" --load "$REPO_ROOT/app"
+# --provenance=false --sbom=false is REQUIRED for ECR.
+#
+# By default buildx attaches provenance and SBOM attestations, which turns the
+# result into an OCI image index rather than a plain manifest. ECR rejects that
+# with a bare "400 Bad Request" on the manifest PUT, after successfully uploading
+# every layer - so it looks like the push worked right up until the final step.
+docker buildx build \
+  --platform "$PLATFORM" \
+  --provenance=false \
+  --sbom=false \
+  -t "$IMAGE" --load "$REPO_ROOT/app"
 
 # --- Verify before pushing ---------------------------------------------------
 # A broken image must never reach the registry. Boot it against a throwaway
