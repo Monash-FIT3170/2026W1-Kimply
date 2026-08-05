@@ -223,16 +223,31 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         throw new Meteor.Error('round-not-found', 'Current round does not exist');
       }
 
-      // prevent duplicate advancement
-      if (currentRound.advanced) return;
+      // Claim this round atomically.
+      //
+      // `advanced: false` is in the SELECTOR, not checked beforehand. MongoDB
+      // guarantees a single document update is atomic, so when several players
+      // submit simultaneously exactly one caller matches and the rest get 0.
+      //
+      // Reading the flag and then setting it - which is what this used to do -
+      // leaves a window between the two where every concurrent caller sees
+      // `advanced: false` and proceeds. Load testing with only 8 players
+      // produced five rounds simultaneously marked isCurrent for one game, and
+      // at 25 players it reached ten. Each spurious advance also runs an insert
+      // plus a multi-update, so the bug amplified itself: submitSequence p50
+      // went from 366ms at 8 players to 2080ms at 25.
+      const claimed = await RoundsCollection.updateAsync(
+        { _id: currentRoundId, advanced: false },
+        {
+          $set: {
+            advanced: true,
+            isCurrent: false,
+          },
+        }
+      );
 
-      // mark current round as completed
-      await RoundsCollection.updateAsync(currentRoundId, {
-        $set: {
-          advanced: true,
-          isCurrent: false,
-        },
-      });
+      // Another caller got there first. Nothing to do.
+      if (claimed === 0) return;
 
       // increase sequence size for next round
       const nextLength = currentRound.lengthOfSequence + 1;
