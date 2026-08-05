@@ -14,9 +14,13 @@
 #
 # Exit codes:
 #   0  deployed and verified
-#   1  deploy failed, previous image restored and verified
-#   2  usage or precondition error
-#   3  deploy failed AND rollback failed - the site is down, intervene manually
+#   1  deploy failed, previous image restored and verified - site is serving again
+#   2  usage or precondition error - nothing was changed
+#   3  needs a human. Either the rollback also failed, or there was nothing safe
+#      to roll back to. The site may be down.
+#
+# The distinction matters: 1 means "handled, investigate at your leisure",
+# 3 means "act now".
 
 set -Eeuo pipefail
 
@@ -51,9 +55,32 @@ set -a; source "$ENV_FILE"; set +a
 : "${ROOT_URL:?ROOT_URL must be set in $ENV_FILE}"
 
 NEW_IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_SHA"
-PREV_IMAGE="${APP_IMAGE:-}"
 
 compose() { docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"; }
+
+# The rollback target must be what is ACTUALLY RUNNING, not what .env claims.
+#
+# These two can disagree: an interrupted deploy (dropped SSH session, Ctrl-C)
+# can leave .env updated while the container was never swapped. Trusting .env in
+# that state makes rollback a no-op - it would "restore" the very image that just
+# failed - and the failure would be silent, precisely when it matters most.
+running_image() {
+  docker inspect "$CONTAINER" --format '{{.Config.Image}}' 2>/dev/null || true
+}
+
+PREV_IMAGE="$(running_image)"
+DECLARED_IMAGE="${APP_IMAGE:-}"
+
+if [[ -z "$PREV_IMAGE" ]]; then
+  log "NOTE: no running $CONTAINER container. This looks like a first deploy."
+  log "      There will be nothing to roll back to if it fails."
+elif [[ "$PREV_IMAGE" != "$DECLARED_IMAGE" ]]; then
+  log "WARNING: .env and the running container disagree."
+  log "  .env says : ${DECLARED_IMAGE:-<unset>}"
+  log "  running   : $PREV_IMAGE"
+  log "  This is the signature of a previously interrupted deploy."
+  log "  Using the RUNNING image as the rollback target, which is the safe choice."
+fi
 
 # Rewrite APP_IMAGE in place, atomically, preserving the file's 0600 mode.
 set_app_image() {
@@ -83,6 +110,19 @@ activate() {
   # --no-deps leaves nginx and certbot untouched, so TLS termination never blips.
   log "[$label] recreating the app container"
   compose up -d --no-deps app || return 1
+
+  # Confirm the swap actually happened. `compose up` can exit 0 having decided the
+  # container was already up to date, so without this the script would go on to
+  # health-check the OLD container and report a success that never occurred.
+  local actual
+  actual="$(running_image)"
+  if [[ "$actual" != "$image" ]]; then
+    log "[$label] ERROR: container is running the wrong image after recreate"
+    log "[$label]   expected : $image"
+    log "[$label]   actual   : ${actual:-<no container>}"
+    return 1
+  fi
+  log "[$label] container is running $image"
 
   log "[$label] waiting for the container healthcheck"
   local status
@@ -115,8 +155,20 @@ aws ecr get-login-password --region "$AWS_REGION" \
 
 # Pull BEFORE touching anything running: if the image is missing or the pull
 # fails, the current deployment is completely undisturbed.
+#
+# Exit 2, not 1. Nothing was attempted, so this is a precondition failure. Letting
+# set -e propagate docker's exit 1 would report it as "deploy failed, rolled back
+# successfully", which is a materially different and wrong claim.
 log "Pulling image"
-docker pull "$NEW_IMAGE"
+if ! docker pull "$NEW_IMAGE"; then
+  log "ERROR: could not pull $NEW_IMAGE"
+  log "Nothing was changed. The running deployment is untouched."
+  log "Check the tag exists and was pushed:"
+  log "  aws ecr describe-images --region $AWS_REGION --repository-name $ECR_REPOSITORY \\"
+  log "    --query 'sort_by(imageDetails,&imagePushedAt)[*].[imageTags[0],imagePushedAt]' --output table"
+  log "If it is missing, build and push it first:  ./deploy/build-push.sh"
+  exit 2
+fi
 
 if activate "$NEW_IMAGE" "deploy"; then
   log "SUCCESS: $NEW_IMAGE is live"
@@ -133,8 +185,22 @@ fi
 log "Deploy verification FAILED"
 
 if [[ -z "$PREV_IMAGE" ]]; then
-  log "No previous image recorded, so there is nothing to roll back to."
-  log "The site may be down. Investigate with: compose logs --tail=100 app"
+  log "No previous image was running, so there is nothing to roll back to."
+  log "The site is likely down. Investigate:"
+  log "  cd $APP_DIR && docker compose -f docker-compose.prod.yml --env-file .env logs --tail=100 app"
+  exit 3
+fi
+
+# Rolling back to the image that just failed would achieve nothing while
+# reporting success. Refuse loudly instead.
+if [[ "$PREV_IMAGE" == "$NEW_IMAGE" ]]; then
+  log "REFUSING to roll back: the previous image is the same as the one that just failed."
+  log "  image: $NEW_IMAGE"
+  log "There is no earlier version to fall back to automatically."
+  log "Pick a known-good SHA and deploy it explicitly:"
+  log "  aws ecr describe-images --region $AWS_REGION --repository-name $ECR_REPOSITORY \\"
+  log "    --query 'sort_by(imageDetails,&imagePushedAt)[*].[imageTags[0],imagePushedAt]' --output table"
+  log "  sudo $APP_DIR/deploy/deploy.sh <known-good-sha>"
   exit 3
 fi
 
