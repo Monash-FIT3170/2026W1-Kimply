@@ -7,11 +7,9 @@ import { ColourSequence } from '../ColourSequence.jsx';
 import { Leaderboard } from '../Leaderboard.jsx';
 import { EndLeaderboard } from '../EndLeaderboard.jsx';
 import { useLocation } from 'react-router-dom';
-import { TileLattice, BG } from '../components/design';
+
 export const GamePage = () => {
-  const [playerId, setPlayerId] = useState(
-    localStorage.getItem('playerId')
-  );
+  const [playerId, setPlayerId] = useState(null);
   const [playerCanInput, setPlayerCanInput] = useState(false);
   const [attemptedSequence, setAttemptedSequence] = useState([]);
   const [message, setMessage] = useState('');
@@ -20,9 +18,10 @@ export const GamePage = () => {
   const [completedRoundId, setCompletedRoundId] = useState(null);
   const [replayKey, setReplayKey] = useState(0);
   const location = useLocation();
-  const playerNameFromLobby = location.state?.playerName;
+  const playerNameFromLobby = location.state?.playerName || 'Demo Player';
   const roomPin = location.state?.pin;
-  const gameId = roomPin;
+  const gameId = roomPin || 'demo';
+
   useEffect(() => {
     const roundsSub = Meteor.subscribe('rounds');
     const playersSub = Meteor.subscribe('players');
@@ -31,40 +30,42 @@ export const GamePage = () => {
       playersSub.stop();
     };
   }, []);
+
   const round = useTracker(() => {
     return RoundsCollection.findOne({ gameId, isCurrent: true });
   }, [gameId]);
+
   const player = useTracker(() => {
     if (!playerId) return null;
     return PlayersCollection.findOne(playerId);
   }, [playerId]);
+
   useEffect(() => {
     if (!round?._id || playerId) return;
     Meteor.call('players.join', round._id, playerNameFromLobby, gameId, (error, result) => {
-
       if (error) {
         console.error(error);
         setMessage('Could not join the game.');
         return;
       }
-
       setPlayerId(result);
-      localStorage.setItem('playerId', result);
-
     });
   }, [round?._id, playerId]);
+
   useEffect(() => {
     setPlayerCanInput(false);
     setAttemptedSequence([]);
     setMessage('');
     setCompletedRoundId(null);
   }, [round?._id]);
+
   const handleColourClick = (colour) => {
     if (!playerCanInput) return;
     if (!round?.sequence) return;
     if (attemptedSequence.length >= round.sequence.length) return;
     setAttemptedSequence([...attemptedSequence, colour]);
   };
+
   const handleSubmit = () => {
     if (!playerId) {
       setMessage('Player is not ready yet.');
@@ -102,10 +103,12 @@ export const GamePage = () => {
       }
     });
   };
+
   const handleClear = () => {
     setAttemptedSequence([]);
     setMessage('Try again. Repeat the flashed sequence.');
   };
+
   if (!round) {
     return (
       <div
@@ -131,15 +134,19 @@ export const GamePage = () => {
       </div>
     );
   }
+
   if (!player) return null;
+
   if (player?.gameFinished) {
     return <EndLeaderboard gameId={player.gameId} currentPlayerId={player._id} />;
   }
+
   if (player?.eliminated) {
     const longestStreak = player.longestStreak ?? 0;
     const totalGuesses = player.totalGuesses ?? 0;
     const correctGuesses = player.correctGuesses ?? 0;
     const accuracy = totalGuesses > 0 ? Math.round((correctGuesses / totalGuesses) * 100) : 0;
+
     return (
       <div
         style={{
@@ -207,166 +214,161 @@ export const GamePage = () => {
       </div>
     );
   }
+
   return (
     <div
       style={{
         minHeight: '100vh',
-        position: 'relative',
-        overflow: 'hidden',
         background: 'linear-gradient(135deg, #1a0533 0%, #0d1b4b 100%)',
         display: 'flex',
         flexDirection: 'column',
-        padding: '2vh 2vw',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px',
         transform: shake ? 'translateX(-6px)' : 'translateX(0)',
         transition: 'transform 0.1s ease',
         boxShadow: correctGlow ? 'inset 0 0 80px #00aaff' : 'none',
       }}
     >
-      <TileLattice opacity={0.06} />
-      <div className="relative flex shrink-0 justify-between px-7 py-5" style={{ width: '100%' }}>
-        <span style={{ fontSize: '2vw', fontWeight: 800, color: 'white', letterSpacing: '-0.02em', fontFamily: 'Outfit, sans-serif' }}>KIMPLY</span>
+      {/* Lives display */}
+      <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '8px', marginBottom: '16px' }}>
+        {[1, 2, 3].map((heart) => (
+          <div
+            key={heart}
+            style={{
+              width: '44px',
+              height: '44px',
+              backgroundColor: heart <= (player?.lives ?? 3) ? '#e03030' : '#333',
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '20px',
+              boxShadow: heart <= (player?.lives ?? 3) ? '0 0 10px #e0303088' : 'none',
+              transition: 'all 0.3s ease',
+            }}
+          >
+            {'\u2764'}
+          </div>
+        ))}
       </div>
-      <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
-        {/* Lives display */}
-        <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2vh' }}>
-          {[1, 2, 3].map((heart) => (
+
+      <div style={{ textAlign: 'center' }}>
+        <p
+          style={{
+            color: 'white',
+            marginBottom: '12px',
+            fontWeight: 'bold',
+            letterSpacing: '2px',
+          }}
+        >
+          LEVEL {round.lengthOfSequence - 3}
+        </p>
+        <p
+          style={{
+            color: '#ccc',
+            marginBottom: '12px',
+            fontSize: '0.9rem',
+          }}
+        ></p>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            gap: '6px',
+            marginBottom: '20px',
+          }}
+        >
+          {(round.sequence || []).map((_, i) => (
             <div
-              key={heart}
+              key={i}
               style={{
-                width: '4vw',
-                height: '4vw',
-                backgroundColor: heart <= (player?.lives ?? 3) ? '#e03030' : '#333',
+                width: '12px',
+                height: '12px',
                 borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '2vw',
-                boxShadow: heart <= (player?.lives ?? 3) ? '0 0 10px #e0303088' : 'none',
-                transition: 'all 0.3s ease',
+                backgroundColor: i < attemptedSequence.length ? '#fff' : '#556',
               }}
-            >
-              {'\u2764'}
-            </div>
+            />
           ))}
         </div>
-        <div style={{ textAlign: 'center' }}>
-          <p
+        <ColourSequence
+          roundId={round._id}
+          sequence={round.sequence}
+          replayKey={replayKey}
+          playerCanInput={playerCanInput}
+          onSequenceComplete={() => {
+            setPlayerCanInput(true);
+            setMessage('Your turn. Repeat the sequence.');
+          }}
+          onColourClick={handleColourClick}
+        />
+        <p
+          style={{
+            color: 'white',
+            marginTop: '18px',
+            minHeight: '24px',
+            fontSize: '0.9rem',
+          }}
+        >
+          Selected: {attemptedSequence.length}/{round.sequence.length}
+        </p>
+        <p
+          style={{
+            color: '#ffd369',
+            marginTop: '8px',
+            minHeight: '24px',
+            fontSize: '0.9rem',
+          }}
+        >
+          {message}
+        </p>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            gap: '12px',
+            marginTop: '24px',
+          }}
+        >
+          <button
+            onClick={handleClear}
+            disabled={!playerCanInput || attemptedSequence.length === 0}
             style={{
-              color: 'white',
-              marginBottom: '1vh',
+              width: '120px',
+              padding: '14px',
+              backgroundColor: playerCanInput && attemptedSequence.length > 0 ? '#444' : '#222',
+              color: playerCanInput && attemptedSequence.length > 0 ? 'white' : '#555',
               fontWeight: 'bold',
-              letterSpacing: '2px',
-              fontSize: '1.2vw',
+              fontSize: '0.9rem',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: playerCanInput && attemptedSequence.length > 0 ? 'pointer' : 'not-allowed',
+              letterSpacing: '1px',
             }}
           >
-            LEVEL {round.lengthOfSequence - 3}
-          </p>
-          <p
+            CLEAR
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!playerCanInput || attemptedSequence.length !== round.sequence.length}
             style={{
-              color: '#ccc',
-              marginBottom: '1vh',
-              fontSize: '0.9vw',
-            }}
-          ></p>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'center',
-              gap: '0.5vw',
-              marginBottom: '2vh',
+              width: '140px',
+              padding: '14px',
+              backgroundColor:
+                playerCanInput && attemptedSequence.length === round.sequence.length ? '#666' : '#2a2a3a',
+              color: playerCanInput && attemptedSequence.length === round.sequence.length ? 'white' : '#444',
+              fontWeight: 'bold',
+              fontSize: '0.9rem',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: playerCanInput && attemptedSequence.length === round.sequence.length ? 'pointer' : 'not-allowed',
+              letterSpacing: '1px',
             }}
           >
-            {(round.sequence || []).map((_, i) => (
-              <div
-                key={i}
-                style={{
-                  width: '1vw',
-                  height: '1vw',
-                  borderRadius: '50%',
-                  backgroundColor: i < attemptedSequence.length ? '#fff' : '#556',
-                }}
-              />
-            ))}
-          </div>
-          <ColourSequence
-            roundId={round._id}
-            sequence={round.sequence}
-            replayKey={replayKey}
-            playerCanInput={playerCanInput}
-            onSequenceComplete={() => {
-              setPlayerCanInput(true);
-              setMessage('Your turn. Repeat the sequence.');
-            }}
-            onColourClick={handleColourClick}
-          />
-          <p
-            style={{
-              color: 'white',
-              marginTop: '1.5vh',
-              minHeight: '2vh',
-              fontSize: '1vw',
-            }}
-          >
-            Selected: {attemptedSequence.length}/{round.sequence.length}
-          </p>
-          <p
-            style={{
-              color: '#ffd369',
-              marginTop: '0.8vh',
-              minHeight: '2vh',
-              fontSize: '1vw',
-            }}
-          >
-            {message}
-          </p>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'center',
-              gap: '1vw',
-              marginTop: '2vh',
-            }}
-          >
-            <button
-              onClick={handleClear}
-              disabled={!playerCanInput || attemptedSequence.length === 0}
-              style={{
-                width: '8vw',
-                padding: '1vw',
-                backgroundColor: playerCanInput && attemptedSequence.length > 0 ? '#444' : '#222',
-                color: playerCanInput && attemptedSequence.length > 0 ? 'white' : '#555',
-                fontWeight: 'bold',
-                fontSize: '0.9vw',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: playerCanInput && attemptedSequence.length > 0 ? 'pointer' : 'not-allowed',
-                letterSpacing: '1px',
-              }}
-            >
-              CLEAR
-            </button>
-            <button
-              onClick={handleSubmit}
-              disabled={!playerCanInput || attemptedSequence.length !== round.sequence.length}
-              style={{
-                width: '9vw',
-                padding: '1vw',
-                backgroundColor:
-                  playerCanInput && attemptedSequence.length === round.sequence.length ? '#666' : '#2a2a3a',
-                color: playerCanInput && attemptedSequence.length === round.sequence.length ? 'white' : '#444',
-                fontWeight: 'bold',
-                fontSize: '0.9vw',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: playerCanInput && attemptedSequence.length === round.sequence.length ? 'pointer' : 'not-allowed',
-                letterSpacing: '1px',
-              }}
-            >
-              SUBMIT
-            </button>
-          </div>
-          {completedRoundId && <Leaderboard roundId={completedRoundId} />}
+            SUBMIT
+          </button>
         </div>
+        {completedRoundId && <Leaderboard roundId={completedRoundId} />}
       </div>
     </div>
   );
