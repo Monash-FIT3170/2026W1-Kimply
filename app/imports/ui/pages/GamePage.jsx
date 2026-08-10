@@ -9,7 +9,9 @@ import { EndLeaderboard } from '../EndLeaderboard.jsx';
 import { useLocation } from 'react-router-dom';
 import { TileLattice, BG } from '../components/design';
 export const GamePage = () => {
-  const [playerId, setPlayerId] = useState(null);
+  const [playerId, setPlayerId] = useState(
+    localStorage.getItem('playerId')
+  );
   const [playerCanInput, setPlayerCanInput] = useState(false);
   const [attemptedSequence, setAttemptedSequence] = useState([]);
   const [message, setMessage] = useState('');
@@ -18,9 +20,9 @@ export const GamePage = () => {
   const [completedRoundId, setCompletedRoundId] = useState(null);
   const [replayKey, setReplayKey] = useState(0);
   const location = useLocation();
-  const playerNameFromLobby = location.state?.playerName || 'Demo Player';
+  const playerNameFromLobby = location.state?.playerName;
   const roomPin = location.state?.pin;
-  const gameId = roomPin || 'demo';
+  const gameId = roomPin;
   useEffect(() => {
     const roundsSub = Meteor.subscribe('rounds');
     const playersSub = Meteor.subscribe('players');
@@ -39,12 +41,16 @@ export const GamePage = () => {
   useEffect(() => {
     if (!round?._id || playerId) return;
     Meteor.call('players.join', round._id, playerNameFromLobby, gameId, (error, result) => {
+
       if (error) {
         console.error(error);
         setMessage('Could not join the game.');
         return;
       }
+
       setPlayerId(result);
+      localStorage.setItem('playerId', result);
+
     });
   }, [round?._id, playerId]);
   useEffect(() => {
