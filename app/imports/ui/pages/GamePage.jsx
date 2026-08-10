@@ -21,6 +21,7 @@ export const GamePage = () => {
   const playerNameFromLobby = location.state?.playerName;
   const roomPin = location.state?.pin;
   const gameId = roomPin;
+  const lobbyPlayerId = location.state?.playerId;
 
   useEffect(() => {
     if (!gameId) return;
@@ -48,16 +49,19 @@ export const GamePage = () => {
 
   useEffect(() => {
     if (!round?._id || playerId) return;
-    Meteor.call('players.join', round._id, playerNameFromLobby, gameId, (error, result) => {
+    if (!gameId || !playerNameFromLobby) {
+      setMessage('Missing game info. Please join from the lobby.');
+      return;
+    }
+    Meteor.call('players.join', round._id, playerNameFromLobby, gameId, lobbyPlayerId, (error, result) => {
       if (error) {
         console.error(error);
         setMessage('Could not join the game.');
         return;
       }
       setPlayerId(result);
-      localStorage.setItem(`playerId:${gameId}`, result);
     });
-  }, [round?._id, playerId]);
+  }, [round?._id, playerId, gameId, playerNameFromLobby, lobbyPlayerId]);
 
   useEffect(() => {
     setPlayerCanInput(false);
