@@ -2,6 +2,7 @@ import { Meteor } from 'meteor/meteor';
 import { RoundsCollection } from './rounds';
 import { PlayersCollection } from './players';
 import { LeaderboardCollection } from './leaderboard';
+import { RoomsCollection } from './rooms';
 
 const COLOURS = ['red', 'blue', 'green', 'yellow'];
 
@@ -15,6 +16,10 @@ async function checkWinner(gameId) {
 
   const alreadyFinished = players.some((p) => p.gameFinished);
   if (alreadyFinished) return;
+
+  const room = await RoomsCollection.findOneAsync({ pin: gameId });
+  const expectedPlayerCount = room?.players?.length ?? 0;
+  if (players.length < expectedPlayerCount) return;
 
   const active = players.filter((p) => !p.eliminated);
 
@@ -99,10 +104,16 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
     },
 
     // Add a player to a round
-    'players.join'(roundId, playerName, gameId = null) {
+    async 'players.join'(roundId, playerName, gameId = null, lobbyPlayerId = null) {
+      if (lobbyPlayerId) {
+        const existing = await PlayersCollection.findOneAsync({ gameId, lobbyPlayerId });
+        if (existing) return existing._id;
+      }
+
       return PlayersCollection.insertAsync({
         gameId,
         roundId,
+        lobbyPlayerId,
         name: playerName,
         lives: 3,
         attemptedSequence: [],
