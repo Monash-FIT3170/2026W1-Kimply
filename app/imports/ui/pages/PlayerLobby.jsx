@@ -107,7 +107,7 @@ function SharePanel({ link }) {
   );
 }
 
-function HostView({ room, playerName, onBack, navigate }) {
+function HostView({ room, playerName, playerId, onBack, navigate }) {
   const players = room.players || [];
   const joinLink = `${window.location.origin}/play/join?code=${room.pin}`;
   const [editing, setEditing] = useState(true);
@@ -121,7 +121,7 @@ function HostView({ room, playerName, onBack, navigate }) {
         console.error(err);
         return;
       }
-      navigate('/game', { state: { playerName, pin: room.pin } });
+      navigate('/game', { state: { playerName, pin: room.pin, playerId } });
     });
   };
 
@@ -256,7 +256,7 @@ function HostView({ room, playerName, onBack, navigate }) {
   );
 }
 
-function JoinedView({ room, playerName, onBack, navigate }) {
+function JoinedView({ room, playerName, playerId, onBack, navigate }) {
   const players = room.players || [];
   const emptySlots = Math.max(0, MAX_PLAYERS - players.length);
 
@@ -279,7 +279,7 @@ function JoinedView({ room, playerName, onBack, navigate }) {
 
   useEffect(() => {
     if (room?.status === 'in_progress') {
-      navigate('/game', { state: { playerName, pin: room.pin } });
+      navigate('/game', { state: { playerName, pin: room.pin, playerId } });
     }
   }, [room?.status]);
 
@@ -369,7 +369,7 @@ export function PlayerLobby() {
   useEffect(() => {
     if (room?.status === 'in_progress' && !gameStarted.current) {
       gameStarted.current = true;
-      navigate('/game', { state: { playerName, pin: room.pin } });
+      navigate('/game', { state: { playerName, pin: room.pin, playerId } });
     }
   }, [room?.status]);
 
@@ -416,9 +416,9 @@ export function PlayerLobby() {
       />
 
       { isHost? (
-        <HostView room={room} playerName={playerName} onBack={onBack} />
+        <HostView room={room} playerName={playerName} playerId={playerId} onBack={onBack} navigate={navigate}/>
       ) : (
-        <JoinedView room={room} playerName={playerName} onBack={onBack} navigate={navigate} />
+        <JoinedView room={room} playerName={playerName} playerId={playerId} onBack={onBack} navigate={navigate} />
       )}
     </>
   )
