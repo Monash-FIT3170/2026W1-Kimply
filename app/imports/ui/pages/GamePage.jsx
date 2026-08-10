@@ -243,7 +243,7 @@ export const GamePage = () => {
     >
       {/* Lives display */}
       <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '8px', marginBottom: '16px' }}>
-        {[1, 2, 3].map((heart) => (
+        {Array.from({ length: Math.max(player?.lives ?? 3, 3) }, (_, i) => i + 1).map((heart) => (
           <div
             key={heart}
             style={{
