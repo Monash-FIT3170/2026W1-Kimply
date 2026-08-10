@@ -100,6 +100,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         createdAt: new Date(),
         advanced: false,
         isCurrent: true,
+        roundNumber: 1,
       });
     },
 
@@ -145,6 +146,9 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         const totalGuesses = (player.totalGuesses ?? 0) + 1;
         const correctGuesses = (player.correctGuesses ?? 0) + 1;
 
+        const bonusLife = round.roundNumber === 7 ? 1 : 0;
+        const lives = (player.lives ?? 0) + bonusLife;
+
         // mark player as completed
         await PlayersCollection.updateAsync(playerId, {
           $set: {
@@ -154,6 +158,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
             totalGuesses,
             correctGuesses,
             completeRound: true,
+            lives, 
           },
         });
 
@@ -164,7 +169,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
           gameId: player.gameId,
           playerId,
           name: player.name,
-          lives: player.lives,
+          lives,
           roundId: player.roundId,
           completedAt: new Date(),
         });
@@ -258,6 +263,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         createdAt: new Date(),
         advanced: false,
         isCurrent: true,
+        roundNumber: (currentRound.roundNumber ?? 1) + 1,
       });
 
       // move active players into next round
