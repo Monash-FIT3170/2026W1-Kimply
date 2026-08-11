@@ -3,9 +3,11 @@ import { Meteor } from 'meteor/meteor';
 import { useTracker } from 'meteor/react-meteor-data';
 import { LeaderboardCollection } from '../api/leaderboard';
 
-export const Leaderboard = ({ roundId }) => {
+export const Leaderboard = ({ gameId, roundId }) => {
   const leaderboard = useTracker(() => {
-    const sub = Meteor.subscribe('leaderboard');
+    if (!gameId) return [];
+    // The publication is scoped by gameId; roundId then narrows to this round.
+    const sub = Meteor.subscribe('leaderboard', gameId);
 
     if (!sub.ready() || !roundId) {
       return [];
@@ -20,7 +22,7 @@ export const Leaderboard = ({ roundId }) => {
         },
       }
     ).fetch();
-  }, [roundId]);
+  }, [gameId, roundId]);
 
   return (
     <div

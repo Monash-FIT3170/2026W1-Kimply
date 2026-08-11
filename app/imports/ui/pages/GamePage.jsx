@@ -20,16 +20,20 @@ export const GamePage = () => {
   const location = useLocation();
   const playerNameFromLobby = location.state?.playerName || 'Demo Player';
   const roomPin = location.state?.pin;
-  const gameId = roomPin || 'demo';
+  // No 'demo' fallback: the publications are scoped by gameId, so a placeholder
+  // would subscribe to a game that does not exist and hang on LOADING forever.
+  const gameId = roomPin || null;
   useEffect(() => {
-    const roundsSub = Meteor.subscribe('rounds');
-    const playersSub = Meteor.subscribe('players');
+    if (!gameId) return undefined;
+    const roundsSub = Meteor.subscribe('rounds', gameId);
+    const playersSub = Meteor.subscribe('players', gameId);
     return () => {
       roundsSub.stop();
       playersSub.stop();
     };
-  }, []);
+  }, [gameId]);
   const round = useTracker(() => {
+    if (!gameId) return null;
     return RoundsCollection.findOne({ gameId, isCurrent: true });
   }, [gameId]);
   const player = useTracker(() => {
@@ -100,6 +104,31 @@ export const GamePage = () => {
     setAttemptedSequence([]);
     setMessage('Try again. Repeat the flashed sequence.');
   };
+  // Reached by loading /game directly, or after a refresh drops location.state.
+  // Without a room PIN there is no game to subscribe to, so say so instead of
+  // sitting on LOADING indefinitely.
+  if (!gameId) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          background: 'linear-gradient(135deg, #1a0533 0%, #0d1b4b 100%)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '18px',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <p style={{ color: 'white', letterSpacing: '4px', fontSize: '0.8rem', fontWeight: 'bold', opacity: 0.5 }}>
+          NO GAME SELECTED
+        </p>
+        <a href="/play" style={{ color: '#7CFFB2', fontSize: '0.9rem' }}>
+          Join or create a room
+        </a>
+      </div>
+    );
+  }
   if (!round) {
     return (
       <div
@@ -218,9 +247,28 @@ export const GamePage = () => {
     >
       <TileLattice opacity={0.06} />
       <div className="relative flex shrink-0 justify-between px-7 py-5" style={{ width: '100%' }}>
-        <span style={{ fontSize: '2vw', fontWeight: 800, color: 'white', letterSpacing: '-0.02em', fontFamily: 'Outfit, sans-serif' }}>KIMPLY</span>
+        <span
+          style={{
+            fontSize: '2vw',
+            fontWeight: 800,
+            color: 'white',
+            letterSpacing: '-0.02em',
+            fontFamily: 'Outfit, sans-serif',
+          }}
+        >
+          KIMPLY
+        </span>
       </div>
-      <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
+      <div
+        style={{
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flex: 1,
+        }}
+      >
         {/* Lives display */}
         <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2vh' }}>
           {[1, 2, 3].map((heart) => (
@@ -352,14 +400,15 @@ export const GamePage = () => {
                 fontSize: '0.9vw',
                 border: 'none',
                 borderRadius: '8px',
-                cursor: playerCanInput && attemptedSequence.length === round.sequence.length ? 'pointer' : 'not-allowed',
+                cursor:
+                  playerCanInput && attemptedSequence.length === round.sequence.length ? 'pointer' : 'not-allowed',
                 letterSpacing: '1px',
               }}
             >
               SUBMIT
             </button>
           </div>
-          {completedRoundId && <Leaderboard roundId={completedRoundId} />}
+          {completedRoundId && <Leaderboard gameId={gameId} roundId={completedRoundId} />}
         </div>
       </div>
     </div>
