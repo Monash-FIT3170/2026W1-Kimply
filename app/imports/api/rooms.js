@@ -26,12 +26,13 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
   });
 
   Meteor.methods({
-    async 'rooms.create'(hostName) {
+    async 'rooms.create'(hostName, accountId) {
       if (typeof hostName !== 'string' || !hostName.trim()) {
         throw new Meteor.Error('invalid', 'Invalid name');
       }
       const name = hostName.trim();
       const hostId = Random.id();
+      const hostAccountId = typeof accountId === 'string' && accountId.trim() ? accountId.trim() : null;
 
       let pin;
       for (let i = 0; i < 10; i++) {
@@ -48,7 +49,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
         hostName: name,
         gameName: `Game${pin}`,
         status: 'lobby',
-        players: [{ id: hostId, name }],
+        players: [{ id: hostId, name, accountId: hostAccountId }],
         createdAt: new Date(),
       });
 
@@ -99,7 +100,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       );
     },
 
-    async 'rooms.join'(pin, playerName) {
+    async 'rooms.join'(pin, playerName, accountId) {
       if (typeof pin !== 'string' || !pin.trim()) {
         throw new Meteor.Error('invalid', 'Invalid PIN');
       }
@@ -114,10 +115,11 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       if (nameTaken) throw new Meteor.Error('name-taken', 'Name already taken');
 
       const playerId = Random.id()
+      const joinAccountId = typeof accountId === 'string' && accountId.trim() ? accountId.trim() : null;
 
       await RoomsCollection.updateAsync(
         { _id: room._id },
-        { $push: { players: { id: playerId, name: playerName.trim() } } }
+        { $push: { players: { id: playerId, name: playerName.trim(), accountId: joinAccountId } } }
       );
 
       return {roomId: room.pin, playerId: playerId}

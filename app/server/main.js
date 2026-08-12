@@ -4,6 +4,7 @@ import { generateSequence } from '../imports/api/sequence.js';
 import { RoundsCollection } from '../imports/api/rounds.js';
 import { PlayersCollection } from '../imports/api/players.js';
 import { LeaderboardCollection } from '../imports/api/leaderboard.js';
+import { GlobalLeaderboardCollection } from '../imports/api/globalLeaderboard.js';
 import '../imports/api/gameMethods';
 import '../imports/api/playerAccounts';
 
@@ -28,3 +29,6 @@ Meteor.startup(async () => {
 Meteor.publish('rounds', () => RoundsCollection.find());
 Meteor.publish('players', () => PlayersCollection.find());
 Meteor.publish('leaderboard', () => LeaderboardCollection.find());
+Meteor.publish('globalLeaderboard', () =>
+  GlobalLeaderboardCollection.find({}, { sort: { bestRound: -1, achievedAt: 1 } })
+);

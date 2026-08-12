@@ -52,7 +52,7 @@ if (Meteor.isServer && !global._playerAccountsServerInitialized) {
 
       const passwordSalt = randomBytes(16).toString('hex');
 
-      await PlayerAccountsCollection.insertAsync({
+      const accountId = await PlayerAccountsCollection.insertAsync({
         displayName,
         email,
         passwordSalt,
@@ -61,9 +61,10 @@ if (Meteor.isServer && !global._playerAccountsServerInitialized) {
         wins: 0,
         bestRound: 0,
         createdAt: new Date(),
+        updatedAt: new Date(),
       });
 
-      return { displayName, email };
+      return { _id: accountId, displayName, email };
     },
 
     async 'playerAccounts.signIn'(credentials) {
@@ -89,6 +90,7 @@ if (Meteor.isServer && !global._playerAccountsServerInitialized) {
       }
 
       return {
+        _id: account._id,
         displayName: account.displayName,
         email: account.email,
       };

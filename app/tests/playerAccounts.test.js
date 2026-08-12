@@ -49,12 +49,14 @@ if (Meteor.isServer) {
           password: 'password123',
         });
 
+        const account = await PlayerAccountsCollection.findOneAsync({ email: 'alice@example.com' });
+
         assert.deepStrictEqual(result, {
+          _id: account._id,
           displayName: 'Alice',
           email: 'alice@example.com',
         });
 
-        const account = await PlayerAccountsCollection.findOneAsync({ email: 'alice@example.com' });
         assert.ok(account);
         assert.strictEqual(account.displayName, 'Alice');
         assert.strictEqual(account.gamesPlayed, 0);
@@ -139,7 +141,10 @@ if (Meteor.isServer) {
           password: 'password123',
         });
 
+        const account = await PlayerAccountsCollection.findOneAsync({ email: 'alice@example.com' });
+
         assert.deepStrictEqual(result, {
+          _id: account._id,
           displayName: 'Alice',
           email: 'alice@example.com',
         });
