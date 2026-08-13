@@ -21,6 +21,7 @@ export const GamePage = () => {
   const playerNameFromLobby = location.state?.playerName || 'Demo Player';
   const roomPin = location.state?.pin;
   const gameId = roomPin || 'demo';
+  const accountId = location.state?.playerAccount?._id || null;
   useEffect(() => {
     const roundsSub = Meteor.subscribe('rounds');
     const playersSub = Meteor.subscribe('players');
@@ -38,7 +39,7 @@ export const GamePage = () => {
   }, [playerId]);
   useEffect(() => {
     if (!round?._id || playerId) return;
-    Meteor.call('players.join', round._id, playerNameFromLobby, gameId, (error, result) => {
+    Meteor.call('players.join', round._id, playerNameFromLobby, gameId, accountId, (error, result) => {
       if (error) {
         console.error(error);
         setMessage('Could not join the game.');

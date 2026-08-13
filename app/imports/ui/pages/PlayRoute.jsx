@@ -137,7 +137,7 @@ export function PlayRoute() {
     setLoading(true);
     setError('');
 
-    Meteor.call('rooms.create', trimmedName, (err, result) => {
+    Meteor.call('rooms.create', trimmedName, signedInAccount?._id, (err, result) => {
       setLoading(false);
       if (err) { setError('Could not create room. Try again.'); return; }
 
@@ -146,9 +146,11 @@ export function PlayRoute() {
       //   playerId : result.hostId,
       //   gameId : result.gameId
       // };
-      
+
       // localStorage.setItem('reconnectData', JSON.stringify(reconnectData));
-      navigate(`/play/${result.pin}`, { state: { playerName: trimmedName, isHost: true, playerId: result.hostId } });
+      navigate(`/play/${result.pin}`, {
+        state: { playerName: trimmedName, isHost: true, playerId: result.hostId, playerAccount: signedInAccount },
+      });
     });
   };
 
