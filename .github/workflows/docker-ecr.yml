@@ -42,3 +42,32 @@ jobs:
           ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$TAG
           docker push \
           ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$TAG
+
+      - name: Pull and Build Docker Image
+        run: |
+          COMMAND_ID=$(aws ssm send-command \
+            --region ap-southeast-2 \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "commands=[
+              'cd /opt/kimply',
+              'aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin $ECR_REGISTRY',
+              'export APP_IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:$TAG',
+              'docker pull $APP_IMAGE',
+              'docker compose -f docker-compose.prod.yml --env-file .env config -q'
+              'docker compose -f docker-compose.prod.yml --env-file .env up -d --no-deps app'
+            ]" \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "SSM command: $COMMAND_ID"
+
+          aws ssm wait command-executed \
+            --region ap-southeast-2 \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" || true
+
+          aws ssm get-command-invocation \
+            --region "$AWS_REGION" \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID"
