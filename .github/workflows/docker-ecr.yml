@@ -1,4 +1,4 @@
-name: Build and push Docker Image
+name: Build and Deploy Docker Image
 
 on:
   push:
@@ -47,23 +47,16 @@ jobs:
       - name: Configure AWS credentials EC2
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::827152325060:role/GitHubActionsDeploy
+          role-to-assume: arn:aws:iam::827152325060:role/GitHubActionsEC2Commands
           aws-region: ap-southeast-2
 
-      - name: Pull and Build Docker Image
+      - name: Pull and Deploy Docker Image
         run: |
           COMMAND_ID=$(aws ssm send-command \
-            --region ap-southeast-2 \
+            --region "$AWS_REGION" \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
-            --parameters "commands=[
-              'cd /opt/kimply',
-              'aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin $ECR_REGISTRY',
-              'export APP_IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:$TAG',
-              'docker pull $APP_IMAGE',
-              'docker compose -f docker-compose.prod.yml --env-file .env config -q'
-              'docker compose -f docker-compose.prod.yml --env-file .env up -d --no-deps app'
-            ]" \
+            --parameters "commands=['/opt/kimply/deploy/deploy.sh $TAG']" \
             --query "Command.CommandId" \
             --output text)
 
