@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y \
     curl git python3 build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-RUN curl https://install.meteor.com/ | sh
+RUN npm install -g meteor@3.4.1
 ENV PATH="/root/.meteor:$PATH"
 ENV METEOR_ALLOW_SUPERUSER=1
 
