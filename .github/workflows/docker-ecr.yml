@@ -13,6 +13,7 @@ env:
   AWS_REGION: ap-southeast-2
   ECR_REPOSITORY: kimply
   TAG: ${{ github.sha }}
+  INSTANCE_ID: i-08184036cf37c932c
 
 jobs:
   build-and-push:
@@ -22,12 +23,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials ECR
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::827152325060:role/GitHubActionsECRPush
           aws-region: ${{ env.AWS_REGION }}
-        
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
@@ -42,6 +43,12 @@ jobs:
           ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$TAG
           docker push \
           ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$TAG
+
+      - name: Configure AWS credentials EC2
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::827152325060:role/GitHubActionsDeploy
+          aws-region: ap-southeast-2
 
       - name: Pull and Build Docker Image
         run: |
