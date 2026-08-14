@@ -35,12 +35,11 @@ jobs:
         run: |
           docker build -t $ECR_REPOSITORY ./app
 
-      - name: Tag Docker Image
+      - name: Tag and Push Docker Image
+        env:
+          TAG: ${{ github.sha }}  
         run: |
-          docker tag $ECR_REPOSITORY:latest \
-          ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:latest
-
-      - name: Push Docker image
-        run: |
+          docker tag $ECR_REPOSITORY:$TAG \
+          ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$TAG
           docker push \
-          ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:latest
+          ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$TAG
