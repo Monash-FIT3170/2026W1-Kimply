@@ -12,6 +12,7 @@ permissions:
 env:
   AWS_REGION: ap-southeast-2
   ECR_REPOSITORY: kimply
+  TAG: ${{ github.sha }}
 
 jobs:
   build-and-push:
@@ -33,11 +34,9 @@ jobs:
 
       - name: Build Docker Image
         run: |
-          docker build -t $ECR_REPOSITORY ./app
+          docker build -t $ECR_REPOSITORY:$TAG ./app
 
       - name: Tag and Push Docker Image
-        env:
-          TAG: ${{ github.sha }}  
         run: |
           docker tag $ECR_REPOSITORY:$TAG \
           ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$TAG
