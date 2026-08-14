@@ -4,7 +4,7 @@ import { PlayersCollection } from '../api/players';
 import { useNavigate } from 'react-router-dom';
 import { BG, PRIMARY, FG2, TileLattice, Avatar, TopBar, ArrowIcon, avatarColor } from './components/design';
 
-const MEDAL = [
+export const MEDAL = [
   { color: 'oklch(0.83 0.16 80)', label: '1st' },
   { color: 'oklch(0.72 0.01 270)', label: '2nd' },
   { color: 'oklch(0.72 0.14 55)', label: '3rd' },

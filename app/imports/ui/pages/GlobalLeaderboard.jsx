@@ -1,9 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import { useSubscribe, useTracker } from 'meteor/react-meteor-data';
 import { GlobalLeaderboardCollection } from '/imports/api/globalLeaderboard';
+import { MEDAL } from '../EndLeaderboard';
 import {
-  PRIMARY,
-  TILE,
   HAIRLINE,
   TileLattice,
   Avatar,
@@ -13,9 +12,9 @@ import {
 } from '../components/design';
 
 const RANK_ACCENT = {
-  1: PRIMARY,
-  2: TILE.teal,
-  3: TILE.amber,
+  1: MEDAL[0].color,
+  2: MEDAL[1].color,
+  3: MEDAL[2].color,
 };
 
 function RankBadge({ rank }) {
