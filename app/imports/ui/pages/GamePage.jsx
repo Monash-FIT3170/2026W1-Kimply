@@ -20,7 +20,14 @@ export const GamePage = () => {
   const location = useLocation();
   const playerNameFromLobby = location.state?.playerName || 'Demo Player';
   const roomPin = location.state?.pin;
-  const gameId = roomPin || 'demo';
+  const gameId = roomPin;
+  const lobbyPlayerId = location.state?.playerId;
+
+  useEffect(() => {
+    if (!gameId) return;
+    const saved = localStorage.getItem(`playerId:${gameId}`);
+    if (saved) setPlayerId(saved);
+  }, [gameId]);
 
   useEffect(() => {
     const roundsSub = Meteor.subscribe('rounds');
@@ -42,7 +49,11 @@ export const GamePage = () => {
 
   useEffect(() => {
     if (!round?._id || playerId) return;
-    Meteor.call('players.join', round._id, playerNameFromLobby, gameId, (error, result) => {
+    if (!gameId || !playerNameFromLobby) {
+      setMessage('Missing game info. Please join from the lobby.');
+      return;
+    }
+    Meteor.call('players.join', round._id, playerNameFromLobby, gameId, lobbyPlayerId, (error, result) => {
       if (error) {
         console.error(error);
         setMessage('Could not join the game.');
@@ -50,7 +61,7 @@ export const GamePage = () => {
       }
       setPlayerId(result);
     });
-  }, [round?._id, playerId]);
+  }, [round?._id, playerId, gameId, playerNameFromLobby, lobbyPlayerId]);
 
   useEffect(() => {
     setPlayerCanInput(false);
@@ -232,7 +243,7 @@ export const GamePage = () => {
     >
       {/* Lives display */}
       <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '8px', marginBottom: '16px' }}>
-        {[1, 2, 3].map((heart) => (
+        {Array.from({ length: Math.max(player?.lives ?? 3, 3) }, (_, i) => i + 1).map((heart) => (
           <div
             key={heart}
             style={{

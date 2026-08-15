@@ -2,6 +2,7 @@ import { Meteor } from 'meteor/meteor';
 import { RoundsCollection } from './rounds';
 import { PlayersCollection } from './players';
 import { LeaderboardCollection } from './leaderboard';
+import { RoomsCollection } from './rooms';
 
 const COLOURS = ['red', 'blue', 'green', 'yellow'];
 
@@ -15,6 +16,10 @@ async function checkWinner(gameId) {
 
   const alreadyFinished = players.some((p) => p.gameFinished);
   if (alreadyFinished) return;
+
+  const room = await RoomsCollection.findOneAsync({ pin: gameId });
+  const expectedPlayerCount = room?.players?.length ?? 0;
+  if (players.length < expectedPlayerCount) return;
 
   const active = players.filter((p) => !p.eliminated);
 
@@ -95,14 +100,21 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         createdAt: new Date(),
         advanced: false,
         isCurrent: true,
+        roundNumber: 1,
       });
     },
 
     // Add a player to a round
-    'players.join'(roundId, playerName, gameId = null) {
+    async 'players.join'(roundId, playerName, gameId = null, lobbyPlayerId = null) {
+      if (lobbyPlayerId) {
+        const existing = await PlayersCollection.findOneAsync({ gameId, lobbyPlayerId });
+        if (existing) return existing._id;
+      }
+
       return PlayersCollection.insertAsync({
         gameId,
         roundId,
+        lobbyPlayerId,
         name: playerName,
         lives: 3,
         attemptedSequence: [],
@@ -134,6 +146,9 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         const totalGuesses = (player.totalGuesses ?? 0) + 1;
         const correctGuesses = (player.correctGuesses ?? 0) + 1;
 
+        const bonusLife = round.roundNumber === 7 ? 1 : 0;
+        const lives = (player.lives ?? 0) + bonusLife;
+
         // mark player as completed
         await PlayersCollection.updateAsync(playerId, {
           $set: {
@@ -143,6 +158,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
             totalGuesses,
             correctGuesses,
             completeRound: true,
+            lives, 
           },
         });
 
@@ -153,7 +169,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
           gameId: player.gameId,
           playerId,
           name: player.name,
-          lives: player.lives,
+          lives,
           roundId: player.roundId,
           completedAt: new Date(),
         });
@@ -247,6 +263,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         createdAt: new Date(),
         advanced: false,
         isCurrent: true,
+        roundNumber: (currentRound.roundNumber ?? 1) + 1,
       });
 
       // move active players into next round
