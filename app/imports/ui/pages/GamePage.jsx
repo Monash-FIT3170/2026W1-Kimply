@@ -18,7 +18,7 @@ export const GamePage = () => {
   const [completedRoundId, setCompletedRoundId] = useState(null);
   const [replayKey, setReplayKey] = useState(0);
   const location = useLocation();
-  const playerNameFromLobby = location.state?.playerName;
+  const playerNameFromLobby = location.state?.playerName || 'Demo Player';
   const roomPin = location.state?.pin;
   const gameId = roomPin;
   const lobbyPlayerId = location.state?.playerId;
