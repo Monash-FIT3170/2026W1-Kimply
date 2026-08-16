@@ -1,7 +1,7 @@
 import { Meteor } from 'meteor/meteor';
 import { useTracker } from 'meteor/react-meteor-data';
 import { PlayersCollection } from '../api/players';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { BG, PRIMARY, FG2, TileLattice, Avatar, TopBar, ArrowIcon, avatarColor } from './components/design';
 
 // Exported so pages/GlobalLeaderboard.jsx can match its top-3 row colors to
@@ -25,6 +25,13 @@ function accuracyPercent(player) {
 
 export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
   const navigate = useNavigate();
+  // Read directly off location.state rather than a prop from GamePage —
+  // GamePage is rendered under the same route, so this is the same state
+  // it received (including playerAccount, if the player is signed in).
+  // Both exits below route to /play (the menu) carrying it forward, the
+  // same fix applied to the leaderboard and lobby back buttons.
+  const { state } = useLocation();
+  const playerAccount = state?.playerAccount;
 
   const players = useTracker(() => {
     const sub = Meteor.subscribe('players');
@@ -95,7 +102,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
       />
 
       <div className="relative z-10">
-        <TopBar onBack={() => navigate('/')} />
+        <TopBar onBack={() => navigate('/play', { state: { playerAccount } })} />
       </div>
 
       <div className="relative z-10 flex flex-1 flex-col items-center px-6 pb-12">
@@ -103,10 +110,10 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
           className="mb-7 flex flex-col items-center text-center"
           style={{ animation: 'leaderboardTitleIn 0.7s ease both' }}
         >
-          <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.22em]" style={{ color: PRIMARY }}>
+          <h1 className="font-outfit text-5xl font-extrabold tracking-tight">Final Leaderboard</h1>
+          {/* <p className="mb-2 font-mono text-[13px] uppercase tracking-[0.22em]" style={{ color: PRIMARY }}>
             Final Results
-          </p>
-          <h1 className="font-outfit text-5xl font-extrabold tracking-tight">Leaderboard</h1>
+          </p> */}
           {currentRank && (
             <div
               className="mt-4 flex flex-col items-center gap-2"
@@ -123,7 +130,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
                 {currentRankIsTied ? `You tied for ${ordinal(currentRank)}` : `You came ${ordinal(currentRank)}`}
               </div>
               <div
-                className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest"
+                className="flex items-center gap-2 font-mono text-[13px] uppercase tracking-widest"
                 style={{ color: FG2 }}
               >
                 <span>Accuracy {accuracyPercent(currentPlayer)}%</span>
@@ -134,7 +141,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
               </div>
             </div>
           )}
-          {winnerGroup.length > 0 && (
+          {/* {winnerGroup.length > 0 && (
             <div
               className="mt-3 rounded-full px-4 py-2 font-outfit text-sm font-extrabold"
               style={{
@@ -146,7 +153,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
             >
               Winner: {winnerGroup.map((player) => player.name).join(' & ')}
             </div>
-          )}
+          )} */}
         </div>
 
         {/* Podium */}
@@ -155,7 +162,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
             const medalIndex = i === 0 ? 1 : i === 1 ? 0 : 2;
             const medal = MEDAL[medalIndex];
             // 3rd rises first (i=2, delay 0s), 2nd next (i=0, delay 0.5s), 1st last (i=1, delay 1s)
-            const riseDelay = i === 2 ? 0 : i === 0 ? 0.5 : 1;
+            const riseDelay = (i === 2 ? 0 : i === 0 ? 1 : 2) + 0.5;
             const avatarDelay = riseDelay + 0.35;
             if (group.length === 0) return <div key={i} className="flex-1" />;
             return (
@@ -195,7 +202,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
                     : `${group[0].name}${group.length > 1 ? ` +${group.length - 1}` : ''}`}
                 </span>
                 <span
-                  className="rounded-full px-2 py-1 text-center font-mono text-[10px] uppercase tracking-widest"
+                  className="rounded-full px-2 py-1 text-center font-mono font-bold text-[11px] uppercase tracking-widest"
                   style={{
                     color: medal.color,
                     background: `color-mix(in oklab, ${medal.color} ${medalIndex === 0 ? 22 : medalIndex === 1 ? 14 : 18}%, transparent)`,
@@ -237,20 +244,20 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
 
         <div className="flex w-full max-w-md flex-col gap-2">
           {/* header */}
-          <div className="mb-1 flex px-3" style={{ animation: 'rowSlideIn 0.45s ease 1.35s both' }}>
-            <span className="w-12 font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
+          <div className="mb-1 flex px-3" style={{ animation: 'rowSlideIn 0.45s ease 3.5s both' }}>
+            <span className="w-12 font-mono text-[11px] uppercase tracking-widest" style={{ color: FG2 }}>
               Rank
             </span>
-            <span className="flex-1 font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
+            <span className="flex-1 font-mono text-[11px] uppercase tracking-widest" style={{ color: FG2 }}>
               Player
             </span>
-            <span className="w-24 text-right font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
+            <span className="w-24 text-right font-mono text-[11px] uppercase tracking-widest" style={{ color: FG2 }}>
               Score
             </span>
-            <span className="w-24 text-right font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
+            <span className="w-24 text-right font-mono text-[11px] uppercase tracking-widest" style={{ color: FG2 }}>
               Streak
             </span>
-            <span className="w-20 text-right font-mono text-[10px] uppercase tracking-widest" style={{ color: FG2 }}>
+            <span className="w-20 text-right font-mono text-[11px] uppercase tracking-widest" style={{ color: FG2 }}>
               Acc
             </span>
           </div>
@@ -260,7 +267,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
             const tied = sorted.filter((p) => rankKey(p) === rankKey(player)).length > 1;
             const medal = MEDAL[rank];
             const rowColor = medal ? medal.color : 'oklch(0.93 0.01 270)';
-            const rowDelay = 1.5 + index * 0.04;
+            const rowDelay = 4 + index * 0.1;
             const isCurrentPlayer = player.id === currentPlayerId;
 
             return (
@@ -332,7 +339,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
         </div>
 
         <button
-          onClick={() => navigate('/play')}
+          onClick={() => navigate('/play', { state: { playerAccount } })}
           className="mt-8 inline-flex items-center gap-2 rounded-full px-5 py-3 font-outfit text-[13px] font-extrabold uppercase tracking-[0.16em] transition-transform hover:scale-[1.02]"
           style={{
             background: `color-mix(in oklab, ${PRIMARY} 16%, transparent)`,
