@@ -1,8 +1,11 @@
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Meteor } from 'meteor/meteor';
 import { useSubscribe, useTracker } from 'meteor/react-meteor-data';
 import { GlobalLeaderboardCollection } from '/imports/api/globalLeaderboard';
 import { MEDAL } from '../EndLeaderboard';
 import {
+  PRIMARY,
   HAIRLINE,
   TileLattice,
   Avatar,
@@ -33,15 +36,25 @@ function RankBadge({ rank }) {
   );
 }
 
-function LeaderboardRow({ entry, rank }) {
+function LeaderboardRow({ entry, rank, isYou }) {
   const accent = RANK_ACCENT[rank];
   return (
     <div
       className="grid items-center gap-3 rounded-xl border px-3.5 py-3 transition-colors"
       style={{
         gridTemplateColumns: '40px 1fr 72px 72px',
-        borderColor: accent ? `color-mix(in oklab, ${accent} 30%, transparent)` : HAIRLINE,
-        background: accent ? `color-mix(in oklab, ${accent} 7%, transparent)` : 'oklch(0.20 0.02 270)',
+        background: accent
+          ? `color-mix(in oklab, ${accent} 7%, transparent)`
+          : isYou
+            ? `color-mix(in oklab, ${PRIMARY} 10%, transparent)`
+            : 'oklch(0.20 0.02 270)',
+        borderColor: isYou
+          ? `color-mix(in oklab, ${PRIMARY} 48%, transparent)`
+          : accent
+            ? `color-mix(in oklab, ${accent} 30%, transparent)`
+            : HAIRLINE,
+        boxShadow: isYou ? `0 0 22px color-mix(in oklab, ${PRIMARY} 18%, transparent)` : 'none',
+        animation: isYou ? 'scoreboardRowIn 0.6s cubic-bezier(0.22,1,0.36,1) both' : 'none',
       }}
     >
       <RankBadge rank={rank} />
@@ -49,7 +62,21 @@ function LeaderboardRow({ entry, rank }) {
       <div className="flex min-w-0 items-center gap-3">
         <Avatar letter={entry.displayName[0]?.toUpperCase()} color={avatarColor(entry.displayName)} size={32} />
         <div className="min-w-0">
-          <div className="truncate font-outfit text-sm font-semibold text-fg">{entry.displayName}</div>
+          <div className="truncate font-outfit text-sm font-semibold text-fg">
+            {entry.displayName}
+            {isYou && (
+              <span
+                className="ml-2 rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest"
+                style={{
+                  color: PRIMARY,
+                  background: `color-mix(in oklab, ${PRIMARY} 16%, transparent)`,
+                  border: `1px solid color-mix(in oklab, ${PRIMARY} 38%, transparent)`,
+                }}
+              >
+                You
+              </span>
+            )}
+          </div>
           <div className="font-mono text-[9px] uppercase tracking-widest text-fg3">
             {entry.gamesPlayed} {entry.gamesPlayed === 1 ? 'game' : 'games'}
           </div>
@@ -71,12 +98,29 @@ function LeaderboardRow({ entry, rank }) {
 
 export function GlobalLeaderboard() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const myAccountId = location.state?.playerAccount?._id || null;
 
   const isLoading = useSubscribe('globalLeaderboard')();
   const entries = useTracker(
     () => GlobalLeaderboardCollection.find({}, { sort: { bestRound: -1, achievedAt: 1 }, limit: 50 }).fetch(),
     []
   );
+
+  const myIndex = myAccountId ? entries.findIndex((entry) => entry.accountId === myAccountId) : -1;
+  const myRankInTop50 = myIndex >= 0 ? myIndex + 1 : null;
+
+  const [myStanding, setMyStanding] = useState(null);
+
+  useEffect(() => {
+    if (isLoading || !myAccountId || myRankInTop50) {
+      setMyStanding(null);
+      return;
+    }
+    Meteor.call('globalLeaderboard.myStanding', myAccountId, (err, result) => {
+      if (!err) setMyStanding(result);
+    });
+  }, [isLoading, myAccountId, myRankInTop50]);
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden bg-bg text-fg">
@@ -103,8 +147,34 @@ export function GlobalLeaderboard() {
             ) : (
               <div className="flex flex-col gap-2">
                 {entries.map((entry, index) => (
-                  <LeaderboardRow key={entry._id} entry={entry} rank={index + 1} />
+                  <LeaderboardRow
+                    key={entry._id}
+                    entry={entry}
+                    rank={index + 1}
+                    isYou={myAccountId != null && entry.accountId === myAccountId}
+                  />
                 ))}
+
+                {myStanding && (
+                  <>
+                    <div className="my-1 flex items-center gap-2" aria-hidden="true">
+                      <div className="h-px flex-1" style={{ background: HAIRLINE }} />
+                      <span className="font-mono text-[9px] uppercase tracking-widest text-fg3">Your ranking</span>
+                      <div className="h-px flex-1" style={{ background: HAIRLINE }} />
+                    </div>
+                    <LeaderboardRow
+                      entry={{
+                        accountId: myAccountId,
+                        displayName: myStanding.displayName,
+                        bestRound: myStanding.bestRound,
+                        gamesPlayed: myStanding.gamesPlayed,
+                        wins: myStanding.wins,
+                      }}
+                      rank={myStanding.rank}
+                      isYou
+                    />
+                  </>
+                )}
               </div>
             )}
           </div>

@@ -170,6 +170,7 @@ export function PlayRoute() {
         <div className="flex items-center gap-3">
           <Link
             to="/leaderboard"
+            state={{ playerAccount: signedInAccount }}
             className="rounded-full border border-hairline px-3.5 py-1.5 font-outfit text-[11px] font-bold uppercase tracking-wider text-fg2 transition-colors hover:text-fg"
           >
             Leaderboard
