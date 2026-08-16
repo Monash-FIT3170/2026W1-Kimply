@@ -74,7 +74,7 @@ export function GlobalLeaderboard() {
 
   const isLoading = useSubscribe('globalLeaderboard')();
   const entries = useTracker(
-    () => GlobalLeaderboardCollection.find({}, { sort: { bestRound: -1, achievedAt: 1 } }).fetch(),
+    () => GlobalLeaderboardCollection.find({}, { sort: { bestRound: -1, achievedAt: 1 }, limit: 50 }).fetch(),
     []
   );
 
@@ -87,8 +87,8 @@ export function GlobalLeaderboard() {
       <div className="relative flex flex-1 flex-col items-center overflow-y-auto px-7 pb-14">
         <div className="w-full max-w-xl">
           <div className="mb-7 text-center">
-            <h1 className="font-outfit text-3xl font-extrabold tracking-tight text-fg">Global Leaderboard</h1>
-            <p className="mt-2 font-manrope text-sm text-fg3">Top 50 players, ranked by highest round reached.</p>
+            <h1 className="font-outfit text-5xl font-extrabold tracking-tight text-fg">Global Leaderboard</h1>
+            <p className="mt-2 font-manrope text-2sm text-fg3">Top 50 players, ranked by highest round reached.</p>
           </div>
 
           <div className="rounded-[22px] border border-hairline bg-surface p-4">
