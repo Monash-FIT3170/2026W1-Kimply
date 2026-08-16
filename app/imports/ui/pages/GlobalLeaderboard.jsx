@@ -20,6 +20,16 @@ const RANK_ACCENT = {
   3: MEDAL[2].color,
 };
 
+function rankAnnouncement(rank, name) {
+  if (rank === 1) return { text: `👑 ${name}, you're the Kimply champion!`, color: MEDAL[0].color };
+  if (rank === 2) return { text: `🥈 ${name}, you're Kimply's runner-up!`, color: MEDAL[1].color };
+  if (rank === 3) return { text: `🥉 ${name}, you're on the Kimply podium!`, color: MEDAL[2].color };
+  if (rank <= 5) return { text: `${name}, you're crushing the top 5!`, color: PRIMARY };
+  if (rank <= 10) return { text: `${name}, you're officially top 10!`, color: PRIMARY };
+  if (rank <= 20) return { text: `${name}, welcome to the Kimply top 20!`, color: PRIMARY };
+  return { text: `${name}, you're climbing the Kimply leaderboard!`, color: PRIMARY };
+}
+
 function RankBadge({ rank }) {
   const accent = RANK_ACCENT[rank];
   return (
@@ -109,6 +119,7 @@ export function GlobalLeaderboard() {
 
   const myIndex = myAccountId ? entries.findIndex((entry) => entry.accountId === myAccountId) : -1;
   const myRankInTop50 = myIndex >= 0 ? myIndex + 1 : null;
+  const announcement = myRankInTop50 ? rankAnnouncement(myRankInTop50, entries[myIndex].displayName) : null;
 
   const [myStanding, setMyStanding] = useState(null);
 
@@ -133,6 +144,20 @@ export function GlobalLeaderboard() {
           <div className="mb-7 text-center">
             <h1 className="font-outfit text-5xl font-extrabold tracking-tight text-fg">Global Leaderboard</h1>
             <p className="mt-2 font-manrope text-2sm text-fg3">Top 50 players, ranked by highest round reached.</p>
+
+            {announcement && (
+              <div
+                className="mt-4 inline-flex items-center gap-2 rounded-full px-4 py-2 font-outfit text-sm font-extrabold"
+                style={{
+                  color: announcement.color,
+                  background: `color-mix(in oklab, ${announcement.color} 16%, transparent)`,
+                  border: `1px solid color-mix(in oklab, ${announcement.color} 42%, transparent)`,
+                  animation: 'winnerCrown 1.1s cubic-bezier(0.22,1,0.36,1) both',
+                }}
+              >
+                {announcement.text}
+              </div>
+            )}
           </div>
 
           <div className="rounded-[22px] border border-hairline bg-surface p-4">
