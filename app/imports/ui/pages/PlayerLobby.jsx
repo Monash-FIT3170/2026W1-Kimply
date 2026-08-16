@@ -406,7 +406,7 @@ export function PlayerLobby() {
 
           // removing session storage of reconnect data
           localStorage.removeItem('reconnectData');
-          navigate('/play', {replace: true});
+          navigate('/play', { replace: true, state: { playerAccount } });
 
         }}
         onCancel = {() =>{

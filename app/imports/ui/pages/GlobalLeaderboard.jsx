@@ -126,7 +126,7 @@ export function GlobalLeaderboard() {
     <div className="relative flex h-full w-full flex-col overflow-hidden bg-bg text-fg">
       <TileLattice opacity={0.05} />
 
-      <TopBar onBack={() => navigate('/play')} />
+      <TopBar onBack={() => navigate(-1)} />
 
       <div className="relative flex flex-1 flex-col items-center overflow-y-auto px-7 pb-14">
         <div className="w-full max-w-xl">
