@@ -15,12 +15,17 @@ function generateSequence(length) {
 
 // Records a player's final result (on elimination or win) against their
 // registered account, then keeps the global leaderboard trimmed to the top 50.
-// No-op for guests (no accountId).
+// No-op for guests (no accountId) — this is the *only* place globalLeaderboard
+// or playerAccounts' stats get written, called once per player from the two
+// checkWinner branches below (one call per player, exactly once per game).
 async function recordGlobalResult(accountId, displayName, levelReached, won) {
   if (!accountId) return;
 
   const now = new Date();
 
+  // playerAccounts is the durable record — gamesPlayed/wins always increment,
+  // bestRound only ever moves up ($max), regardless of whether this particular
+  // game beat their previous best.
   await PlayerAccountsCollection.updateAsync(accountId, {
     $inc: { gamesPlayed: 1, wins: won ? 1 : 0 },
     $max: { bestRound: levelReached },
@@ -30,6 +35,10 @@ async function recordGlobalResult(accountId, displayName, levelReached, won) {
   const account = await PlayerAccountsCollection.findOneAsync(accountId);
   if (!account) return;
 
+  // globalLeaderboard is a denormalized *snapshot*, not the source of truth —
+  // one row per account. A worse game still refreshes gamesPlayed/wins so the
+  // row stays accurate, but only actually improving bestRound moves the rank
+  // (bumps achievedAt too, which is the tie-break the sort/trim below rely on).
   const existing = await GlobalLeaderboardCollection.findOneAsync({ accountId });
 
   if (!existing) {
@@ -55,6 +64,11 @@ async function recordGlobalResult(accountId, displayName, levelReached, won) {
     });
   }
 
+  // Cap enforcement: only ever fires when a brand-new account just entered
+  // the board (an existing account's update can't push the count past 50).
+  // Sorts worst-first (lowest bestRound; on a tie, most-recently achieved is
+  // considered "worst" and evicted first) and deletes exactly the overflow,
+  // so the collection never holds more than GLOBAL_LEADERBOARD_SIZE docs.
   const total = await GlobalLeaderboardCollection.find().countAsync();
   if (total > GLOBAL_LEADERBOARD_SIZE) {
     const overflow = await GlobalLeaderboardCollection.find(

@@ -4,6 +4,9 @@ import { PlayersCollection } from '../api/players';
 import { useNavigate } from 'react-router-dom';
 import { BG, PRIMARY, FG2, TileLattice, Avatar, TopBar, ArrowIcon, avatarColor } from './components/design';
 
+// Exported so pages/GlobalLeaderboard.jsx can match its top-3 row colors to
+// this end-of-game screen — keep the two in sync rather than hardcoding a
+// second palette there.
 export const MEDAL = [
   { color: 'oklch(0.83 0.16 80)', label: '1st' },
   { color: 'oklch(0.72 0.01 270)', label: '2nd' },
