@@ -20,9 +20,9 @@ if (Meteor.isServer && !global._globalLeaderboardIndexesInitialized) {
   });
 }
 
-// Lets a signed-in player see their position even when it's outside the
-// published top 50 — ranked against every account's bestRound, not just
-// the trimmed globalLeaderboard collection.
+// Lets a signed-in player see their own stats even when they're outside the
+// published top 50 — unranked (no globalLeaderboard entry exists for them
+// to derive a position from), but still their real stats from playerAccounts.
 if (Meteor.isServer && !global._globalLeaderboardMethodsInitialized) {
   global._globalLeaderboardMethodsInitialized = true;
   Meteor.methods({
@@ -34,12 +34,8 @@ if (Meteor.isServer && !global._globalLeaderboardMethodsInitialized) {
       const account = await PlayerAccountsCollection.findOneAsync(accountId.trim());
       if (!account || !account.gamesPlayed) return null;
 
-      const better = await PlayerAccountsCollection.find({
-        bestRound: { $gt: account.bestRound },
-      }).countAsync();
-
       return {
-        rank: better + 1,
+        // rank: "-",
         displayName: account.displayName,
         bestRound: account.bestRound,
         gamesPlayed: account.gamesPlayed,

@@ -77,7 +77,7 @@ function LeaderboardRow({ entry, rank, isYou }) {
               </span>
             )}
           </div>
-          <div className="font-mono text-[9px] uppercase tracking-widest text-fg3">
+          <div className="font-mono text-[11px] uppercase tracking-widest text-fg3">
             {entry.gamesPlayed} {entry.gamesPlayed === 1 ? 'game' : 'games'}
           </div>
         </div>
@@ -85,12 +85,12 @@ function LeaderboardRow({ entry, rank, isYou }) {
 
       <div className="text-right">
         <div className="font-outfit text-base font-extrabold text-fg">{entry.bestRound}</div>
-        <div className="font-mono text-[9px] uppercase tracking-widest text-fg3">Level</div>
+        <div className="font-mono text-[11px] uppercase tracking-widest text-fg3">Level</div>
       </div>
 
       <div className="text-right">
         <div className="font-outfit text-base font-extrabold text-fg">{entry.wins}</div>
-        <div className="font-mono text-[9px] uppercase tracking-widest text-fg3">Wins</div>
+        <div className="font-mono text-[11px] uppercase tracking-widest text-fg3">Wins</div>
       </div>
     </div>
   );
@@ -159,7 +159,7 @@ export function GlobalLeaderboard() {
                   <>
                     <div className="my-1 flex items-center gap-2" aria-hidden="true">
                       <div className="h-px flex-1" style={{ background: HAIRLINE }} />
-                      <span className="font-mono text-[9px] uppercase tracking-widest text-fg3">Your ranking</span>
+                      <span className="font-mono text-[13px] uppercase tracking-widest text-fg3">Your ranking</span>
                       <div className="h-px flex-1" style={{ background: HAIRLINE }} />
                     </div>
                     <LeaderboardRow
@@ -170,7 +170,7 @@ export function GlobalLeaderboard() {
                         gamesPlayed: myStanding.gamesPlayed,
                         wins: myStanding.wins,
                       }}
-                      rank={myStanding.rank}
+                      rank="–"
                       isYou
                     />
                   </>
