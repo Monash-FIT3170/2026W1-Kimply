@@ -11,6 +11,17 @@ import {
 
 const MAX_PLAYERS = 8;
 
+function getGameModeColor(mode) {
+  const colors = {
+    easy: 'oklch(0.75 0.20 120)',
+    medium: 'oklch(0.70 0.22 70)',
+    hard: 'oklch(0.65 0.22 25)',
+    custom: 'oklch(0.60 0.20 270)',
+    battle_royale: 'oklch(0.50 0.25 340)',
+  };
+  return colors[mode] || 'oklch(0.60 0.20 270)';
+}
+
 function BackButton({ onClick }) {
   return (
     <button
@@ -181,16 +192,10 @@ function HostView({ room, playerName, onBack, navigate, gameMode, customSettings
           </div>
 
           {/* Game Mode Badge */}
-          <div className="flex items-center gap-2 rounded-full px-4 py-2" style={{ background: 'color-mix(in oklab, oklch(0.24 0.02 270), transparent)' }}>
-            <span className="font-mono text-[10px] uppercase tracking-widest text-fg3">Mode:</span>
-            <span className="font-outfit font-semibold text-sm text-fg">
-              {gameMode === 'battle_royale' ? 'Battle Royale' : gameMode.charAt(0).toUpperCase() + gameMode.slice(1)}
+          <div className="flex items-center gap-2 rounded-full px-4 py-2" style={{ background: getGameModeColor(gameMode) }}>
+            <span className="font-outfit font-semibold text-sm text-bg">
+              {gameMode === 'battle_royale' ? 'Battle Royale Mode' : gameMode.charAt(0).toUpperCase() + gameMode.slice(1) + ' Mode'}
             </span>
-            {gameMode === 'custom' && customSettings && (
-              <span className="font-mono text-[9px] text-fg3">
-                ({customSettings.numLives}❤️ • {customSettings.startingSequenceLength}📊)
-              </span>
-            )}
           </div>
 
           <p className="font-mono text-[11px] text-fg3 uppercase tracking-[0.18em]">Your Room Code</p>
@@ -321,16 +326,10 @@ function JoinedView({ room, playerName, onBack, navigate, gameMode, customSettin
           </div>
 
           {/* Game Mode Badge */}
-          <div className="flex items-center gap-2 rounded-full px-4 py-2 w-fit" style={{ background: 'color-mix(in oklab, oklch(0.24 0.02 270), transparent)' }}>
-            <span className="font-mono text-[10px] uppercase tracking-widest text-fg3">Mode:</span>
-            <span className="font-outfit font-semibold text-sm text-fg">
-              {gameMode === 'battle_royale' ? 'Battle Royale' : gameMode.charAt(0).toUpperCase() + gameMode.slice(1)}
+          <div className="flex items-center gap-2 rounded-full px-4 py-2 w-fit" style={{ background: getGameModeColor(gameMode) }}>
+            <span className="font-outfit font-semibold text-sm text-bg">
+              {gameMode === 'battle_royale' ? 'Battle Royale Mode' : gameMode.charAt(0).toUpperCase() + gameMode.slice(1) + ' Mode'}
             </span>
-            {gameMode === 'custom' && customSettings && (
-              <span className="font-mono text-[9px] text-fg3">
-                ({customSettings.numLives}❤️ • {customSettings.startingSequenceLength}📊)
-              </span>
-            )}
           </div>
           <div className="flex items-center justify-between">
             <p className="font-outfit text-sm font-bold uppercase tracking-widest text-fg2">
