@@ -107,7 +107,7 @@ function SharePanel({ link }) {
   );
 }
 
-function HostView({ room, playerName, onBack, navigate }) {
+function HostView({ room, playerName, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
   const joinLink = `${window.location.origin}/play/join?code=${room.pin}`;
   const [editing, setEditing] = useState(true);
@@ -180,6 +180,18 @@ function HostView({ room, playerName, onBack, navigate }) {
             )}
           </div>
 
+          {/* Game Mode Badge */}
+          <div className="flex items-center gap-2 rounded-full px-4 py-2" style={{ background: 'color-mix(in oklab, oklch(0.24 0.02 270), transparent)' }}>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-fg3">Mode:</span>
+            <span className="font-outfit font-semibold text-sm text-fg">
+              {gameMode === 'battle_royale' ? 'Battle Royale' : gameMode.charAt(0).toUpperCase() + gameMode.slice(1)}
+            </span>
+            {gameMode === 'custom' && customSettings && (
+              <span className="font-mono text-[9px] text-fg3">
+                ({customSettings.numLives}❤️ • {customSettings.startingSequenceLength}📊)
+              </span>
+            )}
+          </div>
 
           <p className="font-mono text-[11px] text-fg3 uppercase tracking-[0.18em]">Your Room Code</p>
 
@@ -256,7 +268,7 @@ function HostView({ room, playerName, onBack, navigate }) {
   );
 }
 
-function JoinedView({ room, playerName, onBack, navigate }) {
+function JoinedView({ room, playerName, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
   const emptySlots = Math.max(0, MAX_PLAYERS - players.length);
 
@@ -306,6 +318,19 @@ function JoinedView({ room, playerName, onBack, navigate }) {
               <span className="font-mono text-[10px] uppercase tracking-widest text-fg3">Room</span>
               <span className="font-mono text-[13px] font-bold text-fg">{room.pin}</span>
             </div>
+          </div>
+
+          {/* Game Mode Badge */}
+          <div className="flex items-center gap-2 rounded-full px-4 py-2 w-fit" style={{ background: 'color-mix(in oklab, oklch(0.24 0.02 270), transparent)' }}>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-fg3">Mode:</span>
+            <span className="font-outfit font-semibold text-sm text-fg">
+              {gameMode === 'battle_royale' ? 'Battle Royale' : gameMode.charAt(0).toUpperCase() + gameMode.slice(1)}
+            </span>
+            {gameMode === 'custom' && customSettings && (
+              <span className="font-mono text-[9px] text-fg3">
+                ({customSettings.numLives}❤️ • {customSettings.startingSequenceLength}📊)
+              </span>
+            )}
           </div>
           <div className="flex items-center justify-between">
             <p className="font-outfit text-sm font-bold uppercase tracking-widest text-fg2">
@@ -361,6 +386,8 @@ export function PlayerLobby() {
   const playerName = state?.playerName || '';
   const playerId = state?.playerId || '';
   const isHost = state?.isHost === true;
+  const gameMode = state?.gameMode || 'standard';
+  const customSettings = state?.customSettings || null;
   const gameStarted = useRef(false);  
   const [showExitPopup, setShowExitPopup] = useState(false);
   const isLoading = useSubscribe('rooms.lobby', pin);
@@ -415,9 +442,9 @@ export function PlayerLobby() {
       />
 
       { isHost? (
-        <HostView room={room} playerName={playerName} onBack={onBack} navigate={navigate} />
+        <HostView room={room} playerName={playerName} onBack={onBack} navigate={navigate} gameMode={gameMode} customSettings={customSettings} />
       ) : (
-        <JoinedView room={room} playerName={playerName} onBack={onBack} navigate={navigate} />
+        <JoinedView room={room} playerName={playerName} onBack={onBack} navigate={navigate} gameMode={gameMode} customSettings={customSettings} />
       )}
     </>
   )
