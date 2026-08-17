@@ -53,7 +53,7 @@ export function CustomGameSettings() {
           {/* Flash Speed */}
           <div className="mb-7">
             <div className="flex items-center justify-between">
-              <label className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg3">Flash Speed (ms)</label>
+              <label className="font-mono text-[11px] uppercase tracking-[0.16em] text-white font-bold">Flash Speed (ms)</label>
               <span className="font-outfit text-lg font-bold text-fg">{flashSpeed}</span>
             </div>
             <p className="mt-1 font-manrope text-[12px] text-fg3">How fast tiles flash (200-1000)</p>
@@ -73,7 +73,7 @@ export function CustomGameSettings() {
           {/* Number of Lives */}
           <div className="mb-7">
             <div className="flex items-center justify-between">
-              <label className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg3">Number of Lives</label>
+              <label className="font-mono text-[11px] uppercase tracking-[0.16em] text-white font-bold">Number of Lives</label>
               <span className="font-outfit text-lg font-bold text-fg">{numLives}</span>
             </div>
             <p className="mt-1 font-manrope text-[12px] text-fg3">Lives before elimination (1-10)</p>
@@ -93,7 +93,7 @@ export function CustomGameSettings() {
           {/* Starting Sequence Length */}
           <div className="mb-7">
             <div className="flex items-center justify-between">
-              <label className="font-mono text-[11px] uppercase tracking-[0.16em] text-fg3">Starting Sequence</label>
+              <label className="font-mono text-[11px] uppercase tracking-[0.16em] text-white font-bold">Starting Sequence Length</label>
               <span className="font-outfit text-lg font-bold text-fg">{startingSequenceLength}</span>
             </div>
             <p className="mt-1 font-manrope text-[12px] text-fg3">Initial sequence length (2-10)</p>
