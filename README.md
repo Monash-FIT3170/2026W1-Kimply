@@ -184,6 +184,27 @@ docker compose exec backend meteor npm install <package-name>
 
 You don't need to rebuild the image after adding a package.
 
+## Formatting
+
+This project uses Prettier for code formatting. VS Code workspace settings are committed in `.vscode/` so installing the recommended Prettier extension enables format-on-save.
+
+```bash
+npm run format:check
+npm run format
+```
+
+These commands work from the repository root and forward to the Meteor app in `app/`. If you are already inside `app/`, the same commands work there too.
+
+If you edit through VS Code attached to the Docker container, install the extensions into that attached container:
+
+1. Start the app with `docker compose up`.
+2. In VS Code, run `Dev Containers: Attach to Running Container...`.
+3. Pick the Kimply `backend` container.
+4. Open `/kimply`.
+5. In the Extensions panel, install `Prettier - Code formatter` in the attached container.
+
+The tracked `.vscode/extensions.json` file recommends that extension, and `.vscode/settings.json` handles format-on-save.
+
 ---
 
 ## Troubleshooting
@@ -199,3 +220,7 @@ Make sure Docker Desktop is installed and running. On older Docker versions the 
 
 **Port 3000 is already in use**
 Another app is using port 3000. Stop that app, or run `docker compose down` first to clean up any leftover containers.
+
+
+## Licence
+See the LICENSE file in the root of the Repository for the project's MIT license.

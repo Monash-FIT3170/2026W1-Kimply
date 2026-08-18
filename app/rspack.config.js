@@ -1,32 +1,32 @@
-const { defineConfig } = require("@meteorjs/rspack");
-const { rspack } = require("@rspack/core");
+const { defineConfig } = require('@meteorjs/rspack');
+const path = require('path');
 
-/**
- * Rspack configuration for Meteor projects.
- *
- * Provides typed flags on the `Meteor` object, such as:
- * - `Meteor.isClient` / `Meteor.isServer`
- * - `Meteor.isDevelopment` / `Meteor.isProduction`
- * - …and other flags available
- *
- * Use these flags to adjust your build settings based on environment.
- */
 module.exports = defineConfig((Meteor) => {
-  return {
-    module: {
-      rules: [
-        // Add support for importing SVGs as React components
+  const rules = [
+    {
+      test: /\.css$/,
+      use: ['postcss-loader'],
+      type: 'css',
+    },
+  ];
+
+  // Instrument imports/ with Istanbul so global.__coverage__ is populated
+  // at runtime — V8 coverage env vars don't reach Meteor's app server process.
+  if (!Meteor.isProduction) {
+    rules.push({
+      test: /\.(js|jsx)$/,
+      include: path.resolve(__dirname, 'imports'),
+      use: [
         {
-          test: /\.svg$/i,
-          issuer: /\.[jt]sx?$/,
-          use: ["@svgr/webpack"],
-        },
-        {
-          test: /\.css$/,
-          use: ["postcss-loader"],
-          type: "css",
+          loader: 'babel-loader',
+          options: {
+            presets: [['@babel/preset-react', { runtime: 'automatic' }]],
+            plugins: [['istanbul', { include: ['imports/**'] }]],
+          },
         },
       ],
-    },
-  };
+    });
+  }
+
+  return { module: { rules } };
 });
