@@ -27,3 +27,12 @@ Meteor.startup(async () => {
 Meteor.publish('rounds', () => RoundsCollection.find());
 Meteor.publish('players', () => PlayersCollection.find());
 Meteor.publish('leaderboard', () => LeaderboardCollection.find());
+
+Meteor.publish('eliminations', function (gameId) {
+  if (typeof gameId == 'string') {
+    return PlayersCollection.find({gameId, eliminated: true}, {sort: {eliminatedAt: -1}, limit: 20});
+  }
+  else {
+    this.ready();
+  }
+})
