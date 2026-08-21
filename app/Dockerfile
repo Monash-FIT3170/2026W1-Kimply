@@ -1,7 +1,5 @@
-# Production image for Kimply.
-#
-# Built for linux/arm64 (the deployment target is a t4g.medium Graviton instance)
-# and pushed to ECR by commit SHA. The production host never runs a Meteor build.
+# Production image for Kimply. Built for linux/arm64 (t4g.medium Graviton) and
+# pushed to ECR by commit SHA. The production host never runs a Meteor build.
 #
 #   docker buildx build --platform linux/arm64 -t <registry>/kimply:<sha> ./app
 
@@ -14,25 +12,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ENV METEOR_ALLOW_SUPERUSER=1
 
-# Pinned. This was previously `curl https://install.meteor.com/ | sh`, which is
-# unpinned, so a new Meteor release could silently change the image contents.
-#
-# The npm package unpacks the real toolchain into $HOME/.meteor and symlinks
-# `meteor` there. It does NOT add a shim to the global npm bin, so this PATH entry
-# is required - without it every `meteor` invocation below fails with exit 127.
+# The npm package unpacks the toolchain into $HOME/.meteor and adds no global shim,
+# so without this PATH entry every `meteor` call below exits 127.
 RUN npm install -g meteor@3.4.1
 ENV PATH="/root/.meteor:${PATH}"
 
 WORKDIR /app
 
-# Dependencies first, so this layer caches independently of source changes.
-#
-# `npm ci`, not `npm install`: the lockfile was already being copied and then
-# ignored, which made every build non-reproducible.
-#
-# devDependencies are REQUIRED here. rspack.config.js pulls in postcss-loader,
-# babel-loader, @babel/core and @babel/preset-react at build time. Adding
-# --omit=dev to this line silently ships unprocessed Tailwind CSS.
+# devDependencies are REQUIRED: rspack.config.js pulls in postcss-loader,
+# babel-loader, @babel/core and @babel/preset-react at build time, so --omit=dev
+# here silently ships unprocessed Tailwind CSS.
 COPY package.json package-lock.json ./
 COPY .meteor .meteor/
 RUN meteor npm ci
@@ -41,25 +30,11 @@ COPY . .
 
 RUN meteor build --directory /build --server-only
 
-# Serve the modern client to every browser.
-#
-# Meteor hands the web.browser.legacy (ES5) bundle to any user agent that its
-# modern-browsers package cannot identify. Facebook Messenger's in-app browser on
-# iOS is one of those - its UA carries no `Version/x Safari/y` token, only
-# `Mobile/15E148 [FBAN/...]` - so Messenger users were served the legacy bundle
-# and got a blank screen, while every normal browser worked fine.
-#
-# That bundle was never exercised in development either: entrypoint.sh runs with
-# --exclude-archs web.browser.legacy,web.cordova, so the legacy arch existed only
-# in production, untested. It is missing app code relative to the modern build,
-# most likely because the rspack integration only compiles for web.browser.
-#
-# `meteor build` has no --exclude-archs flag (that is a `meteor run` option), and
-# deleting the arch outright would rely on undocumented fallback behaviour in
-# webapp. Overwriting it with the modern program is explicit and arch-agnostic:
-# whichever one Meteor selects, the client receives working code.
-#
-# The legacy arch targets IE11-era browsers, which are irrelevant here.
+# Serve the modern client to every browser. Meteor falls back to the ES5
+# web.browser.legacy bundle for any user agent its modern-browsers package cannot
+# identify (Facebook Messenger's iOS in-app browser is one), and that bundle is
+# missing app code, so those users got a blank screen. `meteor build` has no
+# --exclude-archs, so overwrite the arch instead of deleting it.
 RUN set -eux; \
     cd /build/bundle/programs; \
     test -d web.browser && test -d web.browser.legacy; \
@@ -67,19 +42,13 @@ RUN set -eux; \
     cp -a web.browser web.browser.legacy; \
     diff -q web.browser/program.json web.browser.legacy/program.json
 
-# Install the bundle's own server dependencies here, in the glibc builder that has
-# a compiler, so the runtime image needs neither build tools nor npm.
-#
-# `npm install`, not `npm ci`: Meteor 3.4 does NOT emit a lockfile into the bundle,
-# and `npm ci` requires one - it fails with npm's usage dump, which is easy to
-# misread as a bad flag. This is Meteor's own documented deployment step.
-# Reproducibility still comes from app/package-lock.json, which pins what
-# `meteor build` compiled the bundle from.
+# Install the bundle's server dependencies here, where a compiler exists, so the
+# runtime image needs neither build tools nor npm. `npm install`, not `npm ci`:
+# Meteor 3.4 emits no lockfile into the bundle and `npm ci` fails without one.
 RUN cd /build/bundle/programs/server && npm install --omit=dev --no-audit --no-fund
 
-# Fail loudly at build time if the bundle expects a different Node major than the
-# runner stage below provides. A mismatch here is the classic "builds fine, dies
-# on boot" failure, so assert it rather than assuming.
+# A Node major mismatch with the runner stage is the classic "builds fine, dies on
+# boot" failure, so assert it at build time.
 RUN node -e "\
 const v = require('/build/bundle/star.json').nodeVersion; \
 console.log('bundle expects Node ' + v); \
@@ -90,8 +59,7 @@ if (!v.startsWith('22.')) { \
 
 # ---------- Stage 2: runtime ----------
 # bookworm-slim, not alpine: the builder is glibc, and crossing to musl means any
-# server dependency that ever needs to compile dies with an opaque node-gyp error
-# on an image that has no compiler.
+# server dependency that needs to compile dies on an image with no compiler.
 FROM node:22-bookworm-slim AS runner
 
 ENV NODE_ENV=production \
@@ -102,18 +70,15 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 
-# The `node` user (uid 1000) already exists in the official image.
 COPY --from=builder --chown=node:node /build/bundle /app
 
 USER node
 
 EXPOSE 3000
 
-# No curl in the slim image, so probe with node itself.
-# Liveness only: this must not depend on MongoDB, or an Atlas blip would put the
-# container into a restart loop.
+# Liveness only, via node because the slim image has no curl. This must not depend
+# on MongoDB, or an Atlas blip would put the container into a restart loop.
 HEALTHCHECK --interval=15s --timeout=3s --start-period=45s --retries=3 \
     CMD node -e "require('http').get('http://127.0.0.1:3000/health/live',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
-# MONGO_URL and ROOT_URL are supplied at runtime. No secret is baked into any layer.
 CMD ["node", "main.js"]
