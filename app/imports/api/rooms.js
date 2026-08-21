@@ -73,6 +73,27 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       await RoomsCollection.updateAsync({ _id: room._id }, { $set: { gameMode } });
     },
 
+    async 'rooms.updateSettings'(pin, settings) {
+          const room = await RoomsCollection.findOneAsync({ pin });
+          if (room?.gameMode !== 'custom') {
+            throw new Meteor.Error('not-custom-mode', 'Settings only apply in custom game mode');
+          }
+    
+          const validSpeeds = ['slow', 'medium', 'fast'];
+          if (settings.flashingSpeed && !validSpeeds.includes(settings.flashingSpeed)) {
+            throw new Meteor.Error('invalid-speed', 'flashingSpeed must be slow, medium, or fast');
+          }
+    
+          if (settings.startingLives != null && (!Number.isInteger(settings.startingLives) || settings.startingLives < 1)) {
+            throw new Meteor.Error('invalid-lives', 'startingLives must be a positive integer');
+          }
+          if (settings.startingSequenceLength != null && (!Number.isInteger(settings.startingSequenceLength) || settings.startingSequenceLength < 1)) {
+            throw new Meteor.Error('invalid-length', 'startingSequenceLength must be a positive integer');
+          }
+    
+          await RoomsCollection.updateAsync({ pin }, { $set: { customSettings: settings } });
+        },
+
     async 'rooms.start'(pin) {
       if (typeof pin !== 'string' || !pin.trim()) {
         throw new Meteor.Error('invalid', 'Invalid PIN');
