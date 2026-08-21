@@ -7,6 +7,7 @@ import { ColourSequence } from '../ColourSequence.jsx';
 import { Leaderboard } from '../Leaderboard.jsx';
 import { EndLeaderboard } from '../EndLeaderboard.jsx';
 import { useLocation } from 'react-router-dom';
+import { RoomsCollection } from '../../api/rooms.js';
 
 export const GamePage = () => {
   const [playerId, setPlayerId] = useState(null);
@@ -32,11 +33,13 @@ export const GamePage = () => {
   useEffect(() => {
     const roundsSub = Meteor.subscribe('rounds');
     const playersSub = Meteor.subscribe('players');
+    const roomSub = Meteor.subscribe('rooms.lobby', gameId);
     return () => {
       roundsSub.stop();
       playersSub.stop();
+      roomSub.stop();
     };
-  }, []);
+  }, [gameId]);
 
   const round = useTracker(() => {
     return RoundsCollection.findOne({ gameId, isCurrent: true });
@@ -46,6 +49,10 @@ export const GamePage = () => {
     if (!playerId) return null;
     return PlayersCollection.findOne(playerId);
   }, [playerId]);
+
+  const room = useTracker(() => {
+    return RoomsCollection.findOne({ pin: gameId });
+  }, [gameId]);
 
   useEffect(() => {
     if (!round?._id || playerId) return;
@@ -273,7 +280,7 @@ export const GamePage = () => {
             letterSpacing: '2px',
           }}
         >
-          LEVEL {round.lengthOfSequence - 3}
+          LEVEL {round.roundNumber}
         </p>
         <p
           style={{
@@ -312,6 +319,7 @@ export const GamePage = () => {
             setMessage('Your turn. Repeat the sequence.');
           }}
           onColourClick={handleColourClick}
+          flashingSpeed={room?.gameMode === 'custom' ? room.customSettings?.flashingSpeed : 'medium'}
         />
         <p
           style={{
