@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { createLiveLeaderboardRows, getPlayerStatus } from '../imports/ui/leaderboardModel.js';
+import { createLiveLeaderboardRows, getPlayerStatus } from '../imports/ui/leaderboardModels.js';
 
 describe('live leaderboard model', function () {
   it('returns the correct status for each player', function () {

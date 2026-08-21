@@ -5,7 +5,7 @@ import { Meteor } from 'meteor/meteor';
 import { useTracker } from 'meteor/react-meteor-data';
 import { PlayersCollection } from '../api/players';
 import { RoundsCollection } from '../api/rounds';
-import { createLiveLeaderboardRows } from './leaderboardModel';
+import { createLiveLeaderboardRows } from './leaderboardModels';
 
 export const Leaderboard = ({ gameId, currentPlayerId }) => {
   const { rows, ready } = useTracker(() => {
