@@ -15,7 +15,6 @@ export const GamePage = () => {
   const [message, setMessage] = useState('');
   const [shake, setShake] = useState(false);
   const [correctGlow, setCorrectGlow] = useState(false);
-  const [completedRoundId, setCompletedRoundId] = useState(null);
   const [replayKey, setReplayKey] = useState(0);
   const location = useLocation();
   const playerNameFromLobby = location.state?.playerName || 'Demo Player';
@@ -55,7 +54,6 @@ export const GamePage = () => {
     setPlayerCanInput(false);
     setAttemptedSequence([]);
     setMessage('');
-    setCompletedRoundId(null);
   }, [round?._id]);
   const handleColourClick = (colour) => {
     if (!playerCanInput) return;
@@ -80,7 +78,6 @@ export const GamePage = () => {
       }
       if (result.success) {
         setMessage('Correct sequence! Please wait for other players to finish.');
-        setCompletedRoundId(round._id);
         setCorrectGlow(true);
         setTimeout(() => setCorrectGlow(false), 800);
         setPlayerCanInput(false);
