@@ -83,15 +83,6 @@ elif [[ "$PREV_IMAGE" != "$DECLARED_IMAGE" ]]; then
 fi
 
 # Rewrite APP_IMAGE in place, atomically, preserving the file's 0600 mode.
-#
-# CRITICAL: the exported shell variable must be updated too.
-#
-# Docker Compose gives the shell environment PRECEDENCE over --env-file. This
-# script does `set -a; source "$ENV_FILE"` to read ECR_REGISTRY and friends,
-# which exports APP_IMAGE with its OLD value. Rewriting only the file then has
-# no effect on compose at all: it keeps resolving the stale exported value,
-# `compose up` decides the service is already current, exits 0, and nothing is
-# recreated. Every deploy silently becomes a no-op that reports success.
 set_app_image() {
   local image="$1" tmp
   tmp="$(mktemp "${ENV_FILE}.XXXXXX")"
