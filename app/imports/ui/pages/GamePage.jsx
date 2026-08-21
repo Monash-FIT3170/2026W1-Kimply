@@ -408,8 +408,7 @@ export const GamePage = () => {
               SUBMIT
             </button>
           </div>
-          {completedRoundId && <Leaderboard gameId={gameId} roundId={completedRoundId} />}
-        </div>
+            <Leaderboard gameId={gameId} currentPlayerId={playerId} />        </div>
       </div>
     </div>
   );
