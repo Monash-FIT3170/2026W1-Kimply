@@ -90,7 +90,14 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
   global._gameMethodsInitialized = true;
   Meteor.methods({
     // Generate a new round with a colour sequence
-    'rounds.generate'(length = 4, gameId = null) {
+    async 'rounds.generate'(gameId = null) {
+
+      const room = await RoomsCollection.findOneAsync({ pin: gameId }); // sync version if this stays a sync method
+      const length =
+        room?.gameMode === 'custom' && room?.customSettings?.startingSequenceLength
+          ? room.customSettings.startingSequenceLength
+          : 4;
+
       const sequence = generateSequence(length);
 
       return RoundsCollection.insertAsync({
@@ -111,12 +118,18 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         if (existing) return existing._id;
       }
 
+      const room = await RoomsCollection.findOneAsync({ pin: gameId });
+      const startingLives =
+        room?.gameMode === 'custom' && room?.customSettings?.startingLives
+          ? room.customSettings.startingLives
+          : 3;
+
       return PlayersCollection.insertAsync({
         gameId,
         roundId,
         lobbyPlayerId,
         name: playerName,
-        lives: 3,
+        lives: startingLives,
         attemptedSequence: [],
         currentStreak: 0,
         longestStreak: 0,
@@ -128,6 +141,27 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         completeRound: false,
         gameFinished: false,
       });
+    },
+
+    async 'rooms.updateSettings'(pin, settings) {
+      const room = await RoomsCollection.findOneAsync({ pin });
+      if (room?.gameMode !== 'custom') {
+        throw new Meteor.Error('not-custom-mode', 'Settings only apply in custom game mode');
+      }
+
+      const validSpeeds = ['slow', 'medium', 'fast'];
+      if (settings.flashingSpeed && !validSpeeds.includes(settings.flashingSpeed)) {
+        throw new Meteor.Error('invalid-speed', 'flashingSpeed must be slow, medium, or fast');
+      }
+
+      if (settings.startingLives != null && (!Number.isInteger(settings.startingLives) || settings.startingLives < 1)) {
+        throw new Meteor.Error('invalid-lives', 'startingLives must be a positive integer');
+      }
+      if (settings.startingSequenceLength != null && (!Number.isInteger(settings.startingSequenceLength) || settings.startingSequenceLength < 1)) {
+        throw new Meteor.Error('invalid-length', 'startingSequenceLength must be a positive integer');
+      }
+
+      await RoomsCollection.updateAsync({ pin }, { $set: { customSettings: settings } });
     },
 
     // Submit a player's attempted sequence
@@ -188,7 +222,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
             longestStreak,
             totalGuesses,
             eliminated,
-            eliminatedRound: eliminated ? round.lengthOfSequence - 3 : player.eliminatedRound,
+            eliminatedRound: eliminated ? round.roundNumber : player.eliminatedRound,
           },
         });
 
