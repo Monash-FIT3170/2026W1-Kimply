@@ -538,6 +538,9 @@ The invite link matters specifically: `navigator.clipboard` is unavailable outsi
 
 ## 11. Routine deployment
 
+> **Before you ever run `deploy/sync-config.sh` against production, diff first.**
+> On 2026-08-21 the production box was found to be running a `deploy.sh` that was *newer and more correct* than the repository's, fixed in place and never committed back. A sync would have silently reverted it. `sync-config.sh --dry-run` shows exactly what would change; treat any unexpected entry under `deploy/` as drift to investigate and port back, not to overwrite.
+
 Normally you do not run this at all.
 `.github/workflows/deploy.yml` performs exactly these steps on every push: `main` deploys to production, `dev` deploys to development.
 The manual path below is for when CI is unavailable, or for deploying a SHA that is not the tip of a branch.
