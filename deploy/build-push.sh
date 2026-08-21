@@ -23,6 +23,8 @@ echo "Building: $IMAGE"
 # Build the exact production image.
 docker buildx build \
   --platform "$PLATFORM" \
+  --provenance=false \
+  --sbom=false \
   --file "$REPO_ROOT/app/Dockerfile" \
   --tag "$IMAGE" \
   --load \
