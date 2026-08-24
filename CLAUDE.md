@@ -423,15 +423,15 @@ There is no configuration surface: starting lives (3), initial sequence length (
 Two deployed environments, each a single AWS EC2 instance with Nginx as the reverse proxy, Let's Encrypt TLS, and its own MongoDB Atlas Free cluster.
 Images are built by CI, pushed to ECR by commit SHA, and pulled by the instance over SSM.
 
-| | Production | Development |
-|---|---|---|
-| Branch | `main` | `dev` |
-| URL | `https://kimply.online` | `https://dev.kimply.online` |
-| Instance | `i-08184036cf37c932c` | `i-09575e88c984e1c7d` |
-| Elastic IP | `15.134.53.178` | `15.134.96.122` |
-| ECR repo | `kimply` | `kimply-dev` |
-| OIDC roles | `GitHubActionsECRPush`, `GitHubActionsEC2Commands` | same names with a `Dev` suffix |
-| Atlas cluster | `kimply-mongodb` | `kimply-dev-mongodb` |
+|               | Production                                         | Development                    |
+| ------------- | -------------------------------------------------- | ------------------------------ |
+| Branch        | `main`                                             | `dev`                          |
+| URL           | `https://kimply.online`                            | `https://dev.kimply.online`    |
+| Instance      | `i-08184036cf37c932c`                              | `i-09575e88c984e1c7d`          |
+| Elastic IP    | `15.134.53.178`                                    | `15.134.96.122`                |
+| ECR repo      | `kimply`                                           | `kimply-dev`                   |
+| OIDC roles    | `GitHubActionsECRPush`, `GitHubActionsEC2Commands` | same names with a `Dev` suffix |
+| Atlas cluster | `kimply-mongodb`                                   | `kimply-dev-mongodb`           |
 
 Both are driven by the single workflow `.github/workflows/deploy.yml`, which picks its target from `github.ref_name`.
 Everything else - `deploy/`, `nginx/`, `docker-compose.prod.yml`, `scripts/` - is environment-agnostic and reads its configuration from `/opt/kimply/.env` on the box.
@@ -490,6 +490,7 @@ One entry per substantive change: what changed, which files, and any consequence
 The custom game settings page now offers Fast, Med, and Slow flash-speed choices mapped to 200 ms, 500 ms, and 1000 ms respectively. The existing numeric `flashSpeed` setting passed through navigation is unchanged.
 
 ### 2026-08-21 - A development environment that mirrors production, deployed from `dev`
+
 `dev.kimply.online` is now a second, fully independent copy of the production stack on its own `t4g.small`, with its own Elastic IP, ECR repository, IAM roles and Atlas cluster.
 Files: new `.github/workflows/deploy.yml` (replaces `docker-ecr.yml`), new `docs/dev-environment.md`; `deploy/deploy.sh`, `deploy/build-push.sh`, `deploy/init-letsencrypt.sh`, `docs/deployment-manual.md`, `docs/operations.md`, `CLAUDE.md`.
 Deleted the untracked `.github/workflows/aws_push.yml` (a broken stub with no `id-token: write`, an undefined `AWS_REGION`, a role that does not exist, and a duplicate `main` trigger that would have raced the real pipeline) and `rendered.conf` (an envsubst debug artifact).
