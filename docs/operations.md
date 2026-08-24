@@ -287,16 +287,22 @@ Approximate, `ap-southeast-2`, USD per month.
 
 ### Fixed
 
+Per environment. Both production and development run the same shape.
+
 | Item | Cost |
 |---|---|
-| EC2 `t4g.medium` on demand | $26.86 |
+| EC2 `t4g.small` on demand | $13.43 |
 | EBS gp3 30 GB | $2.88 |
 | Elastic IP / public IPv4 | $3.65 |
 | ECR storage (~10 images, heavy layer sharing) | $0.15-0.20 |
 | Route 53 | $0.00 (DNS is external) |
 | MongoDB Atlas M0 | $0.00 |
-| CloudWatch | $0.00-5.00 (free tier covers 12 months) |
-| **Total** | **~$33-38/month** (roughly A$51-58) |
+| CloudWatch | $0.00-5.00 (free tier covers 12 months, development has no agent) |
+| **Per environment** | **~$20-25/month** |
+| **Both environments** | **~$40-45/month** (roughly A$62-69) |
+
+An earlier version of this table costed a `t4g.medium` at $26.86.
+The instances are `t4g.small`, so the real bill was always about half that line.
 
 ### Usage-dependent
 
@@ -305,14 +311,16 @@ A player session is a few MB, so expect $0.
 
 ### Reducing it
 
-- **1-year no-upfront Savings Plan on `t4g.medium`**: about 28% off, bringing EC2 to roughly $19/month.
-- **`t4g.small`** (2 GB, ~$13/month) is genuinely viable now that builds happen off-box. The runtime budget is roughly 700 MB-1 GB. Treat it as a post-load-test optimisation, not a starting point, and confirm headroom first.
+- **1-year no-upfront Savings Plan on `t4g.small`**: about 28% off, bringing EC2 to roughly $9.70/month per instance.
+- **Stop the development instance when nobody is using it.** EBS and the Elastic IP still bill, but the $13.43 of EC2 does not. Note that a stopped instance keeps its Elastic IP association, so DNS and the Atlas allowlist survive a stop/start.
+- **`t4g.micro` for development** (1 GB, ~$6.70/month) would halve it again, but the image sets `NODE_OPTIONS=--max-old-space-size=1536`, so it stops being a like-for-like replica of production and stops being useful for judging whether a change fits.
 
 ### Watch out for
 
 - CloudWatch log groups default to **never expire**. Set retention explicitly (done in the config above).
 - Elastic IPs are billed even while attached, and billed *more* when unattached. Release it if the instance is torn down.
-- ECR without a lifecycle policy grows unbounded.
+- ECR without a lifecycle policy grows unbounded. Both `kimply` and `kimply-dev` carry one: untagged expire after a day, and only the ten most recent tagged images are kept.
+- **Development is not monitored.** No CloudWatch agent, no alarms, no external uptime check, no backups. If `dev.kimply.online` goes down, nothing pages anyone. That is deliberate; see [dev-environment.md](dev-environment.md).
 
 ---
 

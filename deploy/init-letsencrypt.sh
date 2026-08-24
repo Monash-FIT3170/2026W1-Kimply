@@ -36,9 +36,10 @@ set -a; source "$ENV_FILE"; set +a
 
 : "${DOMAIN:?DOMAIN must be set in $ENV_FILE}"
 
-# Names to put on the certificate. Defaults to the apex alone; set CERT_DOMAINS in
+# Names to put on the certificate. Defaults to $DOMAIN alone; set CERT_DOMAINS in
 # the env file to a space-separated list to cover more, e.g.
-#   CERT_DOMAINS="kimply.online www.kimply.online"
+#   production   CERT_DOMAINS="$DOMAIN www.$DOMAIN"
+#   development  CERT_DOMAINS="$DOMAIN"          (no www record exists for dev)
 # The FIRST name becomes the certificate lineage name, which is what the nginx
 # ssl_certificate paths refer to, so it must stay $DOMAIN.
 CERT_DOMAINS="${CERT_DOMAINS:-$DOMAIN}"

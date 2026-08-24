@@ -94,6 +94,9 @@ set_app_image() {
     printf 'APP_IMAGE=%s\n' "$image" >> "$tmp"
   fi
   mv "$tmp" "$ENV_FILE"
+
+  # Keep the exported value in step with the file, or compose ignores the file.
+  export APP_IMAGE="$image"
 }
 
 # Bring up the app container on a given image and prove it is serving.

@@ -420,13 +420,29 @@ There is no configuration surface: starting lives (3), initial sequence length (
 
 ## Deployment
 
-Production runs on a single AWS EC2 instance with Nginx as the reverse proxy, Let's Encrypt TLS, and MongoDB Atlas Free.
-Images are built locally, pushed to ECR by commit SHA, and pulled by the instance.
+Two deployed environments, each a single AWS EC2 instance with Nginx as the reverse proxy, Let's Encrypt TLS, and its own MongoDB Atlas Free cluster.
+Images are built by CI, pushed to ECR by commit SHA, and pulled by the instance over SSM.
 
-See `docs/deployment-manual.md` for the runbook and `docs/operations.md` for monitoring, backups, and rollback.
+| | Production | Development |
+|---|---|---|
+| Branch | `main` | `dev` |
+| URL | `https://kimply.online` | `https://dev.kimply.online` |
+| Instance | `i-08184036cf37c932c` | `i-09575e88c984e1c7d` |
+| Elastic IP | `15.134.53.178` | `15.134.96.122` |
+| ECR repo | `kimply` | `kimply-dev` |
+| OIDC roles | `GitHubActionsECRPush`, `GitHubActionsEC2Commands` | same names with a `Dev` suffix |
+| Atlas cluster | `kimply-mongodb` | `kimply-dev-mongodb` |
+
+Both are driven by the single workflow `.github/workflows/deploy.yml`, which picks its target from `github.ref_name`.
+Everything else - `deploy/`, `nginx/`, `docker-compose.prod.yml`, `scripts/` - is environment-agnostic and reads its configuration from `/opt/kimply/.env` on the box.
+**Do not fork any of those per environment.** If something needs to differ, it belongs in `.env`.
+
+The two environments share no AWS resource. In particular the IAM roles are per-branch, because GitHub's OIDC subject claim names one ref, so a push to `dev` cannot obtain a credential that reaches production.
+
+See `docs/deployment-manual.md` for the production runbook, `docs/dev-environment.md` for the development delta, and `docs/operations.md` for monitoring, backups, and cost.
 
 Local development is unaffected and continues to use the Docker MongoDB container.
-`docker-compose.yml` must stay working; production changes belong in `docker-compose.prod.yml`.
+`docker-compose.yml` must stay working; deployed-environment changes belong in `docker-compose.prod.yml`.
 
 ---
 
@@ -472,6 +488,25 @@ One entry per substantive change: what changed, which files, and any consequence
 ### 2026-08-24 - Custom flash speed choices
 
 The custom game settings page now offers Fast, Med, and Slow flash-speed choices mapped to 200 ms, 500 ms, and 1000 ms respectively. The existing numeric `flashSpeed` setting passed through navigation is unchanged.
+
+### 2026-08-21 - A development environment that mirrors production, deployed from `dev`
+`dev.kimply.online` is now a second, fully independent copy of the production stack on its own `t4g.small`, with its own Elastic IP, ECR repository, IAM roles and Atlas cluster.
+Files: new `.github/workflows/deploy.yml` (replaces `docker-ecr.yml`), new `docs/dev-environment.md`; `deploy/deploy.sh`, `deploy/build-push.sh`, `deploy/init-letsencrypt.sh`, `docs/deployment-manual.md`, `docs/operations.md`, `CLAUDE.md`.
+Deleted the untracked `.github/workflows/aws_push.yml` (a broken stub with no `id-token: write`, an undefined `AWS_REGION`, a role that does not exist, and a duplicate `main` trigger that would have raced the real pipeline) and `rendered.conf` (an envsubst debug artifact).
+
+Not a line of `deploy/`, `nginx/` or `docker-compose.prod.yml` needed to change to support a second environment, which is the strongest evidence that the `.env`-driven design was right.
+
+Seven things worth carrying forward:
+
+- **The OIDC roles are per-branch, and that is deliberate.** GitHub's subject claim is `repo:<org>/<repo>:ref:refs/heads/<branch>`, so the existing production roles simply refused a `dev` workflow. Widening them to accept both refs was the smaller change and was rejected: separate `...Dev` roles, scoped to `repository/kimply-dev` and the dev instance ARN, make it structurally impossible for a push to `dev` to touch production. The production roles were not modified at all.
+- **Separate ECR repositories are required, not tidiness.** `kimply` is `IMMUTABLE`-tagged and keeps only 10 images. Sharing it would let dev builds evict production rollback targets, and because tags are commit SHAs, a fast-forward `dev` to `main` merge would push an already-existing tag and be rejected outright.
+- **`${APP_IMAGE}` has no default, so the ECR repository must be seeded before the box is configured.** `docker compose config` fails on an unset image and `deploy.sh` will not run without one. Run `ECR_REPOSITORY=kimply-dev ./deploy/build-push.sh` locally first, rather than discovering this through a failed first pipeline run.
+- **`build-push.sh` had lost its buildx attestation flags, and getting that wrong poisons an immutable tag.** Commit `2b7dfa2` added `--provenance=false --sbom=false` because buildx otherwise attaches provenance and SBOM attestations, turning the result into an OCI index that ECR rejects with a bare `400 Bad Request` on the manifest PUT, after every layer has already uploaded. Main's 53-line rewrite of the script dropped them; this change restores them. The trap on top of the trap: the failed push still lands the in-toto provenance manifest **under the tag**, and because both repositories are `IMMUTABLE`, every retry then fails with the same 400 for an entirely different reason. Recovery is `aws ecr batch-delete-image` on the tag first, since immutability blocks overwrite but not delete.
+- **The attestation failure is invisible in CI and only bites locally.** GitHub's runners use the classic Docker image store, where `--load` converts to Docker schema2 and the push succeeds, which is why production has been green since 2026-08-14. Docker Desktop with the containerd image store (`io.containerd.snapshotter.v1`) keeps OCI media types through `--load`, so a developer running `build-push.sh` by hand hits it and CI never does.
+- **`deploy/deploy.sh` in the repo was NOT what production actually runs, and the repo copy was broken.** The production box carried a fix that no branch has: `set_app_image()` must `export APP_IMAGE="$image"` as well as rewriting `.env`, because **Docker Compose gives the shell environment precedence over `--env-file`**. `deploy.sh` does `set -a; source "$ENV_FILE"`, which exports the OLD `APP_IMAGE`; rewriting only the file then changes nothing, `compose up` decides the service is already current and prints `Container kimply-app Running` instead of `Recreated`, and the deploy silently becomes a no-op. The post-recreate image guard is what turns that into a loud failure instead of a false success, and it is the only reason this was caught. Verified empirically: `APP_IMAGE=STALE/SENTINEL:0000 docker compose --env-file .env config` resolves to the sentinel, not the file. The fix is now committed; before that, running `sync-config.sh` against **production** would have overwritten prod's working script with the broken one and quietly turned every production deploy into a no-op that reported success.
+- **Production's health gate is currently vacuous.** `main` has no `app/server/health.js`, so `/health/live` and `/health/ready` both return the Meteor SPA shell with a 200 and both the Docker `HEALTHCHECK` and `deploy.sh`'s probe pass unconditionally. `main` is also missing `server/publications.js` and `server/indexes.js`, so production still runs the unscoped publications of D2. Development, built from `dev`, has all three and a genuinely working gate. This resolves when `dev` reaches `main`, which is a release decision and was left alone.
+
+Three documentation claims were corrected against reality while doing this: the instances are `t4g.small` (2 GB) not `t4g.medium`, the swap file is 2 GB not 4 GB, and `build-push.sh` neither refuses a dirty tree nor boots the image before pushing, despite `deployment-manual.md` saying it does both.
 
 ### 2026-08-05 - Production image and proxy validated end to end
 
