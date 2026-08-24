@@ -19,6 +19,8 @@ export const GamePage = () => {
   const [replayKey, setReplayKey] = useState(0);
   const location = useLocation();
   const playerNameFromLobby = location.state?.playerName || 'Demo Player';
+  const gameMode = location.state?.gameMode || 'standard';
+  const isBattleRoyale = gameMode === 'battle_royale';
   const roomPin = location.state?.pin;
   // No 'demo' fallback: the publications are scoped by gameId, so a placeholder
   // would subscribe to a game that does not exist and hang on LOADING forever.
@@ -32,17 +34,24 @@ export const GamePage = () => {
       playersSub.stop();
     };
   }, [gameId]);
-  const round = useTracker(() => {
-    if (!gameId) return null;
-    return RoundsCollection.findOne({ gameId, isCurrent: true });
-  }, [gameId]);
   const player = useTracker(() => {
     if (!playerId) return null;
     return PlayersCollection.findOne(playerId);
   }, [playerId]);
+  const round = useTracker(() => {
+    if (!gameId) return null;
+    //in battle royale follow the player's specific round
+    if (player?.roundId) {
+      return RoundsCollection.findOne(player.roundId);
+    }
+    return RoundsCollection.findOne({ gameId, isCurrent: true });
+  }, [gameId, player?.roundId]);
   useEffect(() => {
     if (!round?._id || playerId) return;
-    Meteor.call('players.join', round._id, playerNameFromLobby, gameId, (error, result) => {
+    // get game mode
+    const gameMode = location.state?.gameMode || 'standard';
+    const isBattleRoyale = gameMode === 'battle_royale';
+    Meteor.call('players.join', round._id, playerNameFromLobby, gameId, isBattleRoyale, (error, result) => {
       if (error) {
         console.error(error);
         setMessage('Could not join the game.');
@@ -56,7 +65,8 @@ export const GamePage = () => {
     setAttemptedSequence([]);
     setMessage('');
     setCompletedRoundId(null);
-  }, [round?._id]);
+    setReplayKey((prev) => prev + 1); //play sequence flash for new round
+  }, [player?.roundId]); //watch sequence of player's specific roundId
   const handleColourClick = (colour) => {
     if (!playerCanInput) return;
     if (!round?.sequence) return;
@@ -79,7 +89,11 @@ export const GamePage = () => {
         return;
       }
       if (result.success) {
-        setMessage('Correct sequence! Please wait for other players to finish.');
+        if (isBattleRoyale) {
+          setMessage('Correct! Moving to next round...');
+        } else {
+          setMessage('Correct sequence! Please wait for other players to finish.');
+        }
         setCompletedRoundId(round._id);
         setCorrectGlow(true);
         setTimeout(() => setCorrectGlow(false), 800);

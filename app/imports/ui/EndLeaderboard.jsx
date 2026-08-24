@@ -332,7 +332,16 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
         </div>
 
         <button
-          onClick={() => navigate('/play')}
+          onClick={() => {
+            if (gameId) {
+              Meteor.call('game.resetSequence', gameId, (err) => {
+                if (err) console.error('Failed to reset sequences:', err);
+                navigate('/play');
+              });
+            } else {
+              navigate('/play');
+            }
+          }}
           className="mt-8 inline-flex items-center gap-2 rounded-full px-5 py-3 font-outfit text-[13px] font-extrabold uppercase tracking-[0.16em] transition-transform hover:scale-[1.02]"
           style={{
             background: `color-mix(in oklab, ${PRIMARY} 16%, transparent)`,
