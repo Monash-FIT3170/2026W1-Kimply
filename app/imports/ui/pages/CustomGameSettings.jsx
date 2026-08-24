@@ -8,6 +8,11 @@ export function CustomGameSettings() {
   const { state } = useLocation();
 
   const [flashSpeed, setFlashSpeed] = useState(500);
+  const flashSpeeds = [
+    { label: 'Slow', value: 1000 },
+    { label: 'Med', value: 500 },
+    { label: 'Fast', value: 200 },
+  ];
   const [numLives, setNumLives] = useState(3);
   const [startingSequenceLength, setStartingSequenceLength] = useState(4);
 
@@ -53,21 +58,31 @@ export function CustomGameSettings() {
           {/* Flash Speed */}
           <div className="mb-7">
             <div className="flex items-center justify-between">
-              <label className="font-mono text-[11px] uppercase tracking-[0.16em] text-white font-bold">Flash Speed (ms)</label>
-              <span className="font-outfit text-lg font-bold text-fg">{flashSpeed}</span>
+              <label className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-white">Flash Speed</label>
+              <span className="font-outfit text-lg font-bold text-fg">{flashSpeeds.find((speed) => speed.value === flashSpeed)?.label}</span>
             </div>
-            <p className="mt-1 font-manrope text-[12px] text-fg3">How fast tiles flash (200-1000)</p>
-            <input
-              type="range"
-              min="200"
-              max="1000"
-              value={flashSpeed}
-              onChange={(e) => setFlashSpeed(Number(e.target.value))}
-              className="mt-3 w-full cursor-pointer"
-              style={{
-                accentColor: PRIMARY,
-              }}
-            />
+            <p className="mt-1 font-manrope text-[12px] text-fg3">Choose how quickly tiles flash</p>
+            <div className="mt-3 grid grid-cols-3 gap-2" role="group" aria-label="Flash speed">
+              {flashSpeeds.map((speed) => {
+                const selected = flashSpeed === speed.value;
+                return (
+                  <button
+                    key={speed.value}
+                    type="button"
+                    onClick={() => setFlashSpeed(speed.value)}
+                    aria-pressed={selected}
+                    className="rounded-[10px] border px-3 py-2 font-outfit text-[13px] font-bold transition-colors"
+                    style={{
+                      background: selected ? PRIMARY : 'transparent',
+                      borderColor: selected ? PRIMARY : HAIRLINE,
+                      color: selected ? BG : 'oklch(0.72 0.01 270)',
+                    }}
+                  >
+                    {speed.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Number of Lives */}
