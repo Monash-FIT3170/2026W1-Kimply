@@ -256,7 +256,9 @@ export const GamePage = () => {
           KIMPLY
         </span>
       </div>
-      <div className="relative flex flex-1 flex-col items-center justify-center gap-6 xl:flex-row xl:items-center">
+      <div className="relative grid flex-1 grid-cols-1 items-center gap-6 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+        <div className="hidden xl:block" aria-hidden="true" />
+
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         {/* Lives display */}
         <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2vh' }}>
@@ -400,7 +402,9 @@ export const GamePage = () => {
         </div>
       </div>
 
-      <Leaderboard gameId={gameId} currentPlayerId={playerId} />
+      <div className="w-full max-w-md justify-self-center">
+        <Leaderboard gameId={gameId} currentPlayerId={playerId} />
+      </div>
     </div>
   </div>
   );
