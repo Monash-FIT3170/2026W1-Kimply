@@ -21,9 +21,15 @@ export const GamePage = () => {
   const location = useLocation();
   const playerNameFromLobby = location.state?.playerName || 'Demo Player';
   const roomPin = location.state?.pin;
+  const lobbyPlayerId = location.state?.playerId;
   // No 'demo' fallback: the publications are scoped by gameId, so a placeholder
   // would subscribe to a game that does not exist and hang on LOADING forever.
   const gameId = roomPin || null;
+  useEffect(() => {
+    if (!gameId || lobbyPlayerId) return;
+    const savedPlayerId = localStorage.getItem(`gamePlayerId:${gameId}`);
+    if (savedPlayerId) setPlayerId(savedPlayerId);
+  }, [gameId, lobbyPlayerId]);
   useEffect(() => {
     if (!gameId) return undefined;
     const roundsSub = Meteor.subscribe('rounds', gameId);
@@ -50,15 +56,16 @@ export const GamePage = () => {
   const totalLives = room?.gameMode === 'custom' ? room.customSettings?.startingLives ?? 3 : 3;
   useEffect(() => {
     if (!round?._id || playerId) return;
-    Meteor.call('players.join', round._id, playerNameFromLobby, gameId, (error, result) => {
+    Meteor.call('players.join', round._id, playerNameFromLobby, gameId, lobbyPlayerId, (error, result) => {
       if (error) {
         console.error(error);
         setMessage('Could not join the game.');
         return;
       }
       setPlayerId(result);
+      localStorage.setItem(`gamePlayerId:${gameId}`, result);
     });
-  }, [round?._id, playerId]);
+  }, [round?._id, playerId, gameId, playerNameFromLobby, lobbyPlayerId]);
   useEffect(() => {
     setPlayerCanInput(false);
     setAttemptedSequence([]);
@@ -87,7 +94,7 @@ export const GamePage = () => {
         return;
       }
       if (result.success) {
-        setMessage('Correct sequence! Please wait for other players to finish.');
+        setMessage(result.roundAdvanced ? 'All players finished. Starting next round.' : 'Correct sequence! Please wait for other players to finish.');
         setCompletedRoundId(round._id);
         setCorrectGlow(true);
         setTimeout(() => setCorrectGlow(false), 800);

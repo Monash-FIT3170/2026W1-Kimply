@@ -118,7 +118,7 @@ function SharePanel({ link }) {
   );
 }
 
-function HostView({ room, playerName, onBack, navigate, gameMode, customSettings }) {
+function HostView({ room, playerName, playerId, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
   const joinLink = `${window.location.origin}/play/join?code=${room.pin}`;
   const [editing, setEditing] = useState(true);
@@ -132,7 +132,7 @@ function HostView({ room, playerName, onBack, navigate, gameMode, customSettings
         console.error(err);
         return;
       }
-      navigate('/game', { state: { playerName, pin: room.pin } });
+      navigate('/game', { state: { playerName, playerId, pin: room.pin } });
     });
   };
 
@@ -273,7 +273,7 @@ function HostView({ room, playerName, onBack, navigate, gameMode, customSettings
   );
 }
 
-function JoinedView({ room, playerName, onBack, navigate, gameMode, customSettings }) {
+function JoinedView({ room, playerName, playerId, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
   const emptySlots = Math.max(0, MAX_PLAYERS - players.length);
 
@@ -296,7 +296,7 @@ function JoinedView({ room, playerName, onBack, navigate, gameMode, customSettin
 
   useEffect(() => {
     if (room?.status === 'in_progress') {
-      navigate('/game', { state: { playerName, pin: room.pin } });
+      navigate('/game', { state: { playerName, playerId, pin: room.pin } });
     }
   }, [room?.status]);
 
@@ -395,7 +395,7 @@ export function PlayerLobby() {
   useEffect(() => {
     if (room?.status === 'in_progress' && !gameStarted.current) {
       gameStarted.current = true;
-      navigate('/game', { state: { playerName, pin: room.pin } });
+      navigate('/game', { state: { playerName, playerId, pin: room.pin } });
     }
   }, [room?.status]);
 
@@ -441,9 +441,9 @@ export function PlayerLobby() {
       />
 
       { isHost? (
-        <HostView room={room} playerName={playerName} onBack={onBack} navigate={navigate} gameMode={gameMode} customSettings={customSettings} />
+        <HostView room={room} playerName={playerName} playerId={playerId} onBack={onBack} navigate={navigate} gameMode={gameMode} customSettings={customSettings} />
       ) : (
-        <JoinedView room={room} playerName={playerName} onBack={onBack} navigate={navigate} gameMode={gameMode} customSettings={customSettings} />
+        <JoinedView room={room} playerName={playerName} playerId={playerId} onBack={onBack} navigate={navigate} gameMode={gameMode} customSettings={customSettings} />
       )}
     </>
   )

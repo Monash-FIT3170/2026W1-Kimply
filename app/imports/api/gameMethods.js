@@ -70,11 +70,22 @@ async function checkWinner(gameId) {
 }
 
 async function advanceRoundIfReady(round) {
+  if (!round) return false;
+
   const playersInRound = await PlayersCollection.find({
     roundId: round._id,
   }).fetchAsync();
+  const room = await RoomsCollection.findOneAsync({ pin: round.gameId });
+  const lobbyPlayerIds = (room?.players || []).map((player) => player.id).filter(Boolean);
+  const expectedPlayerCount = lobbyPlayerIds.length;
 
-  const activePlayers = playersInRound.filter((p) => !p.eliminated);
+  const playersToEvaluate = lobbyPlayerIds.length
+    ? lobbyPlayerIds.map((lobbyPlayerId) => playersInRound.find((player) => player.lobbyPlayerId === lobbyPlayerId)).filter(Boolean)
+    : playersInRound;
+
+  if (playersToEvaluate.length < expectedPlayerCount) return false;
+
+  const activePlayers = playersToEvaluate.filter((p) => !p.eliminated);
   const allFinished = activePlayers.length > 0 && activePlayers.every((p) => p.completeRound);
   const hasWinner = await PlayersCollection.findOneAsync({
     gameId: round.gameId,
@@ -83,7 +94,10 @@ async function advanceRoundIfReady(round) {
 
   if (!round.advanced && allFinished && !hasWinner) {
     await Meteor.callAsync('rounds.advance', round._id);
+    return true;
   }
+
+  return false;
 }
 
 if (Meteor.isServer && !global._gameMethodsInitialized) {
@@ -218,28 +232,13 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         };
       }
 
-      // check all players in current round
-      const playersInRound = await PlayersCollection.find({
-        roundId: player.roundId,
-      }).fetchAsync();
-
-      // only active players
-      const activePlayers = playersInRound.filter((p) => !p.eliminated);
-
-      // check if all active players finished
-      const allFinished = activePlayers.length > 0 && activePlayers.every((p) => p.completeRound);
-
-      const hasWinner = playersInRound.some((p) => p.winner);
-
-      // move to next round if everyone finished
-      if (!round.advanced && allFinished && !hasWinner) {
-        await Meteor.callAsync('rounds.advance', player.roundId);
-      }
+      const roundAdvanced = await advanceRoundIfReady(round);
 
       // return successful completion
       return {
         success: true,
         sequenceComplete: true,
+        roundAdvanced,
       };
     },
 
