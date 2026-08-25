@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Meteor } from 'meteor/meteor';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { BG, PRIMARY, SURFACE, HAIRLINE, TileLattice, Wordmark } from '../components/design';
 
@@ -9,25 +10,37 @@ export function CustomGameSettings() {
 
   const [flashSpeed, setFlashSpeed] = useState(500);
   const flashSpeeds = [
-    { label: 'Slow', value: 1000 },
-    { label: 'Med', value: 500 },
-    { label: 'Fast', value: 200 },
+    { label: 'Slow', value: 1000, backendValue: 'slow' },
+    { label: 'Med', value: 500, backendValue: 'medium' },
+    { label: 'Fast', value: 200, backendValue: 'fast' },
   ];
   const [numLives, setNumLives] = useState(3);
   const [startingSequenceLength, setStartingSequenceLength] = useState(4);
+  const [error, setError] = useState('');
 
-  const handleConfirm = () => {
-    navigate(`/play/${pin}`, {
-      state: {
-        ...state,
-        gameMode: 'custom',
-        customSettings: {
-          flashSpeed,
-          numLives,
-          startingSequenceLength,
+  const handleConfirm = async () => {
+    const selectedFlashSpeed = flashSpeeds.find((speed) => speed.value === flashSpeed);
+    const customSettings = {
+      flashingSpeed: selectedFlashSpeed.backendValue,
+      startingLives: numLives,
+      startingSequenceLength,
+    };
+
+    setError('');
+    try {
+      await Meteor.callAsync('rooms.setGameMode', pin, 'custom');
+      await Meteor.callAsync('rooms.updateSettings', pin, customSettings);
+      navigate(`/play/${pin}`, {
+        state: {
+          ...state,
+          gameMode: 'custom',
+          customSettings,
         },
-      },
-    });
+      });
+    } catch (methodError) {
+      console.error(methodError);
+      setError(methodError.reason || methodError.message || 'Could not save custom settings.');
+    }
   };
 
   const handleBack = () => {
@@ -147,6 +160,7 @@ export function CustomGameSettings() {
             Continue
           </button>
         </div>
+        {error && <p className="font-manrope text-[12px] text-red-300">{error}</p>}
       </div>
     </div>
   );

@@ -8,6 +8,7 @@ import { Leaderboard } from '../Leaderboard.jsx';
 import { EndLeaderboard } from '../EndLeaderboard.jsx';
 import { useLocation } from 'react-router-dom';
 import { TileLattice, BG } from '../components/design';
+import { RoomsCollection } from '../../api/rooms';
 export const GamePage = () => {
   const [playerId, setPlayerId] = useState(null);
   const [playerCanInput, setPlayerCanInput] = useState(false);
@@ -27,9 +28,11 @@ export const GamePage = () => {
     if (!gameId) return undefined;
     const roundsSub = Meteor.subscribe('rounds', gameId);
     const playersSub = Meteor.subscribe('players', gameId);
+    const roomSub = Meteor.subscribe('rooms.lobby', gameId);
     return () => {
       roundsSub.stop();
       playersSub.stop();
+      roomSub.stop();
     };
   }, [gameId]);
   const round = useTracker(() => {
@@ -40,6 +43,11 @@ export const GamePage = () => {
     if (!playerId) return null;
     return PlayersCollection.findOne(playerId);
   }, [playerId]);
+  const room = useTracker(() => {
+    if (!gameId) return null;
+    return RoomsCollection.findOne({ pin: gameId });
+  }, [gameId]);
+  const totalLives = room?.gameMode === 'custom' ? room.customSettings?.startingLives ?? 3 : 3;
   useEffect(() => {
     if (!round?._id || playerId) return;
     Meteor.call('players.join', round._id, playerNameFromLobby, gameId, (error, result) => {
@@ -271,7 +279,7 @@ export const GamePage = () => {
       >
         {/* Lives display */}
         <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2vh' }}>
-          {[1, 2, 3].map((heart) => (
+          {Array.from({ length: totalLives }, (_, i) => i + 1).map((heart) => (
             <div
               key={heart}
               style={{
@@ -340,6 +348,7 @@ export const GamePage = () => {
               setMessage('Your turn. Repeat the sequence.');
             }}
             onColourClick={handleColourClick}
+            flashingSpeed={room?.gameMode === 'custom' ? room.customSettings?.flashingSpeed : 'medium'}
           />
           <p
             style={{
