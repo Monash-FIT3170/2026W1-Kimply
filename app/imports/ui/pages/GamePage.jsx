@@ -16,7 +16,7 @@ export const GamePage = () => {
   const [shake, setShake] = useState(false);
   const [correctGlow, setCorrectGlow] = useState(false);
   const [replayKey, setReplayKey] = useState(0);
-  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
+  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(true);
   const location = useLocation();
   const playerNameFromLobby = location.state?.playerName || 'Demo Player';
   const roomPin = location.state?.pin;
@@ -257,9 +257,7 @@ export const GamePage = () => {
           KIMPLY
         </span>
       </div>
-      <div className="relative grid flex-1 grid-cols-1 items-center gap-6 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
-        <div className="hidden xl:block" aria-hidden="true" />
-
+      <div className="relative flex flex-1 flex-col items-center justify-center">
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         {/* Lives display */}
         <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2vh' }}>
@@ -403,33 +401,22 @@ export const GamePage = () => {
         </div>
       </div>
     </div>
-    <button
-      onClick={() => setIsLeaderboardOpen(true)}
-      className="fixed right-6 top-1/2 z-20 -translate-y-1/2 rounded-full border border-hairline bg-surface px-4 py-3 font-outfit text-sm font-bold text-fg shadow-lg"
-    >
-      Leaderboard
-    </button>
+      <button
+        type="button"
+        onClick={() => setIsLeaderboardOpen((open) => !open)}
+        aria-expanded={isLeaderboardOpen}
+        className="fixed right-6 top-6 z-50 rounded-full border border-hairline bg-surface px-4 py-3 font-outfit text-sm font-bold text-fg shadow-lg"
+      >
+        {isLeaderboardOpen ? 'Collapse leaderboard' : 'Leaderboard'}
+      </button>
 
-    {isLeaderboardOpen && (
-      <>
-        <button
-          aria-label="Close leaderboard"
-          onClick={() => setIsLeaderboardOpen(false)}
-          className="fixed inset-0 z-30 cursor-default bg-black/50"
-        />
-
-        <aside className="fixed right-0 top-0 z-40 h-screen w-full max-w-md overflow-y-auto border-l border-hairline bg-bg p-5 shadow-2xl">
-          <button
-            onClick={() => setIsLeaderboardOpen(false)}
-            className="mb-4 rounded-lg border border-hairline bg-surface px-3 py-2 text-sm font-bold text-fg"
-          >
-            Close
-          </button>
-
-          <Leaderboard gameId={gameId} currentPlayerId={playerId} />
-        </aside>
-      </>
-    )}
+      <aside
+        className={`fixed right-0 top-0 z-40 h-screen w-full max-w-md overflow-y-auto border-l border-hairline bg-bg p-5 pt-20 shadow-2xl transition-transform duration-300 ease-in-out ${
+          isLeaderboardOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        <Leaderboard gameId={gameId} currentPlayerId={playerId} />
+      </aside>
   </div>
   );
 };
