@@ -66,14 +66,16 @@ async function recordGlobalResult(accountId, displayName, levelReached, won) {
 
   // Cap enforcement: only ever fires when a brand-new account just entered
   // the board (an existing account's update can't push the count past 50).
-  // Sorts worst-first (lowest bestRound; on a tie, most-recently achieved is
-  // considered "worst" and evicted first) and deletes exactly the overflow,
-  // so the collection never holds more than GLOBAL_LEADERBOARD_SIZE docs.
+  // Sorts worst-first — lowest bestRound, then fewest wins, then (on a full
+  // tie) most-recently achieved is considered "worst" — and deletes exactly
+  // the overflow, so the collection never holds more than
+  // GLOBAL_LEADERBOARD_SIZE docs. Mirrors the ranking order in
+  // GlobalLeaderboard.jsx and the publish in server/main.js, just inverted.
   const total = await GlobalLeaderboardCollection.find().countAsync();
   if (total > GLOBAL_LEADERBOARD_SIZE) {
     const overflow = await GlobalLeaderboardCollection.find(
       {},
-      { sort: { bestRound: 1, achievedAt: -1 }, limit: total - GLOBAL_LEADERBOARD_SIZE }
+      { sort: { bestRound: 1, wins: 1, achievedAt: -1 }, limit: total - GLOBAL_LEADERBOARD_SIZE }
     ).fetchAsync();
     await GlobalLeaderboardCollection.removeAsync({ _id: { $in: overflow.map((doc) => doc._id) } });
   }

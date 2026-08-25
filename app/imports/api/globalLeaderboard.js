@@ -17,17 +17,20 @@ export const GlobalLeaderboardCollection = global._GlobalLeaderboardCollection;
 
 // One doc per registered account, capped at the top 50 by bestRound (see
 // recordGlobalResult in gameMethods.js, which upserts and trims this collection).
+// Ranking is bestRound desc, then wins desc as the tiebreak (fewer wins
+// loses the tie), then achievedAt as a final tiebreak for a full tie.
 // Indexes:
 //  - accountId unique: enforces one leaderboard row per account, and doubles
 //    as the "did my score improve" guard when recordGlobalResult upserts.
-//  - (bestRound desc, achievedAt asc): matches the sort order the UI and the
-//    trim step both query with, so reads and the eviction scan can use it directly.
+//  - (bestRound desc, wins desc, achievedAt asc): matches the sort order the
+//    UI and the trim step both query with, so reads and the eviction scan
+//    can use it directly.
 if (Meteor.isServer && !global._globalLeaderboardIndexesInitialized) {
   global._globalLeaderboardIndexesInitialized = true;
   Meteor.startup(async () => {
     const raw = GlobalLeaderboardCollection.rawCollection();
     await raw.createIndex({ accountId: 1 }, { unique: true });
-    await raw.createIndex({ bestRound: -1, achievedAt: 1 });
+    await raw.createIndex({ bestRound: -1, wins: -1, achievedAt: 1 });
   });
 }
 

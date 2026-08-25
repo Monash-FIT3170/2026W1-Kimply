@@ -30,5 +30,5 @@ Meteor.publish('rounds', () => RoundsCollection.find());
 Meteor.publish('players', () => PlayersCollection.find());
 Meteor.publish('leaderboard', () => LeaderboardCollection.find());
 Meteor.publish('globalLeaderboard', () =>
-  GlobalLeaderboardCollection.find({}, { sort: { bestRound: -1, achievedAt: 1 } })
+  GlobalLeaderboardCollection.find({}, { sort: { bestRound: -1, wins: -1, achievedAt: 1 } })
 );

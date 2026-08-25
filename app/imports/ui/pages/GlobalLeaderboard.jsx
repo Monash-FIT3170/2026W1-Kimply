@@ -137,7 +137,7 @@ export function GlobalLeaderboard() {
 
   const isLoading = useSubscribe('globalLeaderboard')();
   const entries = useTracker(
-    () => GlobalLeaderboardCollection.find({}, { sort: { bestRound: -1, achievedAt: 1 }, limit: 50 }).fetch(),
+    () => GlobalLeaderboardCollection.find({}, { sort: { bestRound: -1, wins: -1, achievedAt: 1 }, limit: 50 }).fetch(),
     []
   );
 
