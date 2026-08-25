@@ -2,12 +2,83 @@ import { Meteor } from 'meteor/meteor';
 import { RoundsCollection } from './rounds';
 import { PlayersCollection } from './players';
 import { LeaderboardCollection } from './leaderboard';
+import { PlayerAccountsCollection } from './playerAccounts';
+import { GlobalLeaderboardCollection } from './globalLeaderboard';
 
 const COLOURS = ['red', 'blue', 'green', 'yellow'];
+const GLOBAL_LEADERBOARD_SIZE = 50;
 
 // generate random colour sequence
 function generateSequence(length) {
   return Array.from({ length }, () => COLOURS[Math.floor(Math.random() * COLOURS.length)]);
+}
+
+// Records a player's final result (on elimination or win) against their
+// registered account, then keeps the global leaderboard trimmed to the top 50.
+// No-op for guests (no accountId) — this is the *only* place globalLeaderboard
+// or playerAccounts' stats get written, called once per player from the two
+// checkWinner branches below (one call per player, exactly once per game).
+async function recordGlobalResult(accountId, displayName, levelReached, won) {
+  if (!accountId) return;
+
+  const now = new Date();
+
+  // playerAccounts is the durable record — gamesPlayed/wins always increment,
+  // bestRound only ever moves up ($max), regardless of whether this particular
+  // game beat their previous best.
+  await PlayerAccountsCollection.updateAsync(accountId, {
+    $inc: { gamesPlayed: 1, wins: won ? 1 : 0 },
+    $max: { bestRound: levelReached },
+    $set: { updatedAt: now },
+  });
+
+  const account = await PlayerAccountsCollection.findOneAsync(accountId);
+  if (!account) return;
+
+  // globalLeaderboard is a denormalized *snapshot*, not the source of truth —
+  // one row per account. A worse game still refreshes gamesPlayed/wins so the
+  // row stays accurate, but only actually improving bestRound moves the rank
+  // (bumps achievedAt too, which is the tie-break the sort/trim below rely on).
+  const existing = await GlobalLeaderboardCollection.findOneAsync({ accountId });
+
+  if (!existing) {
+    await GlobalLeaderboardCollection.insertAsync({
+      accountId,
+      displayName,
+      bestRound: levelReached,
+      achievedAt: now,
+      gamesPlayed: account.gamesPlayed,
+      wins: account.wins,
+      updatedAt: now,
+    });
+  } else {
+    const isNewBest = levelReached > existing.bestRound;
+    await GlobalLeaderboardCollection.updateAsync(existing._id, {
+      $set: {
+        displayName,
+        gamesPlayed: account.gamesPlayed,
+        wins: account.wins,
+        updatedAt: now,
+        ...(isNewBest ? { bestRound: levelReached, achievedAt: now } : {}),
+      },
+    });
+  }
+
+  // Cap enforcement: only ever fires when a brand-new account just entered
+  // the board (an existing account's update can't push the count past 50).
+  // Sorts worst-first — lowest bestRound, then fewest wins, then (on a full
+  // tie) most-recently achieved is considered "worst" — and deletes exactly
+  // the overflow, so the collection never holds more than
+  // GLOBAL_LEADERBOARD_SIZE docs. Mirrors the ranking order in
+  // GlobalLeaderboard.jsx and the publish in server/main.js, just inverted.
+  const total = await GlobalLeaderboardCollection.find().countAsync();
+  if (total > GLOBAL_LEADERBOARD_SIZE) {
+    const overflow = await GlobalLeaderboardCollection.find(
+      {},
+      { sort: { bestRound: 1, wins: 1, achievedAt: -1 }, limit: total - GLOBAL_LEADERBOARD_SIZE }
+    ).fetchAsync();
+    await GlobalLeaderboardCollection.removeAsync({ _id: { $in: overflow.map((doc) => doc._id) } });
+  }
 }
 
 async function checkWinner(gameId) {
@@ -19,7 +90,8 @@ async function checkWinner(gameId) {
   const active = players.filter((p) => !p.eliminated);
 
   if (active.length === 1) {
-    await PlayersCollection.updateAsync(active[0]._id, {
+    const winner = active[0];
+    await PlayersCollection.updateAsync(winner._id, {
       $set: {
         winner: true,
       },
@@ -34,6 +106,15 @@ async function checkWinner(gameId) {
       },
       { multi: true }
     );
+
+    const winnerRound = await RoundsCollection.findOneAsync(winner.roundId);
+    const winnerLevel = winnerRound ? winnerRound.lengthOfSequence - 3 : winner.eliminatedRound ?? 0;
+
+    // Record every player's final result exactly once, now that the game has concluded.
+    for (const p of players) {
+      const isWinner = p._id === winner._id;
+      await recordGlobalResult(p.accountId, p.name, isWinner ? winnerLevel : p.eliminatedRound ?? 0, isWinner);
+    }
   }
 
   if (active.length === 0 && players.length > 0) {
@@ -61,6 +142,12 @@ async function checkWinner(gameId) {
       },
       { multi: true }
     );
+
+    // Record every player's final result exactly once, now that the game has concluded.
+    for (const p of players) {
+      const isWinner = p.eliminatedRound === highestRound;
+      await recordGlobalResult(p.accountId, p.name, p.eliminatedRound ?? 0, isWinner);
+    }
   }
 }
 
@@ -99,11 +186,12 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
     },
 
     // Add a player to a round
-    'players.join'(roundId, playerName, gameId = null) {
+    'players.join'(roundId, playerName, gameId = null, accountId = null) {
       return PlayersCollection.insertAsync({
         gameId,
         roundId,
         name: playerName,
+        accountId: typeof accountId === 'string' && accountId.trim() ? accountId.trim() : null,
         lives: 3,
         attemptedSequence: [],
         currentStreak: 0,

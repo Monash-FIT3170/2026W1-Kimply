@@ -107,7 +107,7 @@ function SharePanel({ link }) {
   );
 }
 
-function HostView({ room, playerName, onBack, navigate }) {
+function HostView({ room, playerName, playerAccount, onBack, navigate }) {
   const players = room.players || [];
   const joinLink = `${window.location.origin}/play/join?code=${room.pin}`;
   const [editing, setEditing] = useState(true);
@@ -121,7 +121,7 @@ function HostView({ room, playerName, onBack, navigate }) {
         console.error(err);
         return;
       }
-      navigate('/game', { state: { playerName, pin: room.pin } });
+      navigate('/game', { state: { playerName, pin: room.pin, playerAccount } });
     });
   };
 
@@ -256,7 +256,7 @@ function HostView({ room, playerName, onBack, navigate }) {
   );
 }
 
-function JoinedView({ room, playerName, onBack, navigate }) {
+function JoinedView({ room, playerName, playerAccount, onBack, navigate }) {
   const players = room.players || [];
   const emptySlots = Math.max(0, MAX_PLAYERS - players.length);
 
@@ -279,7 +279,7 @@ function JoinedView({ room, playerName, onBack, navigate }) {
 
   useEffect(() => {
     if (room?.status === 'in_progress') {
-      navigate('/game', { state: { playerName, pin: room.pin } });
+      navigate('/game', { state: { playerName, pin: room.pin, playerAccount } });
     }
   }, [room?.status]);
 
@@ -361,7 +361,8 @@ export function PlayerLobby() {
   const playerName = state?.playerName || '';
   const playerId = state?.playerId || '';
   const isHost = state?.isHost === true;
-  const gameStarted = useRef(false);  
+  const playerAccount = state?.playerAccount;
+  const gameStarted = useRef(false);
   const [showExitPopup, setShowExitPopup] = useState(false);
   const isLoading = useSubscribe('rooms.lobby', pin);
   const room = useTracker(() => RoomsCollection.findOne({ pin }));
@@ -369,7 +370,7 @@ export function PlayerLobby() {
   useEffect(() => {
     if (room?.status === 'in_progress' && !gameStarted.current) {
       gameStarted.current = true;
-      navigate('/game', { state: { playerName, pin: room.pin } });
+      navigate('/game', { state: { playerName, pin: room.pin, playerAccount } });
     }
   }, [room?.status]);
 
@@ -405,7 +406,7 @@ export function PlayerLobby() {
 
           // removing session storage of reconnect data
           localStorage.removeItem('reconnectData');
-          navigate('/play', {replace: true});
+          navigate('/play', { replace: true, state: { playerAccount } });
 
         }}
         onCancel = {() =>{
@@ -416,9 +417,9 @@ export function PlayerLobby() {
       />
 
       { isHost? (
-        <HostView room={room} playerName={playerName} onBack={onBack} />
+        <HostView room={room} playerName={playerName} playerAccount={playerAccount} onBack={onBack} navigate={navigate} />
       ) : (
-        <JoinedView room={room} playerName={playerName} onBack={onBack} navigate={navigate} />
+        <JoinedView room={room} playerName={playerName} playerAccount={playerAccount} onBack={onBack} navigate={navigate} />
       )}
     </>
   )

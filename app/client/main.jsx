@@ -8,6 +8,7 @@ import { PlayerLobby } from '/imports/ui/pages/PlayerLobby';
 import { EndLeaderboard } from '/imports/ui/EndLeaderboard';
 import { GamePage } from '/imports/ui/pages/GamePage';
 import { Account } from '/imports/ui/pages/Account';
+import { GlobalLeaderboard } from '/imports/ui/pages/GlobalLeaderboard';
 import '/imports/ui/styles.css';
 
 Meteor.startup(() => {
@@ -23,6 +24,7 @@ Meteor.startup(() => {
         <Route path="/play/:pin" element={<PlayerLobby />} />
         <Route path="*" element={<Navigate to="/" replace />} />
         <Route path="/account" element={<Account />} />
+        <Route path="/leaderboard" element={<GlobalLeaderboard />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
