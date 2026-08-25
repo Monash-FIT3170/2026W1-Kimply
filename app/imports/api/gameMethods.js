@@ -38,8 +38,8 @@ async function checkWinner(gameId, isBattleRoyale = false) {
 
     return;
   }
-  //Standard mode - last player standing wins
-  if (active.length === 1) {
+  //Standard mode - last player standing wins FIX
+  if (!isBattleRoyale && active.length === 1) {
     await PlayersCollection.updateAsync(active[0]._id, {
       $set: {
         winner: true,
@@ -245,6 +245,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
             longestStreak,
             totalGuesses,
             eliminated,
+            currentLevel: round.level ?? round.lengthOfSequence,
             eliminatedRound: eliminated ? round.lengthOfSequence - 3 : player.eliminatedRound,
           },
         });
