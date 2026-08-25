@@ -411,7 +411,7 @@ export const GamePage = () => {
       </button>
 
       <aside
-        className={`fixed right-0 top-0 z-40 h-screen w-full max-w-md overflow-y-auto border-l border-hairline bg-bg p-5 pt-20 shadow-2xl transition-transform duration-300 ease-in-out ${
+        className={`fixed right-6 top-20 z-40 w-[28rem] max-w-[calc(100vw-3rem)] transition-transform duration-300 ease-in-out ${
           isLeaderboardOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
