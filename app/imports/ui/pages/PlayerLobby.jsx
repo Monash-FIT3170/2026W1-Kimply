@@ -3,10 +3,30 @@ import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { Meteor } from 'meteor/meteor';
 import { useSubscribe, useTracker } from 'meteor/react-meteor-data';
 import { RoomsCollection } from '/imports/api/rooms';
+import {
+  CUSTOM_SETTING_LIMITS,
+  DEFAULT_GAME_MODE,
+  GAME_MODE_OPTIONS,
+  GAME_MODES,
+  gameModeLabel,
+  normalizeCustomSettings,
+  resolveGameSettings,
+} from '/imports/api/gameModes';
 import { ConfirmationPopup } from '../components/ConfirmationPopup';
 import {
-  PRIMARY, TILE, HAIRLINE, FG2,
-  TileLattice, Wordmark, Avatar, avatarColor, ReadyChip, CopyIcon, BackChevron, PencilIcon, RainbowBar,
+  PRIMARY,
+  TILE,
+  HAIRLINE,
+  FG2,
+  TileLattice,
+  Wordmark,
+  Avatar,
+  avatarColor,
+  ReadyChip,
+  CopyIcon,
+  BackChevron,
+  PencilIcon,
+  RainbowBar,
 } from '../components/design';
 
 const MAX_PLAYERS = 8;
@@ -107,13 +127,124 @@ function SharePanel({ link }) {
   );
 }
 
+function ModeBadge({ gameMode, customSettings }) {
+  const settings = resolveGameSettings(gameMode || DEFAULT_GAME_MODE, customSettings);
+
+  return (
+    <div className="inline-flex items-center gap-2 rounded-[10px] border border-hairline bg-surface px-2.5 py-1.5">
+      <span className="font-mono text-[10px] uppercase tracking-widest text-fg3">Mode</span>
+      <span className="font-mono text-[13px] font-bold text-fg">{gameModeLabel(settings.gameMode)}</span>
+      <span className="font-mono text-[10px] uppercase tracking-widest text-fg3">
+        {settings.lives} {settings.lives === 1 ? 'life' : 'lives'} · start {settings.startingLength}
+      </span>
+    </div>
+  );
+}
+
+function ModeSelector({ selectedMode, onSelect }) {
+  const selected = selectedMode || DEFAULT_GAME_MODE;
+  const colors = [TILE.teal, PRIMARY, TILE.pink, TILE.violet, TILE.amber];
+
+  return (
+    <div className="grid w-full gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(125px, 1fr))' }}>
+      {GAME_MODE_OPTIONS.map((option, index) => {
+        const active = option.value === selected;
+        const color = colors[index % colors.length];
+
+        return (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onSelect(option.value)}
+            className="flex min-h-[62px] cursor-pointer flex-col justify-center rounded-lg border px-3 py-2 text-left transition-all"
+            style={{
+              background: active ? `color-mix(in oklab, ${color} 18%, transparent)` : 'oklch(0.20 0.02 270)',
+              borderColor: active ? `color-mix(in oklab, ${color} 70%, transparent)` : HAIRLINE,
+              boxShadow: active ? `0 8px 26px -16px color-mix(in oklab, ${color} 80%, transparent)` : 'none',
+            }}
+          >
+            <span className="font-outfit text-[13px] font-extrabold uppercase tracking-[0.12em] text-fg">
+              {option.label}
+            </span>
+            <span
+              className="mt-1 font-mono text-[9px] uppercase tracking-widest"
+              style={{ color: active ? color : FG2 }}
+            >
+              {option.detail}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function CustomSettingControl({ label, value, min, max, onChange }) {
+  return (
+    <label className="bg-bg/40 flex flex-col gap-2 rounded-lg border border-hairline px-3 py-2.5">
+      <span className="flex items-center justify-between gap-3">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-fg3">{label}</span>
+        <span className="font-outfit text-sm font-extrabold text-fg">{value}</span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="w-full"
+        style={{ accentColor: PRIMARY }}
+      />
+    </label>
+  );
+}
+
+function CustomSettingsPanel({ settings, onChange }) {
+  const customSettings = normalizeCustomSettings(settings);
+
+  const updateSetting = (key, value) => {
+    onChange({
+      ...customSettings,
+      [key]: value,
+    });
+  };
+
+  return (
+    <div className="mt-3 grid w-full gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+      <CustomSettingControl
+        label="Start Length"
+        value={customSettings.startingLength}
+        min={CUSTOM_SETTING_LIMITS.startingLength.min}
+        max={CUSTOM_SETTING_LIMITS.startingLength.max}
+        onChange={(value) => updateSetting('startingLength', value)}
+      />
+      <CustomSettingControl
+        label="Lives"
+        value={customSettings.lives}
+        min={CUSTOM_SETTING_LIMITS.lives.min}
+        max={CUSTOM_SETTING_LIMITS.lives.max}
+        onChange={(value) => updateSetting('lives', value)}
+      />
+      <CustomSettingControl
+        label="Growth"
+        value={customSettings.sequenceGrowth}
+        min={CUSTOM_SETTING_LIMITS.sequenceGrowth.min}
+        max={CUSTOM_SETTING_LIMITS.sequenceGrowth.max}
+        onChange={(value) => updateSetting('sequenceGrowth', value)}
+      />
+    </div>
+  );
+}
+
 function HostView({ room, playerName, onBack, navigate }) {
   const players = room.players || [];
   const joinLink = `${window.location.origin}/play/join?code=${room.pin}`;
   const [editing, setEditing] = useState(true);
   const [gameName, setGameName] = useState('');
-  const trimmedGameName = gameName.trim()
+  const trimmedGameName = gameName.trim();
   const hasGameName = trimmedGameName.length > 0;
+  const selectedMode = room.gameMode || DEFAULT_GAME_MODE;
+  const customSettings = normalizeCustomSettings(room.customSettings);
 
   const handleStart = () => {
     Meteor.call('rooms.start', room.pin, (err) => {
@@ -129,9 +260,22 @@ function HostView({ room, playerName, onBack, navigate }) {
     Meteor.call('rooms.kick', room.pin, playerId);
   };
 
-  const saveGameName = async() =>{
-    await Meteor.callAsync("rooms.updateGameName", room.pin, hasGameName ? trimmedGameName : `Game${room.pin}`)
+  const saveGameName = async () => {
+    await Meteor.callAsync('rooms.updateGameName', room.pin, hasGameName ? trimmedGameName : `Game${room.pin}`);
     setEditing(false);
+  };
+
+  const updateGameMode = (gameMode) => {
+    if (gameMode === selectedMode) return;
+    Meteor.call('rooms.updateGameMode', room.pin, gameMode, (err) => {
+      if (err) console.error(err);
+    });
+  };
+
+  const updateCustomSettings = (settings) => {
+    Meteor.call('rooms.updateCustomSettings', room.pin, settings, (err) => {
+      if (err) console.error(err);
+    });
   };
 
   return (
@@ -147,13 +291,13 @@ function HostView({ room, playerName, onBack, navigate }) {
         {/* room code panel */}
         <div className="relative flex w-full max-w-lg flex-col items-center gap-4 overflow-hidden rounded-[22px] border border-hairline bg-surface px-6 pb-5 pt-8">
           {/* tile band */}
-          <RainbowBar
-            className="absolute top-0 left-0 right-0 h-1"
-          />
+          <RainbowBar className="absolute left-0 right-0 top-0 h-1" />
 
           {/* Game Name */}
-          <div className='flex items-center gap-1'>
-            <p className="font-mono height-[32px] text-[11px] text-fg3 uppercase tracking-[0.16em] text-center leading-none whitespace-nowrap shrink-0">Game Name: </p>
+          <div className="flex items-center gap-1">
+            <p className="height-[32px] shrink-0 whitespace-nowrap text-center font-mono text-[11px] uppercase leading-none tracking-[0.16em] text-fg3">
+              Game Name:{' '}
+            </p>
 
             {editing ? (
               <input
@@ -164,15 +308,17 @@ function HostView({ room, playerName, onBack, navigate }) {
                 onKeyDown={(e) => e.key === 'Enter' && saveGameName()}
                 placeholder={`Game${room.pin}`}
                 maxLength={30}
-                className="w-48 bg-surface border border-hairline rounded-[12px] px-3 py-1 font-outfit font-semibold text-base text-fg outline-none placeholder:text-fg3 text-center"
+                className="w-48 rounded-[12px] border border-hairline bg-surface px-3 py-1 text-center font-outfit text-base font-semibold text-fg outline-none placeholder:text-fg3"
                 style={{ caretColor: PRIMARY }}
               />
             ) : (
-              <div className='flex items-center gap-1'> 
-                <span className="font-outfit font-semibold text-base text-fg">{hasGameName ? trimmedGameName : `Game${room.pin}`}</span>
+              <div className="flex items-center gap-1">
+                <span className="font-outfit text-base font-semibold text-fg">
+                  {hasGameName ? trimmedGameName : `Game${room.pin}`}
+                </span>
                 <button
                   onClick={() => setEditing(true)}
-                  className="w-8 h-8 rounded-lg bg-transparent border-none text-fg2 cursor-pointer inline-flex items-center justify-center"
+                  className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent text-fg2"
                 >
                   <PencilIcon size={14} />
                 </button>
@@ -180,8 +326,20 @@ function HostView({ room, playerName, onBack, navigate }) {
             )}
           </div>
 
+          <div className="w-full">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-fg3">Game Mode</p>
+              <span className="font-mono text-[10px] uppercase tracking-widest text-fg3">
+                {gameModeLabel(selectedMode)}
+              </span>
+            </div>
+            <ModeSelector selectedMode={selectedMode} onSelect={updateGameMode} />
+            {selectedMode === GAME_MODES.CUSTOM && (
+              <CustomSettingsPanel settings={customSettings} onChange={updateCustomSettings} />
+            )}
+          </div>
 
-          <p className="font-mono text-[11px] text-fg3 uppercase tracking-[0.18em]">Your Room Code</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-fg3">Your Room Code</p>
 
           <div className="flex gap-2.5">
             {room.pin.split('').map((ch, i) => (
@@ -260,7 +418,7 @@ function JoinedView({ room, playerName, onBack, navigate }) {
   const players = room.players || [];
   const emptySlots = Math.max(0, MAX_PLAYERS - players.length);
 
-  const stillInRoom = !playerName || players.some(p => p.name === playerName);
+  const stillInRoom = !playerName || players.some((p) => p.name === playerName);
   useEffect(() => {
     if (!stillInRoom) navigate('/play', { replace: true, state: { kicked: true } });
   }, [stillInRoom]);
@@ -299,12 +457,17 @@ function JoinedView({ room, playerName, onBack, navigate }) {
           {/* title row */}
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <div>
-              <p className="font-mono text-[11px] text-fg3 uppercase tracking-[0.18em] mb-1">You're in</p>
-              <h1 className="font-outfit font-extrabold text-4xl text-fg tracking-tight leading-none">{room.gameName}</h1>
+              <p className="mb-1 font-mono text-[11px] uppercase tracking-[0.18em] text-fg3">You're in</p>
+              <h1 className="font-outfit text-4xl font-extrabold leading-none tracking-tight text-fg">
+                {room.gameName}
+              </h1>
             </div>
-            <div className="inline-flex items-center gap-2 rounded-[10px] border border-hairline bg-surface px-2.5 py-1.5">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-fg3">Room</span>
-              <span className="font-mono text-[13px] font-bold text-fg">{room.pin}</span>
+            <div className="flex flex-wrap gap-2">
+              <ModeBadge gameMode={room.gameMode} customSettings={room.customSettings} />
+              <div className="inline-flex items-center gap-2 rounded-[10px] border border-hairline bg-surface px-2.5 py-1.5">
+                <span className="font-mono text-[10px] uppercase tracking-widest text-fg3">Room</span>
+                <span className="font-mono text-[13px] font-bold text-fg">{room.pin}</span>
+              </div>
             </div>
           </div>
           <div className="flex items-center justify-between">
@@ -361,7 +524,7 @@ export function PlayerLobby() {
   const playerName = state?.playerName || '';
   const playerId = state?.playerId || '';
   const isHost = state?.isHost === true;
-  const gameStarted = useRef(false);  
+  const gameStarted = useRef(false);
   const [showExitPopup, setShowExitPopup] = useState(false);
   const isLoading = useSubscribe('rooms.lobby', pin);
   const room = useTracker(() => RoomsCollection.findOne({ pin }));
@@ -377,12 +540,11 @@ export function PlayerLobby() {
     navigate('/play', { replace: true });
     return null;
   }
-  useEffect(()=>{
-    if (room === undefined && !isLoading){
-      navigate('/play', {replace: true});
+  useEffect(() => {
+    if (room === undefined && !isLoading) {
+      navigate('/play', { replace: true });
     }
   }, [room]);
-
 
   if (!room) {
     return (
@@ -394,34 +556,34 @@ export function PlayerLobby() {
 
   const onBack = () => setShowExitPopup(true);
 
-
   return (
     <>
       <ConfirmationPopup
-        isOpen = {showExitPopup}
-        onConfirm ={() => {
+        isOpen={showExitPopup}
+        onConfirm={() => {
           setShowExitPopup(false);
-          Meteor.call('rooms.disconnect', pin, playerId) 
+          Meteor.call('rooms.disconnect', pin, playerId);
 
           // removing session storage of reconnect data
           localStorage.removeItem('reconnectData');
-          navigate('/play', {replace: true});
-
+          navigate('/play', { replace: true });
         }}
-        onCancel = {() =>{
+        onCancel={() => {
           setShowExitPopup(false);
         }}
-        title='Leave Game'
-        message= { isHost ? 'Are you sure you want to disconnect from the game, this will terminate the game sesssion.' :'Are you sure you want to disconnect from the game?'}
+        title="Leave Game"
+        message={
+          isHost
+            ? 'Are you sure you want to disconnect from the game, this will terminate the game sesssion.'
+            : 'Are you sure you want to disconnect from the game?'
+        }
       />
 
-      { isHost? (
-        <HostView room={room} playerName={playerName} onBack={onBack} />
+      {isHost ? (
+        <HostView room={room} playerName={playerName} onBack={onBack} navigate={navigate} />
       ) : (
         <JoinedView room={room} playerName={playerName} onBack={onBack} navigate={navigate} />
       )}
     </>
-  )
-
-
+  );
 }

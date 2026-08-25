@@ -7,6 +7,7 @@ import { ColourSequence } from '../ColourSequence.jsx';
 import { Leaderboard } from '../Leaderboard.jsx';
 import { EndLeaderboard } from '../EndLeaderboard.jsx';
 import { useLocation } from 'react-router-dom';
+import { gameModeLabel } from '../../api/gameModes';
 
 export const GamePage = () => {
   const [playerId, setPlayerId] = useState(null);
@@ -137,6 +138,10 @@ export const GamePage = () => {
 
   if (!player) return null;
 
+  const maxLives = Math.max(1, player.startingLives ?? round.lives ?? 3);
+  const roundNumber = round.roundNumber ?? Math.max(1, round.lengthOfSequence - 3);
+  const modeName = gameModeLabel(player.gameMode || round.gameMode);
+
   if (player?.gameFinished) {
     return <EndLeaderboard gameId={player.gameId} currentPlayerId={player._id} />;
   }
@@ -232,7 +237,7 @@ export const GamePage = () => {
     >
       {/* Lives display */}
       <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '8px', marginBottom: '16px' }}>
-        {[1, 2, 3].map((heart) => (
+        {Array.from({ length: maxLives }, (_, index) => index + 1).map((heart) => (
           <div
             key={heart}
             style={{
@@ -256,13 +261,24 @@ export const GamePage = () => {
       <div style={{ textAlign: 'center' }}>
         <p
           style={{
+            color: '#9ce8ff',
+            marginBottom: '8px',
+            fontWeight: 'bold',
+            letterSpacing: '2px',
+            textTransform: 'uppercase',
+          }}
+        >
+          {modeName}
+        </p>
+        <p
+          style={{
             color: 'white',
             marginBottom: '12px',
             fontWeight: 'bold',
             letterSpacing: '2px',
           }}
         >
-          LEVEL {round.lengthOfSequence - 3}
+          LEVEL {roundNumber}
         </p>
         <p
           style={{

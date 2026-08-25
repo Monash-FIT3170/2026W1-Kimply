@@ -2,6 +2,7 @@ import assert from 'assert';
 import '../imports/api/gameMethods.js';
 import { PlayersCollection } from '../imports/api/players.js';
 import { RoundsCollection } from '../imports/api/rounds.js';
+import { GAME_MODES } from '../imports/api/gameModes.js';
 
 describe('Life Deduction', () => {
   let playerId;
@@ -36,6 +37,30 @@ describe('Life Deduction', () => {
     it('player starts with 3 lives', async () => {
       const player = await PlayersCollection.findOneAsync(playerId);
       assert.strictEqual(player.lives, 3);
+    });
+
+    it('players join with the lives configured on the round', async () => {
+      const hardRoundId = await RoundsCollection.insertAsync({
+        gameMode: GAME_MODES.HARD,
+        lengthOfSequence: 5,
+        lives: 1,
+        sequence: ['red', 'blue', 'green', 'yellow', 'red'],
+        createdAt: new Date(),
+        advanced: false,
+        isCurrent: true,
+      });
+
+      const suddenDeathPlayerId = await Meteor.callAsync(
+        'players.join',
+        hardRoundId,
+        'Sudden Death Player',
+        'hard-game'
+      );
+      const player = await PlayersCollection.findOneAsync(suddenDeathPlayerId);
+
+      assert.strictEqual(player.lives, 1);
+      assert.strictEqual(player.startingLives, 1);
+      assert.strictEqual(player.gameMode, GAME_MODES.HARD);
     });
 
     it('incorrect guess is detected and returns success false', async () => {

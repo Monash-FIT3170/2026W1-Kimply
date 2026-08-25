@@ -2,8 +2,28 @@ import assert from 'assert';
 import { Meteor } from 'meteor/meteor';
 import { RoundsCollection } from '../imports/api/rounds';
 import { PlayersCollection } from '../imports/api/players';
+import { GAME_MODES } from '../imports/api/gameModes';
 
 if (Meteor.isServer) {
+  describe('rounds.generate', function () {
+    beforeEach(async function () {
+      await RoundsCollection.removeAsync({});
+    });
+
+    it('stores mode settings on the generated round', async function () {
+      const roundId = await Meteor.callAsync('rounds.generate', 5, 'hard-game', {
+        gameMode: GAME_MODES.HARD,
+      });
+
+      const round = await RoundsCollection.findOneAsync(roundId);
+      assert.strictEqual(round.gameMode, GAME_MODES.HARD);
+      assert.strictEqual(round.lengthOfSequence, 5);
+      assert.strictEqual(round.lives, 1);
+      assert.strictEqual(round.sequenceGrowth, 1);
+      assert.strictEqual(round.roundNumber, 1);
+    });
+  });
+
   describe('rounds.advance', function () {
     beforeEach(async function () {
       await RoundsCollection.removeAsync({});
@@ -24,6 +44,30 @@ if (Meteor.isServer) {
       const nextRound = await RoundsCollection.findOneAsync(nextRoundId);
       assert.equal(nextRound.lengthOfSequence, 5);
       assert.equal(nextRound.sequence.length, 5);
+    });
+
+    it('uses custom sequence growth when advancing', async function () {
+      const roundId = await RoundsCollection.insertAsync({
+        gameMode: GAME_MODES.CUSTOM,
+        lengthOfSequence: 4,
+        lives: 4,
+        sequenceGrowth: 2,
+        roundNumber: 1,
+        sequence: ['red', 'blue', 'green', 'yellow'],
+        createdAt: new Date(),
+        advanced: false,
+        isCurrent: true,
+      });
+
+      const nextRoundId = await Meteor.callAsync('rounds.advance', roundId);
+
+      const nextRound = await RoundsCollection.findOneAsync(nextRoundId);
+      assert.equal(nextRound.lengthOfSequence, 6);
+      assert.equal(nextRound.sequence.length, 6);
+      assert.strictEqual(nextRound.gameMode, GAME_MODES.CUSTOM);
+      assert.strictEqual(nextRound.lives, 4);
+      assert.strictEqual(nextRound.sequenceGrowth, 2);
+      assert.strictEqual(nextRound.roundNumber, 2);
     });
 
     it('marks the current round as advanced and not current', async function () {

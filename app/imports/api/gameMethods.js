@@ -2,6 +2,7 @@ import { Meteor } from 'meteor/meteor';
 import { RoundsCollection } from './rounds';
 import { PlayersCollection } from './players';
 import { LeaderboardCollection } from './leaderboard';
+import { DEFAULT_GAME_MODE, resolveGameSettings } from './gameModes';
 
 const COLOURS = ['red', 'blue', 'green', 'yellow'];
 
@@ -85,12 +86,17 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
   global._gameMethodsInitialized = true;
   Meteor.methods({
     // Generate a new round with a colour sequence
-    'rounds.generate'(length = 4, gameId = null) {
+    'rounds.generate'(length = 4, gameId = null, settings = {}) {
+      const gameSettings = resolveGameSettings(settings.gameMode || DEFAULT_GAME_MODE, settings);
       const sequence = generateSequence(length);
 
       return RoundsCollection.insertAsync({
         gameId,
+        gameMode: gameSettings.gameMode,
         lengthOfSequence: length,
+        lives: gameSettings.lives,
+        sequenceGrowth: gameSettings.sequenceGrowth,
+        roundNumber: settings.roundNumber ?? 1,
         sequence,
         createdAt: new Date(),
         advanced: false,
@@ -99,12 +105,17 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
     },
 
     // Add a player to a round
-    'players.join'(roundId, playerName, gameId = null) {
+    async 'players.join'(roundId, playerName, gameId = null) {
+      const round = await RoundsCollection.findOneAsync(roundId);
+      const startingLives = round?.lives ?? 3;
+
       return PlayersCollection.insertAsync({
         gameId,
         roundId,
+        gameMode: round?.gameMode ?? DEFAULT_GAME_MODE,
         name: playerName,
-        lives: 3,
+        lives: startingLives,
+        startingLives,
         attemptedSequence: [],
         currentStreak: 0,
         longestStreak: 0,
@@ -163,6 +174,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         const eliminated = newLives <= 0;
         const longestStreak = Math.max(player.longestStreak ?? 0, player.currentStreak ?? 0);
         const totalGuesses = (player.totalGuesses ?? 0) + 1;
+        const eliminatedRound = round.roundNumber ?? Math.max(1, round.lengthOfSequence - 3);
 
         await PlayersCollection.updateAsync(playerId, {
           $set: {
@@ -172,7 +184,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
             longestStreak,
             totalGuesses,
             eliminated,
-            eliminatedRound: eliminated ? round.lengthOfSequence - 3 : player.eliminatedRound,
+            eliminatedRound: eliminated ? eliminatedRound : player.eliminatedRound,
           },
         });
 
@@ -235,14 +247,19 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       });
 
       // increase sequence size for next round
-      const nextLength = currentRound.lengthOfSequence + 1;
+      const sequenceGrowth = currentRound.sequenceGrowth ?? 1;
+      const nextLength = currentRound.lengthOfSequence + sequenceGrowth;
 
       const nextSequence = generateSequence(nextLength);
 
       // create next round
       const nextRoundId = await RoundsCollection.insertAsync({
         gameId: currentRound.gameId,
+        gameMode: currentRound.gameMode ?? DEFAULT_GAME_MODE,
         lengthOfSequence: nextLength,
+        lives: currentRound.lives ?? 3,
+        sequenceGrowth,
+        roundNumber: (currentRound.roundNumber ?? Math.max(1, currentRound.lengthOfSequence - 3)) + 1,
         sequence: nextSequence,
         createdAt: new Date(),
         advanced: false,
