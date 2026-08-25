@@ -256,16 +256,8 @@ export const GamePage = () => {
           KIMPLY
         </span>
       </div>
-      <div
-        style={{
-          position: 'relative',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flex: 1,
-        }}
-      >
+      <div className="relative flex flex-1 flex-col items-center justify-center gap-6 xl:flex-row xl:items-center">
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         {/* Lives display */}
         <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2vh' }}>
           {[1, 2, 3].map((heart) => (
@@ -405,8 +397,11 @@ export const GamePage = () => {
               SUBMIT
             </button>
           </div>
-            <Leaderboard gameId={gameId} currentPlayerId={playerId} />        </div>
+        </div>
       </div>
+
+      <Leaderboard gameId={gameId} currentPlayerId={playerId} />
     </div>
+  </div>
   );
 };
