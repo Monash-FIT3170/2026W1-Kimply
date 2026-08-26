@@ -286,7 +286,7 @@ export const GamePage = () => {
       >
         {/* Lives display */}
         <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2vh' }}>
-          {Array.from({ length: totalLives }, (_, i) => i + 1).map((heart) => (
+          {Array.from({ length: Math.max(player?.lives ?? 3, 3) }, (_, i) => i + 1).map((heart) => (
             <div
               key={heart}
               style={{
@@ -316,7 +316,7 @@ export const GamePage = () => {
               fontSize: '1.2vw',
             }}
           >
-            LEVEL {round.lengthOfSequence - 3}
+            LEVEL {round.roundNumber}
           </p>
           <p
             style={{
