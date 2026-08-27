@@ -1,4 +1,5 @@
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { Meteor } from 'meteor/meteor';
 import { BG, PRIMARY, TILE, HAIRLINE, TileLattice, Wordmark, ArrowIcon } from '../components/design';
 
 function ModeCard({ title, description, color, onClick }) {
@@ -84,12 +85,13 @@ export function GameModeSelector() {
     },
   ];
 
-  const handleSelectMode = (modeId) => {
+  const handleSelectMode = async (modeId) => {
     if (modeId === 'custom') {
       navigate(`/play/custom/${pin}`, {
         state: state,
       });
     } else {
+      await Meteor.callAsync('rooms.setGameMode', pin, modeId);
       navigate(`/play/${pin}`, {
         state: {
           ...state,

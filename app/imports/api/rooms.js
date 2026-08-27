@@ -10,6 +10,11 @@ if (!global._RoomsCollection) {
 export const RoomsCollection = global._RoomsCollection;
 
 const PIN_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const GAME_MODE_PRESETS = {
+  easy: { flashingSpeed: 'slow', startingLives: 5, startingSequenceLength: 1 },
+  medium: { flashingSpeed: 'medium', startingLives: 3, startingSequenceLength: 3 },
+  hard: { flashingSpeed: 'fast', startingLives: 1, startingSequenceLength: 3 },
+};
 
 function generatePin() {
   return Array.from({ length: 5 }, () => PIN_CHARS[Math.floor(Math.random() * PIN_CHARS.length)]).join('');
@@ -63,14 +68,16 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
 
     async 'rooms.setGameMode'(pin, gameMode) {
       if (typeof pin !== 'string' || !pin.trim()) throw new Meteor.Error('invalid', 'Invalid PIN');
-      if (!['default', 'custom'].includes(gameMode)) {
+      if (!['default', 'easy', 'medium', 'hard', 'custom'].includes(gameMode)) {
         throw new Meteor.Error('invalid', 'Invalid game mode');
       }
       const room = await RoomsCollection.findOneAsync({ pin: pin.trim() });
       if (!room) throw new Meteor.Error('not-found', 'Room not found');
       if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
 
-      await RoomsCollection.updateAsync({ _id: room._id }, { $set: { gameMode } });
+      await RoomsCollection.updateAsync({
+        _id: room._id,
+      }, { $set: { gameMode, customSettings: GAME_MODE_PRESETS[gameMode] || room.customSettings } });
     },
 
     async 'rooms.updateSettings'(pin, settings) {

@@ -108,7 +108,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
 
       const room = await RoomsCollection.findOneAsync({ pin: gameId }); // sync version if this stays a sync method
       const length =
-        room?.gameMode === 'custom' && room?.customSettings?.startingSequenceLength
+        room?.customSettings?.startingSequenceLength
           ? room.customSettings.startingSequenceLength
           : 4;
 
@@ -134,7 +134,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
 
       const room = await RoomsCollection.findOneAsync({ pin: gameId });
       const startingLives =
-        room?.gameMode === 'custom' && room?.customSettings?.startingLives
+        room?.customSettings?.startingLives
           ? room.customSettings.startingLives
           : 3;
 

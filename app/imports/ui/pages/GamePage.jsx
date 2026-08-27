@@ -355,7 +355,7 @@ export const GamePage = () => {
               setMessage('Your turn. Repeat the sequence.');
             }}
             onColourClick={handleColourClick}
-            flashingSpeed={room?.gameMode === 'custom' ? room.customSettings?.flashingSpeed : 'medium'}
+            flashingSpeed={room?.customSettings?.flashingSpeed || 'medium'}
           />
           <p
             style={{
