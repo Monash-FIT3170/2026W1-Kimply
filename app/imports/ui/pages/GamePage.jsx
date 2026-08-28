@@ -3,6 +3,7 @@ import { Meteor } from 'meteor/meteor';
 import { useTracker } from 'meteor/react-meteor-data';
 import { RoundsCollection } from '../../api/rounds';
 import { PlayersCollection } from '../../api/players';
+import { GameEventsCollection } from '../../api/gameEvents';
 import { ColourSequence } from '../ColourSequence.jsx';
 import { Leaderboard } from '../Leaderboard.jsx';
 import { EndLeaderboard } from '../EndLeaderboard.jsx';
@@ -13,6 +14,7 @@ export const GamePage = () => {
   const [playerCanInput, setPlayerCanInput] = useState(false);
   const [attemptedSequence, setAttemptedSequence] = useState([]);
   const [message, setMessage] = useState('');
+  const [levelUpNotices, setLevelUpNotices] = useState([]);
   const [shake, setShake] = useState(false);
   const [correctGlow, setCorrectGlow] = useState(false);
   const [completedRoundId, setCompletedRoundId] = useState(null);
@@ -38,6 +40,16 @@ export const GamePage = () => {
     return PlayersCollection.findOne(playerId);
   }, [playerId]);
   useEffect(() => {
+    const eventsSub = Meteor.subscribe('gameEvents', gameId);
+    return () => {
+      eventsSub.stop();
+    };
+  }, [gameId]);
+  const levelUpEvents = useTracker(() => {
+    if (!gameId) return [];
+    return GameEventsCollection.find({ gameId, type: 'level-up' }, { sort: { createdAt: -1 } }).fetch();
+  }, [gameId]);
+  useEffect(() => {
     if (!round?._id || playerId) return;
     Meteor.call('players.join', round._id, playerNameFromLobby, gameId, accountId, (error, result) => {
       if (error) {
@@ -54,6 +66,19 @@ export const GamePage = () => {
     setMessage('');
     setCompletedRoundId(null);
   }, [round?._id]);
+  useEffect(() => {
+    if (levelUpEvents.length === 0) return;
+
+    const newest = [...levelUpEvents]
+      .reverse()
+      .slice(0, 4)
+      .map((event) => ({
+        key: event._id,
+        text: `${event.playerName} has reached level ${event.level}`,
+      }));
+
+    setLevelUpNotices(newest);
+  }, [levelUpEvents]);
   const handleColourClick = (colour) => {
     if (!playerCanInput) return;
     if (!round?.sequence) return;
@@ -218,6 +243,41 @@ export const GamePage = () => {
       }}
     >
       <TileLattice opacity={0.06} />
+      <div
+        style={{
+          position: 'fixed',
+          top: '18px',
+          right: '18px',
+          zIndex: 50,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px',
+          pointerEvents: 'none',
+          maxWidth: 'min(320px, calc(100vw - 36px))',
+        }}
+      >
+        {levelUpNotices.map((notice) => (
+          <div
+            key={notice.key}
+            style={{
+              padding: '12px 14px',
+              borderRadius: '14px',
+              background: 'rgba(255,255,255,0.12)',
+              border: '1px solid rgba(255,255,255,0.18)',
+              color: 'white',
+              boxShadow: '0 14px 36px rgba(0,0,0,0.28)',
+              backdropFilter: 'blur(10px)',
+              fontFamily: 'Outfit, sans-serif',
+              fontWeight: 700,
+              fontSize: '0.9rem',
+              lineHeight: 1.25,
+              animation: 'levelUpToastIn 180ms ease-out',
+            }}
+          >
+            {notice.text}
+          </div>
+        ))}
+      </div>
       <div className="relative flex shrink-0 justify-between px-7 py-5" style={{ width: '100%' }}>
         <span style={{ fontSize: '2vw', fontWeight: 800, color: 'white', letterSpacing: '-0.02em', fontFamily: 'Outfit, sans-serif' }}>KIMPLY</span>
       </div>

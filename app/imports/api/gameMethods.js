@@ -3,6 +3,7 @@ import { RoundsCollection } from './rounds';
 import { PlayersCollection } from './players';
 import { LeaderboardCollection } from './leaderboard';
 import { PlayerAccountsCollection } from './playerAccounts';
+import { GameEventsCollection } from './gameEvents';
 import { GlobalLeaderboardCollection } from './globalLeaderboard';
 
 const COLOURS = ['red', 'blue', 'green', 'yellow'];
@@ -353,6 +354,23 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         },
         { multi: true }
       );
+
+      const nextLevel = nextLength - 3;
+      const movedPlayers = await PlayersCollection.find({
+        roundId: nextRoundId,
+        eliminated: false,
+      }).fetchAsync();
+
+      for (const player of movedPlayers) {
+        await GameEventsCollection.insertAsync({
+          gameId: currentRound.gameId,
+          type: 'level-up',
+          playerId: player._id,
+          playerName: player.name,
+          level: nextLevel,
+          createdAt: new Date(),
+        });
+      }
 
       return nextRoundId;
     },
