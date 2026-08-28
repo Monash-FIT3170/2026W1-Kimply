@@ -8,6 +8,10 @@ import {
   PRIMARY, TILE, HAIRLINE, FG2,
   TileLattice, Wordmark, Avatar, avatarColor, ReadyChip, CopyIcon, BackChevron, PencilIcon, RainbowBar,
 } from '../components/design';
+import { playClick } from '../feedback';
+import { playMusic } from '../music';
+
+const MENU_MUSIC = '/music/menu.mp3';
 
 const MAX_PLAYERS = 8;
 
@@ -25,7 +29,7 @@ function getGameModeColor(mode) {
 function BackButton({ onClick }) {
   return (
     <button
-      onClick={onClick}
+      onClick={() => { playClick(); onClick?.(); }}
       className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-[10px] border border-hairline bg-surface"
     >
       <BackChevron size={14} stroke={FG2} />
@@ -127,6 +131,7 @@ function HostView({ room, playerName, onBack, navigate, gameMode, customSettings
   const hasGameName = trimmedGameName.length > 0;
 
   const handleStart = () => {
+    playClick();
     Meteor.call('rooms.start', room.pin, (err) => {
       if (err) {
         console.error(err);
@@ -137,6 +142,7 @@ function HostView({ room, playerName, onBack, navigate, gameMode, customSettings
   };
 
   const kickPlayer = (playerId) => {
+    playClick();
     Meteor.call('rooms.kick', room.pin, playerId);
   };
 
@@ -391,6 +397,10 @@ export function PlayerLobby() {
   const [showExitPopup, setShowExitPopup] = useState(false);
   const isLoading = useSubscribe('rooms.lobby', pin);
   const room = useTracker(() => RoomsCollection.findOne({ pin }));
+
+  useEffect(() => {
+    playMusic(MENU_MUSIC);
+  }, []);
 
   useEffect(() => {
     if (room?.status === 'in_progress' && !gameStarted.current) {

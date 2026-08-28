@@ -394,7 +394,6 @@ Full detail, including the fix for each, is in [docs/defect-register.md](docs/de
 | D7  | `GamePage.jsx:43-53`                           | `playerId` lives only in React state, so a refresh re-fires `players.join` and mints a second player with fresh lives                                                                                                       |
 | D8  | `playerAccounts.js:20-22`                      | Single unstretched SHA-256, non-constant-time comparison, no rate limiting, and an account-enumeration oracle at `:83` vs `:88`                                                                                             |
 | D11 | root `package-lock.json`                       | Declares `@meteorjs/rspack@^2.0.1` while root `package.json` has no dependencies, so `npm ci` at the repo root fails                                                                                                        |
-| D12 | `ColourSequence.jsx:80-92`                     | A new `AudioContext` is created on every tile click and never closed                                                                                                                                                        |
 | D14 | repo-wide                                      | `npm run format:check` **fails on main**: 12 files are prettier-dirty, predating any deployment work. Needs one dedicated formatting commit before formatting can be a CI gate                                              |
 
 ### Not a defect, so nobody chases it again

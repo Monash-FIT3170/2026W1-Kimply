@@ -10,6 +10,7 @@ import { PlayerLobby } from '/imports/ui/pages/PlayerLobby';
 import { EndLeaderboard } from '/imports/ui/EndLeaderboard';
 import { GamePage } from '/imports/ui/pages/GamePage';
 import { Account } from '/imports/ui/pages/Account';
+import { SoundToggle } from '/imports/ui/components/SoundToggle';
 import '/imports/ui/styles.css';
 
 Meteor.startup(() => {
@@ -17,6 +18,7 @@ Meteor.startup(() => {
   const root = createRoot(container);
   root.render(
     <BrowserRouter>
+      <SoundToggle />
       <Routes>
         <Route path="/" element={<Splash />} />
         <Route path="/game" element={<GamePage />} />

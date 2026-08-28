@@ -4,6 +4,7 @@ import { Meteor } from 'meteor/meteor';
 import { PRIMARY, TILE, HAIRLINE, TileLattice, Wordmark, ArrowIcon, BackChevron, FG2 } from '../components/design';
 import { combineKeyHandlers, removeOnBackspace, submitOnEnter } from '../keyboard';
 import { appendRoomCodeInput, clearCapturedInput, roomCodeFromSearchParams } from '../roomCode';
+import { playClick } from '../feedback';
 
 const SLOTS = 5;
 
@@ -35,6 +36,7 @@ export function JoinRoom() {
 
   const handleJoin = () => {
     if (code.length !== SLOTS || loading) return;
+    playClick();
     setLoading(true);
     setError('');
     Meteor.call('rooms.join', code, playerName, (err, res) => {
@@ -72,7 +74,7 @@ export function JoinRoom() {
       <div className="relative flex shrink-0 items-center justify-between px-7 py-5">
         <Wordmark />
         <button
-          onClick={() => navigate(-1)}
+          onClick={() => { playClick(); navigate(-1); }}
           className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-[10px] border border-hairline bg-surface"
         >
           <BackChevron size={14} stroke={FG2} />

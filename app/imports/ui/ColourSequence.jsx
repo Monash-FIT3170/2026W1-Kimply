@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { playColourTone, vibrate } from './feedback';
 
 const SHAPE_ICONS = {
   red: () => <rect x="18" y="18" width="28" height="28" rx="4" fill="none" stroke="white" strokeWidth="3" />,
@@ -61,6 +62,7 @@ export const ColourSequence = ({
 
       const colour = sequence[i];
       setActiveColour(colour);
+      playColourTone(colour);
 
       setTimeout(() => {
         setActiveColour(null);
@@ -76,31 +78,17 @@ export const ColourSequence = ({
       clearTimeout(startDelay);
     };
   }, [roundId, replayKey]);
-  const playClickSound = () => {
-    const audioContext = new AudioContext();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
 
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-
-    oscillator.frequency.value = 450;
-    gainNode.gain.value = 0.08;
-
-    oscillator.start();
-    oscillator.stop(audioContext.currentTime + 0.08);
+  const handleTilePress = (colourId) => {
+    if (!playerCanInput) return;
+    setClickedColour(colourId);
+    playColourTone(colourId);
+    vibrate(25);
+    setTimeout(() => setClickedColour(null), 180);
   };
 
   const handleTileClick = (colourId) => {
     if (!playerCanInput) return;
-
-    setClickedColour(colourId);
-    playClickSound();
-
-    setTimeout(() => {
-      setClickedColour(null);
-    }, 200);
-
     onColourClick(colourId);
   };
   return (
@@ -131,14 +119,19 @@ export const ColourSequence = ({
       >
         {TILE_ORDER.map((colourId) => {
           const ShapeIcon = SHAPE_ICONS[colourId];
-          const isActive = activeColour === colourId || clickedColour === colourId;
-          const bg = isActive ? COLOURS[colourId].active : COLOURS[colourId].dim;
+          const isPlaybackActive = activeColour === colourId;
+          const isClickActive = clickedColour === colourId;
+          const isActive = isPlaybackActive || isClickActive;
+          const activeColourHex = COLOURS[colourId].active;
+          const bg = isActive ? activeColourHex : COLOURS[colourId].dim;
+          const scale = isClickActive ? 0.94 : isPlaybackActive ? 1.05 : 1;
 
           return (
             <button
               key={colourId}
               data-testid={`colour-tile-${colourId}`}
               disabled={!playerCanInput}
+              onPointerDown={() => handleTilePress(colourId)}
               onClick={() => handleTileClick(colourId)}
               style={{
                 width: 'calc(min(360px, 90vw) / 2 - 3px)',
@@ -148,14 +141,15 @@ export const ColourSequence = ({
                 alignItems: 'center',
                 justifyContent: 'center',
                 borderRadius: '16px',
-                transition: 'all 0.15s ease',
+                transition: 'transform 0.12s ease, background-color 0.15s ease, box-shadow 0.15s ease',
                 boxShadow: isActive
-                  ? `0 0 60px ${COLOURS[colourId].active}, 0 0 20px ${COLOURS[colourId].active}`
+                  ? `0 0 90px ${activeColourHex}, 0 0 40px ${activeColourHex}, inset 0 0 30px ${activeColourHex}`
                   : 'none',
-                border: `3px solid ${isActive ? COLOURS[colourId].active : 'rgba(255,255,255,0.08)'}`,
+                border: `3px solid ${isActive ? activeColourHex : 'rgba(255,255,255,0.08)'}`,
                 cursor: playerCanInput ? 'pointer' : 'not-allowed',
                 opacity: playerCanInput || isPlaying ? 1 : 0.7,
-                transform: isActive ? 'scale(0.95)' : 'scale(1)',
+                transform: `scale(${scale})`,
+                animation: isActive ? 'tileActivePulse 0.55s ease-out' : 'none',
               }}
             >
               <svg width="64" height="64" viewBox="0 0 64 64">
