@@ -15,8 +15,8 @@ export const GamePage = () => {
   const [message, setMessage] = useState('');
   const [shake, setShake] = useState(false);
   const [correctGlow, setCorrectGlow] = useState(false);
-  const [completedRoundId, setCompletedRoundId] = useState(null);
   const [replayKey, setReplayKey] = useState(0);
+  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(true);
   const location = useLocation();
   const playerNameFromLobby = location.state?.playerName || 'Demo Player';
   const roomPin = location.state?.pin;
@@ -55,7 +55,6 @@ export const GamePage = () => {
     setPlayerCanInput(false);
     setAttemptedSequence([]);
     setMessage('');
-    setCompletedRoundId(null);
   }, [round?._id]);
   const handleColourClick = (colour) => {
     if (!playerCanInput) return;
@@ -80,7 +79,6 @@ export const GamePage = () => {
       }
       if (result.success) {
         setMessage('Correct sequence! Please wait for other players to finish.');
-        setCompletedRoundId(round._id);
         setCorrectGlow(true);
         setTimeout(() => setCorrectGlow(false), 800);
         setPlayerCanInput(false);
@@ -259,16 +257,8 @@ export const GamePage = () => {
           KIMPLY
         </span>
       </div>
-      <div
-        style={{
-          position: 'relative',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flex: 1,
-        }}
-      >
+      <div className="relative flex flex-1 flex-col items-center justify-center">
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         {/* Lives display */}
         <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2vh' }}>
           {[1, 2, 3].map((heart) => (
@@ -408,9 +398,25 @@ export const GamePage = () => {
               SUBMIT
             </button>
           </div>
-          {completedRoundId && <Leaderboard gameId={gameId} roundId={completedRoundId} />}
         </div>
       </div>
     </div>
+      <button
+        type="button"
+        onClick={() => setIsLeaderboardOpen((open) => !open)}
+        aria-expanded={isLeaderboardOpen}
+        className="fixed right-6 top-6 z-50 rounded-full border border-hairline bg-surface px-4 py-3 font-outfit text-sm font-bold text-fg shadow-lg"
+      >
+        {isLeaderboardOpen ? 'Collapse leaderboard' : 'Leaderboard'}
+      </button>
+
+      <aside
+        className={`fixed right-6 top-20 z-40 w-[28rem] max-w-[calc(100vw-3rem)] transition-transform duration-300 ease-in-out ${
+          isLeaderboardOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        <Leaderboard gameId={gameId} currentPlayerId={playerId} />
+      </aside>
+  </div>
   );
 };
