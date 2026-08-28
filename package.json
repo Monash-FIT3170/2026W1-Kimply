@@ -6,5 +6,8 @@
     "format:check": "npm --prefix app run format:check",
     "test": "npm --prefix app run test",
     "test-app": "npm --prefix app run test-app"
+  },
+  "dependencies": {
+    "ws": "^8.21.3"
   }
 }
