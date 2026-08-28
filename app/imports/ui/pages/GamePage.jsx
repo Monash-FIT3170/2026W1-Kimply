@@ -24,6 +24,28 @@ export const GamePage = () => {
   const roomPin = location.state?.pin;
   const gameId = roomPin || 'demo';
   const accountId = location.state?.playerAccount?._id || null;
+  const playTurnStartSound = () => {
+    const AudioCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtor) return;
+
+    const audioContext = new AudioCtor();
+    const gainNode = audioContext.createGain();
+    const oscillator = audioContext.createOscillator();
+
+    oscillator.type = 'sine';
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    gainNode.gain.setValueAtTime(0.0001, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.08, audioContext.currentTime + 0.02);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.22);
+
+    oscillator.frequency.setValueAtTime(523.25, audioContext.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(659.25, audioContext.currentTime + 0.18);
+
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.24);
+  };
   useEffect(() => {
     const roundsSub = Meteor.subscribe('rounds');
     const playersSub = Meteor.subscribe('players');
@@ -371,6 +393,7 @@ export const GamePage = () => {
             replayKey={replayKey}
             playerCanInput={playerCanInput}
             onSequenceComplete={() => {
+              playTurnStartSound();
               setPlayerCanInput(true);
               setMessage('Your turn. Repeat the sequence.');
             }}
