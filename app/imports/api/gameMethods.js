@@ -304,6 +304,46 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       };
     },
 
+    async 'players.timeoutTurn'(playerId) {
+      const player = await PlayersCollection.findOneAsync(playerId);
+      if (!player || player.eliminated || player.winner || player.gameFinished) {
+        return { ignored: true };
+      }
+
+      const round = await RoundsCollection.findOneAsync(player.roundId);
+      if (!round) {
+        throw new Meteor.Error('round-not-found', 'Current round does not exist');
+      }
+
+      const newLives = player.lives - 1;
+      const eliminated = newLives <= 0;
+      const longestStreak = Math.max(player.longestStreak ?? 0, player.currentStreak ?? 0);
+
+      await PlayersCollection.updateAsync(playerId, {
+        $set: {
+          lives: newLives,
+          currentStreak: 0,
+          longestStreak,
+          totalGuesses: (player.totalGuesses ?? 0) + 1,
+          attemptedSequence: [],
+          completeRound: false,
+          eliminated,
+          eliminatedRound: eliminated ? round.lengthOfSequence - 3 : player.eliminatedRound,
+        },
+      });
+
+      await checkWinner(player.gameId);
+
+      const updatedRound = await RoundsCollection.findOneAsync(player.roundId);
+      await advanceRoundIfReady(updatedRound);
+
+      return {
+        success: true,
+        remainingLives: newLives,
+        eliminated,
+      };
+    },
+
     // advance game to next round
     async 'rounds.advance'(currentRoundId) {
       // get current round

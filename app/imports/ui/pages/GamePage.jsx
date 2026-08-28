@@ -15,6 +15,7 @@ export const GamePage = () => {
   const [attemptedSequence, setAttemptedSequence] = useState([]);
   const [message, setMessage] = useState('');
   const [levelUpNotices, setLevelUpNotices] = useState([]);
+  const [secondsLeft, setSecondsLeft] = useState(30);
   const [shake, setShake] = useState(false);
   const [correctGlow, setCorrectGlow] = useState(false);
   const [completedRoundId, setCompletedRoundId] = useState(null);
@@ -87,6 +88,7 @@ export const GamePage = () => {
     setAttemptedSequence([]);
     setMessage('');
     setCompletedRoundId(null);
+    setSecondsLeft(30);
   }, [round?._id]);
   useEffect(() => {
     if (levelUpEvents.length === 0) return;
@@ -110,6 +112,50 @@ export const GamePage = () => {
     if (attemptedSequence.length >= round.sequence.length) return;
     setAttemptedSequence([...attemptedSequence, colour]);
   };
+  useEffect(() => {
+    if (!playerCanInput || !playerId) {
+      return undefined;
+    }
+
+    setSecondsLeft(30);
+
+    const timeoutId = window.setTimeout(() => {
+      setMessage('Time is up! You lost a life.');
+      Meteor.call('players.timeoutTurn', playerId, (error, result) => {
+        if (error) {
+          console.error(error);
+          setMessage('Something went wrong while handling the timer.');
+          return;
+        }
+
+        if (result?.remainingLives <= 0) {
+          setMessage('Time is up! You have been eliminated!');
+          setPlayerCanInput(false);
+        } else if (typeof result?.remainingLives === 'number') {
+          setMessage(`Time is up! ${result.remainingLives} ${result.remainingLives === 1 ? 'life' : 'lives'} remaining.`);
+          setAttemptedSequence([]);
+          setPlayerCanInput(true);
+          setReplayKey((prev) => prev + 1);
+        }
+      });
+    }, 30000);
+
+    const intervalId = window.setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          window.clearInterval(intervalId);
+          return 0;
+        }
+
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.clearInterval(intervalId);
+    };
+  }, [playerCanInput, playerId, round?._id]);
   const handleSubmit = () => {
     if (!playerId) {
       setMessage('Player is not ready yet.');
@@ -419,6 +465,20 @@ export const GamePage = () => {
           >
             {message}
           </p>
+          {playerCanInput && (
+            <p
+              style={{
+                color: secondsLeft <= 5 ? '#ff7a7a' : '#9ce8ff',
+                marginTop: '0.8vh',
+                minHeight: '2vh',
+                fontSize: '1vw',
+                fontWeight: 'bold',
+                letterSpacing: '1px',
+              }}
+            >
+              Time left: {secondsLeft}s
+            </p>
+          )}
           <div
             style={{
               display: 'flex',
