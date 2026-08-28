@@ -66,6 +66,10 @@ export const playFailure = () => {
   blip(160, { duration: 0.32, gain: 0.12, type: 'sawtooth', sweepTo: 45, when: 0.015 });
 };
 
+export const playClick = () => {
+  blip(880, { duration: 0.06, gain: 0.09, type: 'triangle', chirpFrom: 660 });
+};
+
 export const vibrate = (pattern) => {
   if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return;
   try {

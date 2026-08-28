@@ -1,5 +1,10 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BG, PRIMARY, TILE, TileLattice } from '../components/design';
+import { playMusic } from '../music';
+import { playClick } from '../feedback';
+
+const MENU_MUSIC = '/music/menu.mp3';
 
 function BigLogo() {
   return (
@@ -47,9 +52,13 @@ function BigLogo() {
 export function Splash() {
   const navigate = useNavigate();
 
+  useEffect(() => {
+    playMusic(MENU_MUSIC);
+  }, []);
+
   return (
     <div
-      onClick={() => navigate('/play')}
+      onClick={() => { playClick(); navigate('/play'); }}
       className="relative flex h-full w-full cursor-pointer flex-col overflow-hidden bg-bg text-fg"
     >
       <TileLattice opacity={0.09} />

@@ -9,6 +9,7 @@ import { EndLeaderboard } from '../EndLeaderboard.jsx';
 import { useLocation } from 'react-router-dom';
 import { TileLattice, BG } from '../components/design';
 import { playSuccess, playFailure, vibrate } from '../feedback';
+import { stopMusic } from '../music';
 export const GamePage = () => {
   const [playerId, setPlayerId] = useState(null);
   const [playerCanInput, setPlayerCanInput] = useState(false);
@@ -26,6 +27,7 @@ export const GamePage = () => {
   const gameId = roomPin || null;
   useEffect(() => {
     if (!gameId) return undefined;
+    stopMusic();
     const roundsSub = Meteor.subscribe('rounds', gameId);
     const playersSub = Meteor.subscribe('players', gameId);
     return () => {

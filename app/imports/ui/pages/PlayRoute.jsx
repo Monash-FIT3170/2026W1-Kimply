@@ -4,6 +4,10 @@ import { Meteor } from 'meteor/meteor';
 import { BG, PRIMARY, TILE, HAIRLINE, FG2, TileLattice, Wordmark, Avatar, avatarColor, ArrowIcon, PencilIcon} from '../components/design';
 import { ReconnectPopup } from '../components/ReconnectPopup';
 import { submitOnEnter } from '../keyboard';
+import { playClick } from '../feedback';
+import { playMusic } from '../music';
+
+const MENU_MUSIC = '/music/menu.mp3';
 
 
 
@@ -86,6 +90,10 @@ export function PlayRoute() {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
+  useEffect(() => {
+    playMusic(MENU_MUSIC);
+  }, []);
+
   const wasKicked = state?.kicked === true;
 
   const trimmedName = name.trim();
@@ -134,6 +142,7 @@ export function PlayRoute() {
 
   const handleCreate = () => {
     if (!hasName || loading) return;
+    playClick();
     setLoading(true);
     setError('');
 
@@ -154,6 +163,7 @@ export function PlayRoute() {
 
   const handleJoin = () => {
     if (!hasName) return;
+    playClick();
     navigate('/play/join', { state: { playerName: trimmedName, playerAccount: signedInAccount } });
   };
 
@@ -252,7 +262,7 @@ export function PlayRoute() {
         )}
 
         <button
-          onClick={() => navigate('/')}
+          onClick={() => { playClick(); navigate('/'); }}
           className="rounded-full border border-hairline px-5 py-3 font-outfit text-[13px] font-bold uppercase tracking-[0.16em] text-fg2 transition-colors hover:text-fg"
           style={{ background: 'color-mix(in oklab, oklch(0.20 0.02 270) 72%, transparent)' }}
         >
