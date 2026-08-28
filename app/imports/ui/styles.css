@@ -146,6 +146,12 @@ body,
   background: #1a0533;
 }
 
+@keyframes tileActivePulse {
+  0%   { filter: brightness(1.4) saturate(1.2); }
+  50%  { filter: brightness(1.9) saturate(1.4); }
+  100% { filter: brightness(1.4) saturate(1.2); }
+}
+
 @keyframes ecm-backdrop-in  { from{opacity:0} to{opacity:1} }
 @keyframes ecm-backdrop-out { from{opacity:1} to{opacity:0} }
 @keyframes ecm-card-in  { from{opacity:0;transform:translateY(22px) scale(0.96)} to{opacity:1;transform:none} }

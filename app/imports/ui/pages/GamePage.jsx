@@ -8,6 +8,7 @@ import { Leaderboard } from '../Leaderboard.jsx';
 import { EndLeaderboard } from '../EndLeaderboard.jsx';
 import { useLocation } from 'react-router-dom';
 import { TileLattice, BG } from '../components/design';
+import { playSuccess, playFailure, vibrate } from '../feedback';
 export const GamePage = () => {
   const [playerId, setPlayerId] = useState(null);
   const [playerCanInput, setPlayerCanInput] = useState(false);
@@ -84,11 +85,15 @@ export const GamePage = () => {
         setCorrectGlow(true);
         setTimeout(() => setCorrectGlow(false), 800);
         setPlayerCanInput(false);
+        playSuccess();
+        vibrate([60, 40, 90]);
       } else {
         const remainingLives = result.remainingLives ?? (player?.lives ?? 3) - 1;
+        playFailure();
         if (remainingLives <= 0) {
           setMessage('No lives left. You have been eliminated!');
           setPlayerCanInput(false);
+          vibrate([90, 60, 90, 60, 140]);
         } else {
           setMessage(`Wrong sequence! ${remainingLives} ${remainingLives === 1 ? 'life' : 'lives'} remaining.`);
           setShake(true);
@@ -96,6 +101,7 @@ export const GamePage = () => {
           setAttemptedSequence([]);
           setPlayerCanInput(true);
           setReplayKey((prev) => prev + 1);
+          vibrate([50, 70, 50]);
         }
       }
     });

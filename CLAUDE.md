@@ -380,6 +380,7 @@ Detail lives in `docs/defect-register.md` once Phase 1 lands.
 | D2  | `server/main.js:28-30`    | Publications moved to `server/publications.js`, scoped by `gameId`, and `attemptedSequence` excluded                        |
 | D9  | `PlayerLobby.jsx:376-379` | The dead `useEffect` after the early return was deleted, so no hook follows the conditional return                          |
 | D10 | `PlayerLobby.jsx:419`     | `navigate` is now passed to `<HostView>`. This was throwing `TypeError: navigate is not a function` on **every** game start |
+| D12 | `ColourSequence.jsx`      | AudioContext leak fixed by moving audio into `imports/ui/feedback.js`, which lazily creates and reuses a single context     |
 
 ### Outstanding
 
@@ -394,7 +395,6 @@ Full detail, including the fix for each, is in [docs/defect-register.md](docs/de
 | D7  | `GamePage.jsx:43-53`                           | `playerId` lives only in React state, so a refresh re-fires `players.join` and mints a second player with fresh lives                                                                                                       |
 | D8  | `playerAccounts.js:20-22`                      | Single unstretched SHA-256, non-constant-time comparison, no rate limiting, and an account-enumeration oracle at `:83` vs `:88`                                                                                             |
 | D11 | root `package-lock.json`                       | Declares `@meteorjs/rspack@^2.0.1` while root `package.json` has no dependencies, so `npm ci` at the repo root fails                                                                                                        |
-| D12 | `ColourSequence.jsx:80-92`                     | A new `AudioContext` is created on every tile click and never closed                                                                                                                                                        |
 | D14 | repo-wide                                      | `npm run format:check` **fails on main**: 12 files are prettier-dirty, predating any deployment work. Needs one dedicated formatting commit before formatting can be a CI gate                                              |
 
 ### Not a defect, so nobody chases it again
@@ -484,6 +484,15 @@ When new durable information is learned, update the relevant memory file immedia
 
 Newest first.
 One entry per substantive change: what changed, which files, and any consequence that is not obvious from the diff.
+
+### 2026-08-28 - Richer sound, glow, and haptics on tile interactions
+
+Each colour tile now plays a distinct pitched tone on both playback and click (C4/E4/G4/C5), pulses with a much brighter tri-layer glow, and buzzes the device via `navigator.vibrate`. On submit, `GamePage` fires an ascending four-note chord for a correct sequence and a descending saw buzz for a wrong one, with matched vibration patterns. New file `imports/ui/feedback.js` owns the audio and haptics; also edited `ColourSequence.jsx`, `pages/GamePage.jsx`, and `styles.css` (added `tileActivePulse` keyframe).
+
+Two consequences worth carrying forward:
+
+- **D12 (leaked `AudioContext` per click) is fixed as a side effect.** `feedback.js` lazily creates a single shared `AudioContext` and always calls `.resume()` before scheduling, because most browsers hold the context in `suspended` state until a user gesture. Any future audio should go through this module, not `new AudioContext()` inline.
+- **iOS Safari will not vibrate**, ever - `navigator.vibrate` is unimplemented there, and the wrapper silently no-ops. Do not treat missing haptics on iPhone as a regression. Audio unlocks on the first tile click; the very first sequence playback of a session may therefore be silent on stricter browsers, which is acceptable and matches Simon-style expectations.
 
 ### 2026-08-24 - Custom flash speed choices
 
