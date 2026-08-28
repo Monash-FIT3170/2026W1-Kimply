@@ -88,8 +88,9 @@ async function checkWinner(gameId) {
   if (alreadyFinished) return;
 
   const active = players.filter((p) => !p.eliminated);
+  const hasMultiplePlayers = players.length > 1;
 
-  if (active.length === 1) {
+  if (hasMultiplePlayers && active.length === 1) {
     const winner = active[0];
     await PlayersCollection.updateAsync(winner._id, {
       $set: {
@@ -117,7 +118,7 @@ async function checkWinner(gameId) {
     }
   }
 
-  if (active.length === 0 && players.length > 0) {
+  if (hasMultiplePlayers && active.length === 0 && players.length > 0) {
     const highestRound = Math.max(...players.map((p) => p.eliminatedRound ?? 0));
 
     await PlayersCollection.updateAsync(
