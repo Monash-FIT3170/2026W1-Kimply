@@ -7,6 +7,9 @@ Once the instance exists, only [Routine deployment](#7-routine-deployment) and [
 
 **Region:** `ap-southeast-2` (Sydney) throughout.
 
+This runbook describes **production**.
+The development environment at `dev.kimply.online` is the same stack with different names throughout; see [dev-environment.md](dev-environment.md), which is a delta against this document rather than a second copy of it.
+
 ---
 
 ## Contents
@@ -37,7 +40,7 @@ You need:
 - A domain you control, with the ability to create an A record.
 - A MongoDB Atlas account.
 
-**Architecture note.** The deployment target is `t4g.medium`, which is **arm64** (Graviton).
+**Architecture note.** The deployment target is `t4g.small`, which is **arm64** (Graviton).
 Images are built for `linux/arm64` only.
 An amd64 image will not run on it.
 
@@ -58,6 +61,18 @@ Substitute these throughout. Keep a note of them as you go.
 | `<INSTANCE_ID>` | EC2 instance id | `i-0abc123...` |
 | `<ELASTIC_IP>` | Allocated Elastic IP | `13.55.x.x` |
 | `<SHA>` | Full 40-character git commit SHA | `a1b2c3...` |
+
+Both environments exist in the same AWS account, so the placeholders resolve differently depending on which one you are working on:
+
+| Placeholder | Production | Development |
+|---|---|---|
+| `<DOMAIN>` | `kimply.online` | `dev.kimply.online` |
+| `<INSTANCE_ID>` | `i-08184036cf37c932c` | `i-09575e88c984e1c7d` |
+| `<ELASTIC_IP>` | `15.134.53.178` | `15.134.96.122` |
+| `ECR_REPOSITORY` | `kimply` | `kimply-dev` |
+
+Getting these two mixed up is the single most consequential mistake available in this document.
+Check `<INSTANCE_ID>` before every `ssm start-session` and every `deploy.sh`.
 
 Get your account id with:
 
@@ -388,7 +403,7 @@ Copy `deploy/bootstrap-ec2.sh` onto the instance and run it as root:
 sudo bash /tmp/bootstrap-ec2.sh
 ```
 
-It installs Docker CE and the compose plugin, installs **AWS CLI v2** (required by `deploy.sh` for ECR auth, and not shipped with Ubuntu), creates a 4 GB swap file, creates `/opt/kimply`, and installs the certificate renewal cron.
+It installs Docker CE and the compose plugin, installs **AWS CLI v2** (required by `deploy.sh` for ECR auth, and not shipped with Ubuntu), creates a 2 GB swap file (`SWAP_SIZE_MB` in `deploy/bootstrap-ec2.sh`), creates `/opt/kimply`, and installs the certificate renewal cron.
 It is idempotent.
 
 Then place the deployment configuration in `/opt/kimply`:
@@ -420,8 +435,12 @@ That is a real reduction in what lives on a public-facing box.
 ./deploy/build-push.sh
 ```
 
-This refuses a dirty working tree, builds `linux/arm64`, **boots the image against a throwaway MongoDB and checks `/health/ready` before pushing**, then pushes tagged with the commit SHA.
-A broken image never reaches the registry.
+This builds `linux/arm64`, asserts the image declares a `HEALTHCHECK`, and pushes it tagged with the commit SHA.
+It reads `ECR_REPOSITORY` from the environment, which is how the same script serves both environments.
+
+It does **not** refuse a dirty working tree and does **not** boot the image before pushing.
+An earlier version did both; the rewrite that moved the build into CI dropped them.
+The health gate that does exist is in `deploy.sh`, after the image is already in the registry.
 
 Note the SHA it prints.
 
@@ -519,11 +538,19 @@ The invite link matters specifically: `navigator.clipboard` is unavailable outsi
 
 ## 11. Routine deployment
 
-```bash
-# On your machine
-./deploy/build-push.sh                                  # prints <SHA>
+> **Before you ever run `deploy/sync-config.sh` against production, diff first.**
+> On 2026-08-21 the production box was found to be running a `deploy.sh` that was *newer and more correct* than the repository's, fixed in place and never committed back. A sync would have silently reverted it. `sync-config.sh --dry-run` shows exactly what would change; treat any unexpected entry under `deploy/` as drift to investigate and port back, not to overwrite.
 
-# On the instance
+Normally you do not run this at all.
+`.github/workflows/deploy.yml` performs exactly these steps on every push: `main` deploys to production, `dev` deploys to development.
+The manual path below is for when CI is unavailable, or for deploying a SHA that is not the tip of a branch.
+
+```bash
+# On your machine. ECR_REPOSITORY selects the environment.
+ECR_REPOSITORY=kimply     ./deploy/build-push.sh        # production, prints <SHA>
+ECR_REPOSITORY=kimply-dev ./deploy/build-push.sh        # development
+
+# On the instance. Check you targeted the right one.
 aws ssm start-session --region ap-southeast-2 --target <INSTANCE_ID>
 sudo /opt/kimply/deploy/deploy.sh <SHA>
 ```
