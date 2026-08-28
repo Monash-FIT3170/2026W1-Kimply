@@ -1,3 +1,5 @@
+import { isSoundOn, subscribeMuted } from './audio';
+
 let audioEl = null;
 let currentSrc = null;
 let wantsToPlay = false;
@@ -18,6 +20,7 @@ const armUnlock = () => {
 
 const tryPlay = () => {
   if (!audioEl) return;
+  if (!isSoundOn()) return;
   const p = audioEl.play();
   if (p && typeof p.catch === 'function') p.catch(armUnlock);
 };
@@ -35,6 +38,16 @@ export const playMusic = (src, { volume = 0.35 } = {}) => {
   audioEl.volume = volume;
   if (audioEl.paused) tryPlay();
 };
+
+subscribeMuted((muted) => {
+  if (!audioEl) return;
+  if (muted) {
+    // Pause without resetting currentTime so unmute resumes from position.
+    audioEl.pause();
+  } else if (wantsToPlay) {
+    tryPlay();
+  }
+});
 
 export const stopMusic = () => {
   wantsToPlay = false;

@@ -1,3 +1,5 @@
+import { isSoundOn } from './audio';
+
 const COLOUR_FREQUENCIES = {
   red: 523.25,    // C5
   yellow: 659.25, // E5
@@ -20,6 +22,7 @@ const blip = (
   targetFreq,
   { duration = 0.13, gain = 0.16, type = 'square', chirpFrom = null, sweepTo = null, when = 0 } = {},
 ) => {
+  if (!isSoundOn()) return;
   const ctx = getContext();
   if (!ctx) return;
   const t0 = ctx.currentTime + when;
@@ -71,6 +74,7 @@ export const playClick = () => {
 };
 
 export const vibrate = (pattern) => {
+  if (!isSoundOn()) return;
   if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return;
   try {
     navigator.vibrate(pattern);
