@@ -74,7 +74,10 @@ export const GamePage = () => {
       .slice(0, 4)
       .map((event) => ({
         key: event._id,
-        text: `${event.playerName} has reached level ${event.level}`,
+        text:
+          event.playerId === playerId
+            ? `You have leveled up to level ${event.level}`
+            : `${event.playerName} has reached level ${event.level}`,
       }));
 
     setLevelUpNotices(newest);
@@ -279,9 +282,28 @@ export const GamePage = () => {
         ))}
       </div>
       <div className="relative flex shrink-0 justify-between px-7 py-5" style={{ width: '100%' }}>
-        <span style={{ fontSize: '2vw', fontWeight: 800, color: 'white', letterSpacing: '-0.02em', fontFamily: 'Outfit, sans-serif' }}>KIMPLY</span>
+        <span
+          style={{
+            fontSize: '2vw',
+            fontWeight: 800,
+            color: 'white',
+            letterSpacing: '-0.02em',
+            fontFamily: 'Outfit, sans-serif',
+          }}
+        >
+          KIMPLY
+        </span>
       </div>
-      <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
+      <div
+        style={{
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flex: 1,
+        }}
+      >
         {/* Lives display */}
         <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2vh' }}>
           {[1, 2, 3].map((heart) => (
@@ -413,7 +435,8 @@ export const GamePage = () => {
                 fontSize: '0.9vw',
                 border: 'none',
                 borderRadius: '8px',
-                cursor: playerCanInput && attemptedSequence.length === round.sequence.length ? 'pointer' : 'not-allowed',
+                cursor:
+                  playerCanInput && attemptedSequence.length === round.sequence.length ? 'pointer' : 'not-allowed',
                 letterSpacing: '1px',
               }}
             >
