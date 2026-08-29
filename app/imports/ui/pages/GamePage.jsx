@@ -368,7 +368,6 @@ export const GamePage = () => {
           </div>
           {completedRoundId && <Leaderboard roundId={completedRoundId} />}
         </div>
-        {completedRoundId && <Leaderboard roundId={completedRoundId} />}
         <EliminationFeed gameId={gameId} />
       </div>
     </div>
