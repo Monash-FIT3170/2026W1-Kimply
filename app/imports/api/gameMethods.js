@@ -74,12 +74,11 @@ async function advanceRoundIfReady(round) {
     roundId: round._id,
   }).fetchAsync();
 
+  const room = await RoomsCollection.findOneAsync({ pin: round.gameId });
+  const expectedPlayerCount = room?.players?.length ?? 0;
   const activePlayers = playersInRound.filter((p) => !p.eliminated);
-  const allFinished = activePlayers.length > 0 && activePlayers.every((p) => p.completeRound);
-  const hasWinner = await PlayersCollection.findOneAsync({
-    gameId: round.gameId,
-    winner: true,
-  });
+  const allFinished = playersInRound.length >= expectedPlayerCount && activePlayers.length > 0 && activePlayers.every((p) => p.completeRound);
+  const hasWinner = playersInRound.some((p) => p.winner);
 
   if (!round.advanced && allFinished && !hasWinner) {
     await Meteor.callAsync('rounds.advance', round._id);
