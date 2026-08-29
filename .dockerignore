@@ -1,0 +1,36 @@
+# Build context for the DEVELOPMENT image (app/Dockerfile.dev), whose context is
+# the repository root because docker-compose.yml builds with `context: .`.
+#
+# Without this file the whole repo - including app/node_modules, .git and
+# app/_build - is uploaded to the Docker daemon on every dev build.
+#
+# The dev container bind-mounts the source at /kimply and named volumes shadow
+# .meteor/local and node_modules, so none of the below is needed in the context.
+
+node_modules
+app/node_modules
+app/.meteor/local
+app/_build
+app/.nyc_output
+
+.git
+.github
+.vscode
+.idea
+
+coverage
+dist
+build
+
+.DS_Store
+Thumbs.db
+
+npm-debug.log*
+*.log
+
+.env
+.env.*
+
+# Local-only tooling and notes.
+.claude
+docs

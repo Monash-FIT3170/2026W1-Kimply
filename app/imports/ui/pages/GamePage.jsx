@@ -20,12 +20,14 @@ export const GamePage = () => {
   const [secondsLeft, setSecondsLeft] = useState(30);
   const [shake, setShake] = useState(false);
   const [correctGlow, setCorrectGlow] = useState(false);
-  const [completedRoundId, setCompletedRoundId] = useState(null);
   const [replayKey, setReplayKey] = useState(0);
+  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(true);
   const location = useLocation();
   const playerNameFromLobby = location.state?.playerName || 'Demo Player';
   const roomPin = location.state?.pin;
-  const gameId = roomPin || 'demo';
+  // No 'demo' fallback: the publications are scoped by gameId, so a placeholder
+  // would subscribe to a game that does not exist and hang on LOADING forever.
+  const gameId = roomPin || null;
   const accountId = location.state?.playerAccount?._id || null;
   const playTurnStartSound = () => {
     const AudioCtor = window.AudioContext || window.webkitAudioContext;
@@ -41,7 +43,7 @@ export const GamePage = () => {
 
     gainNode.gain.setValueAtTime(0.0001, audioContext.currentTime);
     gainNode.gain.exponentialRampToValueAtTime(0.08, audioContext.currentTime + 0.02);
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.22);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.24);
 
     oscillator.frequency.setValueAtTime(523.25, audioContext.currentTime);
     oscillator.frequency.exponentialRampToValueAtTime(659.25, audioContext.currentTime + 0.18);
@@ -50,14 +52,16 @@ export const GamePage = () => {
     oscillator.stop(audioContext.currentTime + 0.24);
   };
   useEffect(() => {
-    const roundsSub = Meteor.subscribe('rounds');
-    const playersSub = Meteor.subscribe('players');
+    if (!gameId) return undefined;
+    const roundsSub = Meteor.subscribe('rounds', gameId);
+    const playersSub = Meteor.subscribe('players', gameId);
     return () => {
       roundsSub.stop();
       playersSub.stop();
     };
-  }, []);
+  }, [gameId]);
   const round = useTracker(() => {
+    if (!gameId) return null;
     return RoundsCollection.findOne({ gameId, isCurrent: true });
   }, [gameId]);
   const player = useTracker(() => {
@@ -65,6 +69,7 @@ export const GamePage = () => {
     return PlayersCollection.findOne(playerId);
   }, [playerId]);
   useEffect(() => {
+    if (!gameId) return undefined;
     const eventsSub = Meteor.subscribe('gameEvents', gameId);
     return () => {
       eventsSub.stop();
@@ -89,7 +94,6 @@ export const GamePage = () => {
     setPlayerCanInput(false);
     setAttemptedSequence([]);
     setMessage('');
-    setCompletedRoundId(null);
     setSecondsLeft(30);
   }, [round?._id]);
   useEffect(() => {
@@ -175,7 +179,6 @@ export const GamePage = () => {
       }
       if (result.success) {
         setMessage('Correct sequence! Please wait for other players to finish.');
-        setCompletedRoundId(round._id);
         setCorrectGlow(true);
         setTimeout(() => setCorrectGlow(false), 800);
         setPlayerCanInput(false);
@@ -199,6 +202,31 @@ export const GamePage = () => {
     setAttemptedSequence([]);
     setMessage('Try again. Repeat the flashed sequence.');
   };
+  // Reached by loading /game directly, or after a refresh drops location.state.
+  // Without a room PIN there is no game to subscribe to, so say so instead of
+  // sitting on LOADING indefinitely.
+  if (!gameId) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          background: 'linear-gradient(135deg, #1a0533 0%, #0d1b4b 100%)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '18px',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <p style={{ color: 'white', letterSpacing: '4px', fontSize: '0.8rem', fontWeight: 'bold', opacity: 0.5 }}>
+          NO GAME SELECTED
+        </p>
+        <a href="/play" style={{ color: '#7CFFB2', fontSize: '0.9rem' }}>
+          Join or create a room
+        </a>
+      </div>
+    );
+  }
   if (!round) {
     return (
       <div
@@ -309,7 +337,8 @@ export const GamePage = () => {
       style={{
         minHeight: '100vh',
         position: 'relative',
-        overflow: 'hidden',
+        overflowX: 'hidden',
+        overflowY: 'auto',
         background: 'linear-gradient(135deg, #1a0533 0%, #0d1b4b 100%)',
         display: 'flex',
         flexDirection: 'column',
@@ -324,8 +353,8 @@ export const GamePage = () => {
         style={{
           position: 'fixed',
           top: '18px',
-          right: '18px',
-          zIndex: 50,
+          left: '18px',
+          zIndex: 40,
           display: 'flex',
           flexDirection: 'column',
           gap: '10px',
@@ -368,16 +397,8 @@ export const GamePage = () => {
           KIMPLY
         </span>
       </div>
-      <div
-        style={{
-          position: 'relative',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flex: 1,
-        }}
-      >
+      <div className="relative flex flex-1 flex-col items-center justify-start md:justify-center">
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         {/* Lives display */}
         <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2vh' }}>
           {[1, 2, 3].map((heart) => (
@@ -532,10 +553,26 @@ export const GamePage = () => {
               SUBMIT
             </button>
           </div>
-          {completedRoundId && <Leaderboard roundId={completedRoundId} />}
+        </div>
         </div>
         <EliminationFeed gameId={gameId} />
       </div>
+      <button
+        type="button"
+        onClick={() => setIsLeaderboardOpen((open) => !open)}
+        aria-expanded={isLeaderboardOpen}
+        className="fixed right-4 top-4 z-50 rounded-full border border-hairline bg-surface px-4 py-3 font-outfit text-xs font-bold text-fg shadow-lg sm:right-6 sm:top-6 sm:text-sm"
+      >
+        {isLeaderboardOpen ? 'Collapse leaderboard' : 'Leaderboard'}
+      </button>
+
+      <aside
+        className={`relative z-30 mx-auto mt-6 w-full max-w-[calc(100vw-2rem)] px-4 pb-8 transition-all duration-300 ease-in-out md:fixed md:right-6 md:top-20 md:mx-0 md:mt-0 md:w-[28rem] md:max-w-[calc(100vw-3rem)] md:px-0 md:pb-0 md:transition-transform ${
+          isLeaderboardOpen ? 'block md:translate-x-0' : 'hidden md:block md:translate-x-full'
+        }`}
+      >
+        <Leaderboard gameId={gameId} currentPlayerId={playerId} />
+      </aside>
     </div>
   );
 };

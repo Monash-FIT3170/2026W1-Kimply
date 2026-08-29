@@ -1,6 +1,42 @@
+# Build context for the production image (app/Dockerfile).
+#
+# Keep this tight: everything listed here is either regenerated inside the build
+# or has no business in a production image.
+
+# Reinstalled inside the container, and host binaries are the wrong architecture.
 node_modules
+
+# Meteor's local build cache and output.
 .meteor/local
-.git
 _build
 dist
+build
+
+# Coverage artefacts.
+.nyc_output
 coverage
+
+# NOTE: tests/ must NOT be excluded. `meteor.testModule` in package.json points at
+# tests/main.js, and `meteor build` resolves that path even for a production build,
+# failing with:
+#   error: Could not resolve meteor.mainModule "tests/main.js" in package.json
+# The tests are not emitted into the production bundle, so keeping them in the
+# context costs a few KB and nothing else.
+
+# VCS and editor noise.
+.git
+.gitignore
+.vscode
+.idea
+
+# OS junk.
+.DS_Store
+Thumbs.db
+
+# Logs.
+npm-debug.log*
+*.log
+
+# Never let anything resembling an env file reach an image layer.
+.env
+.env.*

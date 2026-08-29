@@ -374,16 +374,15 @@ export function PlayerLobby() {
     }
   }, [room?.status]);
 
+  // Must stay below every hook call. There was previously a second useEffect
+  // after this early return, which meant React saw a different number of hooks
+  // on the redirect path and threw "Rendered fewer hooks than expected".
+  // That effect was also dead code: `!isLoading` negates a function, never a
+  // boolean, so its body could never run.
   if (!isLoading() && !room && !gameStarted.current) {
     navigate('/play', { replace: true });
     return null;
   }
-  useEffect(()=>{
-    if (room === undefined && !isLoading){
-      navigate('/play', {replace: true});
-    }
-  }, [room]);
-
 
   if (!room) {
     return (
