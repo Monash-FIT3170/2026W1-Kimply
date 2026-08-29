@@ -58,7 +58,8 @@ Full workflow lives in the `git` skill. Non-negotiable:
 
 - Never commit or push unless the user asks.
 - Never push to `main` or `dev`. Open a PR that targets `dev` unless this is a production release onto `main`.
-- Every new branch is created **with** a GitHub issue. Name: `{feature,fix,bug,chore}/<issue-number>-<slug>`, cut from up-to-date `origin/dev`.
+- Every new branch is created **with** a GitHub issue. Name: `{feature,fix,bug,chore}/<issue-number>-<slug>`, cut from up-to-date `origin/dev` via `gh issue develop` so the branch appears on the issue.
+- The PR body must contain a standalone `Closes #<n>` so GitHub records "linked a pull request that will close this issue". Do not paste branch/PR URLs into the issue body.
 - If `gh` is not available, print the exact commands. Do not skip the issue.
 
 ---
