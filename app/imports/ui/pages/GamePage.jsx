@@ -20,6 +20,8 @@ export const GamePage = () => {
   const [replayKey, setReplayKey] = useState(0);
   const location = useLocation();
   const playerNameFromLobby = location.state?.playerName || 'Demo Player';
+  const gameMode = location.state?.gameMode || 'standard';
+  const isBattleRoyale = gameMode === 'battle_royale';
   const roomPin = location.state?.pin;
   const lobbyPlayerId = location.state?.playerId;
   // No 'demo' fallback: the publications are scoped by gameId, so a placeholder
@@ -41,10 +43,6 @@ export const GamePage = () => {
       roomSub.stop();
     };
   }, [gameId]);
-  const round = useTracker(() => {
-    if (!gameId) return null;
-    return RoundsCollection.findOne({ gameId, isCurrent: true });
-  }, [gameId]);
   const player = useTracker(() => {
     if (!playerId) return null;
     return PlayersCollection.findOne(playerId);
@@ -53,25 +51,45 @@ export const GamePage = () => {
     if (!gameId) return null;
     return RoomsCollection.findOne({ pin: gameId });
   }, [gameId]);
-  const totalLives = room?.gameMode === 'custom' ? room.customSettings?.startingLives ?? 3 : 3;
+  const round = useTracker(() => {
+    if (!gameId) return null;
+    //in battle royale follow the player's specific round
+    if (player?.roundId) {
+      return RoundsCollection.findOne(player.roundId);
+    }
+    return RoundsCollection.findOne({ gameId, isCurrent: true });
+  }, [gameId, player?.roundId]);
+  const totalLives = room?.gameMode === 'custom' ? (room.customSettings?.startingLives ?? 3) : 3;
   useEffect(() => {
     if (!round?._id || playerId) return;
-    Meteor.call('players.join', round._id, playerNameFromLobby, gameId, lobbyPlayerId, (error, result) => {
-      if (error) {
-        console.error(error);
-        setMessage('Could not join the game.');
-        return;
+    // get game mode
+    const gameMode = location.state?.gameMode || 'standard';
+    const isBattleRoyale = gameMode === 'battle_royale';
+    Meteor.call(
+      'players.join',
+      round._id,
+      playerNameFromLobby,
+      gameId,
+      lobbyPlayerId,
+      isBattleRoyale,
+      (error, result) => {
+        if (error) {
+          console.error(error);
+          setMessage('Could not join the game.');
+          return;
+        }
+        setPlayerId(result);
+        localStorage.setItem(`gamePlayerId:${gameId}`, result);
       }
-      setPlayerId(result);
-      localStorage.setItem(`gamePlayerId:${gameId}`, result);
-    });
+    );
   }, [round?._id, playerId, gameId, playerNameFromLobby, lobbyPlayerId]);
   useEffect(() => {
     setPlayerCanInput(false);
     setAttemptedSequence([]);
     setMessage('');
     setCompletedRoundId(null);
-  }, [round?._id]);
+    setReplayKey((prev) => prev + 1); //play sequence flash for new round
+  }, [player?.roundId]); //watch sequence of player's specific roundId
   const handleColourClick = (colour) => {
     if (!playerCanInput) return;
     if (!round?.sequence) return;
@@ -94,7 +112,11 @@ export const GamePage = () => {
         return;
       }
       if (result.success) {
-        setMessage(result.roundAdvanced ? 'All players finished. Starting next round.' : 'Correct sequence! Please wait for other players to finish.');
+        if (isBattleRoyale) {
+          setMessage('Correct! Moving to next round...');
+        } else {
+          setMessage('Correct sequence! Please wait for other players to finish.');
+        }
         setCompletedRoundId(round._id);
         setCorrectGlow(true);
         setTimeout(() => setCorrectGlow(false), 800);
@@ -316,7 +338,7 @@ export const GamePage = () => {
               fontSize: '1.2vw',
             }}
           >
-            LEVEL {round.roundNumber}
+            LEVEL {round.roundNumber ?? round.lengthOfSequence - 3}
           </p>
           <p
             style={{
