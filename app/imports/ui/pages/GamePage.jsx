@@ -3,6 +3,7 @@ import { Meteor } from 'meteor/meteor';
 import { useTracker } from 'meteor/react-meteor-data';
 import { RoundsCollection } from '../../api/rounds';
 import { PlayersCollection } from '../../api/players';
+import { GameEventsCollection } from '../../api/gameEvents';
 import { ColourSequence } from '../ColourSequence.jsx';
 import { Leaderboard } from '../Leaderboard.jsx';
 import { EndLeaderboard } from '../EndLeaderboard.jsx';
@@ -15,6 +16,8 @@ export const GamePage = () => {
   const [playerCanInput, setPlayerCanInput] = useState(false);
   const [attemptedSequence, setAttemptedSequence] = useState([]);
   const [message, setMessage] = useState('');
+  const [levelUpNotices, setLevelUpNotices] = useState([]);
+  const [secondsLeft, setSecondsLeft] = useState(30);
   const [shake, setShake] = useState(false);
   const [correctGlow, setCorrectGlow] = useState(false);
   const [completedRoundId, setCompletedRoundId] = useState(null);
@@ -24,6 +27,28 @@ export const GamePage = () => {
   const roomPin = location.state?.pin;
   const gameId = roomPin || 'demo';
   const accountId = location.state?.playerAccount?._id || null;
+  const playTurnStartSound = () => {
+    const AudioCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtor) return;
+
+    const audioContext = new AudioCtor();
+    const gainNode = audioContext.createGain();
+    const oscillator = audioContext.createOscillator();
+
+    oscillator.type = 'sine';
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    gainNode.gain.setValueAtTime(0.0001, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.08, audioContext.currentTime + 0.02);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.22);
+
+    oscillator.frequency.setValueAtTime(523.25, audioContext.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(659.25, audioContext.currentTime + 0.18);
+
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.24);
+  };
   useEffect(() => {
     const roundsSub = Meteor.subscribe('rounds');
     const playersSub = Meteor.subscribe('players');
@@ -40,6 +65,16 @@ export const GamePage = () => {
     return PlayersCollection.findOne(playerId);
   }, [playerId]);
   useEffect(() => {
+    const eventsSub = Meteor.subscribe('gameEvents', gameId);
+    return () => {
+      eventsSub.stop();
+    };
+  }, [gameId]);
+  const levelUpEvents = useTracker(() => {
+    if (!gameId) return [];
+    return GameEventsCollection.find({ gameId, type: 'level-up' }, { sort: { createdAt: -1 } }).fetch();
+  }, [gameId]);
+  useEffect(() => {
     if (!round?._id || playerId) return;
     Meteor.call('players.join', round._id, playerNameFromLobby, gameId, accountId, (error, result) => {
       if (error) {
@@ -55,13 +90,74 @@ export const GamePage = () => {
     setAttemptedSequence([]);
     setMessage('');
     setCompletedRoundId(null);
+    setSecondsLeft(30);
   }, [round?._id]);
+  useEffect(() => {
+    if (levelUpEvents.length === 0) return;
+
+    const newest = [...levelUpEvents]
+      .reverse()
+      .slice(0, 4)
+      .map((event) => ({
+        key: event._id,
+        text:
+          event.playerId === playerId
+            ? `You have leveled up to level ${event.level}`
+            : `${event.playerName} has reached level ${event.level}`,
+      }));
+
+    setLevelUpNotices(newest);
+  }, [levelUpEvents]);
   const handleColourClick = (colour) => {
     if (!playerCanInput) return;
     if (!round?.sequence) return;
     if (attemptedSequence.length >= round.sequence.length) return;
     setAttemptedSequence([...attemptedSequence, colour]);
   };
+  useEffect(() => {
+    if (!playerCanInput || !playerId) {
+      return undefined;
+    }
+
+    setSecondsLeft(30);
+
+    const timeoutId = window.setTimeout(() => {
+      setMessage('Time is up! You lost a life.');
+      Meteor.call('players.timeoutTurn', playerId, (error, result) => {
+        if (error) {
+          console.error(error);
+          setMessage('Something went wrong while handling the timer.');
+          return;
+        }
+
+        if (result?.remainingLives <= 0) {
+          setMessage('Time is up! You have been eliminated!');
+          setPlayerCanInput(false);
+        } else if (typeof result?.remainingLives === 'number') {
+          setMessage(`Time is up! ${result.remainingLives} ${result.remainingLives === 1 ? 'life' : 'lives'} remaining.`);
+          setAttemptedSequence([]);
+          setPlayerCanInput(true);
+          setReplayKey((prev) => prev + 1);
+        }
+      });
+    }, 30000);
+
+    const intervalId = window.setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          window.clearInterval(intervalId);
+          return 0;
+        }
+
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.clearInterval(intervalId);
+    };
+  }, [playerCanInput, playerId, round?._id]);
   const handleSubmit = () => {
     if (!playerId) {
       setMessage('Player is not ready yet.');
@@ -224,10 +320,64 @@ export const GamePage = () => {
       }}
     >
       <TileLattice opacity={0.06} />
-      <div className="relative flex shrink-0 justify-between px-7 py-5" style={{ width: '100%' }}>
-        <span style={{ fontSize: '2vw', fontWeight: 800, color: 'white', letterSpacing: '-0.02em', fontFamily: 'Outfit, sans-serif' }}>KIMPLY</span>
+      <div
+        style={{
+          position: 'fixed',
+          top: '18px',
+          right: '18px',
+          zIndex: 50,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px',
+          pointerEvents: 'none',
+          maxWidth: 'min(320px, calc(100vw - 36px))',
+        }}
+      >
+        {levelUpNotices.map((notice) => (
+          <div
+            key={notice.key}
+            style={{
+              padding: '12px 14px',
+              borderRadius: '14px',
+              background: 'rgba(255,255,255,0.12)',
+              border: '1px solid rgba(255,255,255,0.18)',
+              color: 'white',
+              boxShadow: '0 14px 36px rgba(0,0,0,0.28)',
+              backdropFilter: 'blur(10px)',
+              fontFamily: 'Outfit, sans-serif',
+              fontWeight: 700,
+              fontSize: '0.9rem',
+              lineHeight: 1.25,
+              animation: 'levelUpToastIn 180ms ease-out',
+            }}
+          >
+            {notice.text}
+          </div>
+        ))}
       </div>
-      <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
+      <div className="relative flex shrink-0 justify-between px-7 py-5" style={{ width: '100%' }}>
+        <span
+          style={{
+            fontSize: '2vw',
+            fontWeight: 800,
+            color: 'white',
+            letterSpacing: '-0.02em',
+            fontFamily: 'Outfit, sans-serif',
+          }}
+        >
+          KIMPLY
+        </span>
+      </div>
+      <div
+        style={{
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flex: 1,
+        }}
+      >
         {/* Lives display */}
         <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2vh' }}>
           {[1, 2, 3].map((heart) => (
@@ -295,6 +445,7 @@ export const GamePage = () => {
             replayKey={replayKey}
             playerCanInput={playerCanInput}
             onSequenceComplete={() => {
+              playTurnStartSound();
               setPlayerCanInput(true);
               setMessage('Your turn. Repeat the sequence.');
             }}
@@ -320,6 +471,20 @@ export const GamePage = () => {
           >
             {message}
           </p>
+          {playerCanInput && (
+            <p
+              style={{
+                color: secondsLeft <= 5 ? '#ff7a7a' : '#9ce8ff',
+                marginTop: '0.8vh',
+                minHeight: '2vh',
+                fontSize: '1vw',
+                fontWeight: 'bold',
+                letterSpacing: '1px',
+              }}
+            >
+              Time left: {secondsLeft}s
+            </p>
+          )}
           <div
             style={{
               display: 'flex',
@@ -359,7 +524,8 @@ export const GamePage = () => {
                 fontSize: '0.9vw',
                 border: 'none',
                 borderRadius: '8px',
-                cursor: playerCanInput && attemptedSequence.length === round.sequence.length ? 'pointer' : 'not-allowed',
+                cursor:
+                  playerCanInput && attemptedSequence.length === round.sequence.length ? 'pointer' : 'not-allowed',
                 letterSpacing: '1px',
               }}
             >
