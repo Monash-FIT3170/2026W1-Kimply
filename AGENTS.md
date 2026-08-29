@@ -25,13 +25,28 @@ One set of instructions. Every tool must see the same files.
 | `.agents/skills/` | Canonical skills (`SKILL.md` per skill) |
 | `.claude/skills` | Symlink → `.agents/skills` |
 | `.cursor/skills` | Symlink → `.agents/skills` |
-| `docs/decision-log.md` | Dated record of what changed and why |
 
 Add new skills **only** under `.agents/skills/<name>/SKILL.md`. Do not copy them into `.claude/` or `.cursor/` — those folders symlink the whole `skills` directory.
 
 Local-only files stay untracked: `.claude/settings.local.json`, `.claude/worktrees/`.
 
 On Windows the repo must live in WSL2 (already required for Docker) so Git can check out these symlinks.
+
+## Where things live
+
+This file is the inventory of the running system: collections, publications, methods, routes, and the invariants that hold them together.
+Everything below has a home of its own. Read the home file rather than expecting a copy here, and put new detail there rather than growing this one.
+
+| Document | Holds |
+|---|---|
+| [`docs/design_system.md`](docs/design_system.md) | Colour, type, spacing, radii, motion, components, patterns, voice. The design source of truth |
+| [`docs/defect-register.md`](docs/defect-register.md) | Every known defect: how it actually fails and what the fix is |
+| [`docs/decision-log.md`](docs/decision-log.md) | Dated record of what changed and why, newest first |
+| [`docs/deployment-manual.md`](docs/deployment-manual.md) | Production runbook, from empty AWS account to serving traffic |
+| [`docs/dev-environment.md`](docs/dev-environment.md) | How the development stack differs from production |
+| [`docs/operations.md`](docs/operations.md) | Monitoring, backups, incident runbook, cost |
+| [`README.md`](README.md) | WSL2 and Docker setup, and the full local command list |
+| `.agents/skills/<name>/SKILL.md` | How to do a specific kind of work in this repo |
 
 ## Agent operating rules
 
@@ -106,31 +121,13 @@ The full loop is built end to end:
 
 ## Development Commands
 
-**All Docker commands must be run from a WSL2 terminal on Windows** (not PowerShell).
-See README.md for full WSL2 setup instructions.
+**All Docker commands run from a WSL2 terminal on Windows**, not PowerShell.
+Setup, the full command list, and troubleshooting are in [README.md](README.md). The `docker` and `test` skills cover the rest.
 
 ```bash
-# Start development environment (MongoDB + Meteor on port 3000)
-docker compose up
-
-# Run tests (once)
-docker compose exec backend meteor npm test
-
-# Run tests in watch mode
-docker compose exec backend meteor npm run test-app
-
-# Run the one-shot test container instead
-docker compose --profile test run test
-
-# Formatting (this is the only style gate; there is NO ESLint in this repo)
-docker compose exec backend meteor npm run format
-docker compose exec backend meteor npm run format:check
-
-# Add an npm package
-docker compose exec backend meteor npm install <package-name>
-
-# Restart just the Meteor app (e.g. after env var changes)
-docker compose restart backend
+docker compose up                                  # MongoDB + Meteor on :3000
+docker compose exec backend meteor npm test        # tests, once
+docker compose exec backend meteor npm run format  # Prettier, the only style gate
 ```
 
 **Scripts that do NOT exist** (do not invent them in CI or docs): `npm run lint`, `npm run build`, `npm run dev`, `npm run typecheck`, `npm run e2e`.
@@ -142,11 +139,14 @@ The only production build path is the `meteor build` invoked inside `app/Dockerf
 
 ### Tech Stack
 
-- **Meteor 3.4** - full-stack framework (server + client bundling, reactive data over DDP)
-- **React 18** + React Router v7 - UI and routing
-- **MongoDB 7.0** - database, via Meteor's `mongo` package
-- **Tailwind CSS 3** - styling via custom design tokens (oklch colour space)
-- **Rspack** - Meteor's bundler, configured in `app/rspack.config.js`
+| | | Skill |
+|---|---|---|
+| **Meteor 3.4** | Full-stack framework: bundling, methods, reactive data over DDP | `meteor` |
+| **React 18** + Router v7 | UI and routing | `react` |
+| **MongoDB 7.0** | Database, via Meteor's `mongo` package | `mongo` |
+| **Tailwind CSS 3** | Styling from the design tokens (oklch) | `ui` |
+| **Rspack** | Meteor's bundler, configured in `app/rspack.config.js` | `meteor` |
+| **Docker** | Local environment, and the production image | `docker`, `deploy` |
 
 `autopublish` and `insecure` are **not** installed, and there are no `.allow()` / `.deny()` rules.
 All writes go through Meteor methods.
@@ -387,28 +387,23 @@ On `/game` a missing `location.state.pin` renders a "no game selected" screen (`
 
 ---
 
-## Design System (`imports/ui/components/design.jsx`)
+## Design System
 
-All colours use the oklch colour space.
+**[docs/design_system.md](docs/design_system.md)** is the source of truth for colour, typography, spacing, radii, elevation, motion, components, patterns, and voice.
+Read it before designing or building any screen. The `ui` skill turns it into working rules.
 
-| Token | Value | Usage |
-|---|---|---|
-| `BG` | `oklch(0.14 0.02 270)` | Page background |
-| `SURFACE` | `oklch(0.20 0.02 270)` | Cards, inputs |
-| `PRIMARY` | `oklch(0.86 0.19 130)` | Lime, primary actions |
-| `TILE.*` | pink / amber / teal / violet | Game tile colours |
+Only what the design document deliberately does not cover, because it is about the code:
 
-`tailwind.config.js` exposes these as classes: `bg-bg`, `bg-surface`, `text-fg`, `text-fg3`, `border-hairline`, `font-outfit`, `font-manrope`, `font-mono`, `animate-kimply-pulse`.
-Tailwind `content` globs cover `./imports/**` and `./client/**` only, so classes generated elsewhere are purged in production.
-
-Inline styles are used only where Tailwind cannot express the value (`color-mix()`, `oklch` in `box-shadow`, dynamic gradients).
-Because inline styles are widespread, **a strict Content-Security-Policy will break the app** without `style-src 'unsafe-inline'`.
+- Tokens are implemented in `app/tailwind.config.js` as classes and in `app/imports/ui/components/design.jsx` as JS constants for values Tailwind cannot express. The app defines **no** `:root` custom properties, so the CSS block in the design document is a specification, not something to paste in.
+- `design.jsx` has drifted from the system. `SURFACE` is `oklch(0.18 …)` against the documented `0.20`, `FG` and `FG3` also differ, and `DANGER` / `ACCENT` are undocumented. Prefer the Tailwind classes, which match the document exactly.
+- Tailwind `content` globs cover `./imports/**` and `./client/**` only, so a class generated anywhere else is purged in production.
+- Inline styles are widespread, so **a strict Content-Security-Policy breaks the app** without `style-src 'unsafe-inline'`.
 
 ---
 
 ## Testing
 
-Runner is `meteortesting:mocha`. Entry point `tests/main.js` auto-loads every sibling `*.test.js` via `require.context`.
+How to write and run them is the `test` skill. What exists today:
 
 | File | Covers |
 |---|---|
@@ -426,41 +421,28 @@ Runner is `meteortesting:mocha`. Entry point `tests/main.js` auto-loads every si
 
 **Not covered:** any authorization case, any concurrency or race scenario, `rooms.start`, `rooms.disconnect`, `rooms.updateGameName`, `rooms.reconnect`.
 
-CI is `.github/workflows/test.yml`, triggering on `pull_request` to `main` and `dev` only.
-Nothing runs on merge.
-Coverage thresholds are branches 10 / lines 10 / functions 7 / statements 10, which is a smoke gate rather than a quality gate.
+CI (`.github/workflows/test.yml`) runs on pull requests to `main` and `dev` only, never on merge, behind a coverage smoke gate.
 
 ---
 
 ## Known defects
 
-Recorded so they are not rediscovered each session.
-Detail lives in `docs/defect-register.md` once Phase 1 lands.
-
-### Fixed
-
-| ID | Where | Resolution |
-|---|---|---|
-| D1 | `server/main.js:13` | The startup wipe of `RoundsCollection` and its orphaned demo seed are gone. Rounds now expire via a TTL index |
-| D2 | `server/main.js:28-30` | Publications moved to `server/publications.js`, scoped by `gameId`, and `attemptedSequence` excluded |
-| D9 | `PlayerLobby.jsx:376-379` | The dead `useEffect` after the early return was deleted, so no hook follows the conditional return |
-| D10 | `PlayerLobby.jsx:419` | `navigate` is now passed to `<HostView>`. This was throwing `TypeError: navigate is not a function` on **every** game start |
-
-### Outstanding
-
-Full detail, including the fix for each, is in [docs/defect-register.md](docs/defect-register.md).
+One line each, so a review can cite an ID without opening anything.
+**[docs/defect-register.md](docs/defect-register.md) holds the detail**: how each one actually fails, what the fix is, and the resolved ones kept for history. Do not restate that here.
 
 | ID | Where | Issue |
 |---|---|---|
-| D3 | `gameMethods.js:122` | `players.submitSequence` trusts a client-supplied `playerId`, so any browser can drain another player's lives. The fix is binding `this.connection.id` at `players.join`, **not** a login wall - anonymous play is intended |
-| D4 | `gameMethods.js:220-230`, `:14-22`, `:162-171` | Read-then-write races: double round advance, double winner, and `$set` life deduction from a stale read instead of `$inc`. The PIN-collision race is now closed by the unique index |
-| D5 | `gameMethods.js:79-81` | No server-side round deadline. One player leaving mid-round stalls that game forever |
-| D6 | `rooms.js:172` | `rooms.reconnect` returns `isHost: room.hostId === playerId`, but `hostId` is never persisted, so it is always `false` |
-| D7 | `GamePage.jsx:43-53` | `playerId` lives only in React state, so a refresh re-fires `players.join` and mints a second player with fresh lives |
-| D8 | `playerAccounts.js:20-22` | Single unstretched SHA-256, non-constant-time comparison, no rate limiting, and an account-enumeration oracle at `:83` vs `:88` |
-| D11 | root `package-lock.json` | Declares `@meteorjs/rspack@^2.0.1` while root `package.json` has no dependencies, so `npm ci` at the repo root fails |
-| D12 | `ColourSequence.jsx:80-92` | A new `AudioContext` is created on every tile click and never closed |
-| D14 | repo-wide | `npm run format:check` **fails on main**: 12 files are prettier-dirty, predating any deployment work. Needs one dedicated formatting commit before formatting can be a CI gate |
+| D3 | `gameMethods.js:122` | `players.submitSequence` trusts a client-supplied `playerId`. Fix is binding `this.connection.id`, **not** a login wall |
+| D4 | `gameMethods.js:14-22`, `:162-171`, `:220-230` | Read-then-write races: double advance, double winner, `$set` life deduction from a stale read |
+| D5 | `gameMethods.js:79-81` | No round deadline. One player leaving mid-round stalls that game forever |
+| D6 | `rooms.js:172` | `hostId` is never persisted, so `rooms.reconnect` always reports `isHost: false` |
+| D7 | `GamePage.jsx:43-53` | `playerId` lives only in React state, so a refresh mints a second player with fresh lives |
+| D8 | `playerAccounts.js:20-22` | Unstretched SHA-256, non-constant-time compare, no rate limiting, enumeration oracle |
+| D11 | root `package-lock.json` | Desynced against an empty root `package.json`, so `npm ci` at the repo root fails |
+| D12 | `ColourSequence.jsx:80-92` | A new `AudioContext` per tile click, never closed |
+| D14 | repo-wide | `npm run format:check` fails on `main`. Needs one dedicated formatting commit before it can gate CI |
+
+Fixed and kept for history in the register: D1, D2, D9, D10.
 
 ### Not a defect, so nobody chases it again
 
@@ -485,8 +467,9 @@ There is no configuration surface: starting lives (3), initial sequence length (
 
 ## Deployment
 
-Two deployed environments, each a single AWS EC2 instance with Nginx as the reverse proxy, Let's Encrypt TLS, and its own MongoDB Atlas Free cluster.
+Two independent stacks, each a single arm64 EC2 instance behind Nginx with Let's Encrypt TLS and its own MongoDB Atlas free cluster.
 Images are built by CI, pushed to ECR by commit SHA, and pulled by the instance over SSM.
+Runbooks are [`docs/deployment-manual.md`](docs/deployment-manual.md), [`docs/dev-environment.md`](docs/dev-environment.md), and [`docs/operations.md`](docs/operations.md). Shipping, rolling back, and the traps are the `deploy` skill.
 
 | | Production | Development |
 |---|---|---|
@@ -499,15 +482,11 @@ Images are built by CI, pushed to ECR by commit SHA, and pulled by the instance 
 | Atlas cluster | `kimply-mongodb` | `kimply-dev-mongodb` |
 
 Both are driven by the single workflow `.github/workflows/deploy.yml`, which picks its target from `github.ref_name`.
+The two share no AWS resource: the IAM roles are per-branch, because GitHub's OIDC subject claim names one ref, so a push to `dev` cannot obtain a credential that reaches production.
+
 Everything else - `deploy/`, `nginx/`, `docker-compose.prod.yml`, `scripts/` - is environment-agnostic and reads its configuration from `/opt/kimply/.env` on the box.
-**Do not fork any of those per environment.** If something needs to differ, it belongs in `.env`.
-
-The two environments share no AWS resource. In particular the IAM roles are per-branch, because GitHub's OIDC subject claim names one ref, so a push to `dev` cannot obtain a credential that reaches production.
-
-See `docs/deployment-manual.md` for the production runbook, `docs/dev-environment.md` for the development delta, and `docs/operations.md` for monitoring, backups, and cost.
-
-Local development is unaffected and continues to use the Docker MongoDB container.
-`docker-compose.yml` must stay working; deployed-environment changes belong in `docker-compose.prod.yml`.
+**Do not fork any of those per environment.** If something must differ, it belongs in `.env`.
+`docker-compose.yml` is development only and must stay working.
 
 ---
 
@@ -535,7 +514,8 @@ That only works if it stays true.
 | A Meteor method or its arguments | [Methods](#methods) |
 | A route in `client/main.jsx` | [Routing](#routing-appclientmainjsx) |
 | A test file | [Testing](#testing) |
-| Anything that fixes or introduces a defect | [Known defects](#known-defects) |
+| Anything that fixes or introduces a defect | [`docs/defect-register.md`](docs/defect-register.md) first, then the one-line row in [Known defects](#known-defects) |
+| A colour, type, spacing, motion or component decision | [`docs/design_system.md`](docs/design_system.md) - not this file |
 | A team workflow for agents | `.agents/skills/<name>/SKILL.md` only — never copy into `.claude/` or `.cursor/` |
 | Anything substantive at all | [docs/decision-log.md](docs/decision-log.md) - add a dated entry at the top |
 

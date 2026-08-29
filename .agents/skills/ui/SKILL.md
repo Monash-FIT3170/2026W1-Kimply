@@ -1,26 +1,45 @@
 ---
 name: ui
 description: >-
-  Change Kimply UI using the shared design system, Tailwind tokens, and
-  existing page/component patterns. Use when editing pages, components,
-  styling, design tokens, ColourSequence, leaderboard, lobby, or routes.
+  Change Kimply UI against the design system in docs/design_system.md, using
+  Tailwind tokens and the existing component set. Use when editing pages,
+  components, styling, design tokens, ColourSequence, leaderboard, lobby, or
+  routes.
 ---
 
 # UI
 
-Design system: `app/imports/ui/components/design.jsx` — **not** `imports/ui/design.jsx`.
+**Read `docs/design_system.md` first.**
+It is the source of truth for colour, typography, spacing, radii, elevation, motion, component specs, patterns, and voice. Most "what should this look like" questions are already answered there, and anything genuinely new is proposed into that document rather than invented in a component.
+
+Its rules bind: one lime element per screen maximum, tile colours only on game-meaningful elements, tile colours assigned in the fixed order pink → amber → teal → violet, and no new hues.
+
+This skill covers only how that system is wired into the code.
+
+Implementation lives in `app/imports/ui/components/design.jsx` — **not** `imports/ui/design.jsx`.
 
 Reuse `TileLattice`, `Wordmark`, `TopBar`, `BackButton`, `Avatar`, `avatarColor`, `DangerButton`, `GhostButton`, `ReadyChip`, and the icon helpers before drawing new chrome.
 
 ## Tokens
 
-Prefer Tailwind classes from `app/tailwind.config.js`: `bg-bg`, `bg-surface`, `text-fg`, `text-fg2`, `text-fg3`, `border-hairline`, `text-primary`, `font-outfit`, `font-manrope`, `font-mono`, `animate-kimply-pulse`.
+The app defines **no** `:root` custom properties. The CSS block in the design document is a specification; do not paste it in.
+
+Use the Tailwind classes from `app/tailwind.config.js`, whose values match the design document exactly: `bg-bg`, `bg-surface`, `bg-surface2`, `text-fg`, `text-fg2`, `text-fg3`, `border-hairline`, `text-primary`, `bg-tile-pink|amber|teal|violet`, `font-outfit`, `font-manrope`, `font-mono`, `animate-kimply-pulse`.
 
 Outfit for titles and buttons, Manrope for body, JetBrains Mono for PINs and uppercase labels.
 
-JS constants in `design.jsx` (`BG`, `PRIMARY`, `TILE.*`, `DANGER`, …) exist for values Tailwind cannot express. Inline `style` is allowed **only** for `color-mix()`, `oklch` in `box-shadow`, and dynamic gradients.
+JS constants in `design.jsx` exist for values Tailwind cannot express. Inline `style` is allowed **only** for `color-mix()`, `oklch` in `box-shadow`, and dynamic gradients.
 
-`SURFACE` in `design.jsx` is `oklch(0.18 …)`; the Tailwind `surface` token is `oklch(0.20 …)`. Prefer the class `bg-surface` for new work so screens match.
+**`design.jsx` has drifted from the design system.** Prefer the Tailwind class wherever both exist:
+
+| Token | `docs/design_system.md` and `tailwind.config.js` | `design.jsx` |
+|---|---|---|
+| surface | `oklch(0.20 0.02 270)` | `SURFACE` is `oklch(0.18 0.02 270)` |
+| fg | `oklch(0.97 0.006 80)` | `FG` is `oklch(0.96 0.01 270)` |
+| fg-3 | `oklch(0.55 0.015 270)` | `FG3` is `oklch(0.50 0.01 270)` |
+| n/a | not documented | `DANGER`, `ACCENT` |
+
+Do not widen the drift. If a screen needs `DANGER` or `ACCENT`, that is a gap to propose into the design document, not a new constant.
 
 Content globs are `./imports/**` and `./client/**` only. A class used from anywhere else is purged in production.
 

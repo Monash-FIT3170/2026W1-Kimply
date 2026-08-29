@@ -10,6 +10,8 @@ description: >-
 
 Read `AGENTS.md` tables and `docs/defect-register.md` before commenting. Anonymous play is intentional — "add login" is not a valid fix for missing `this.userId`.
 
+A diff that touches UI is reviewed against `docs/design_system.md`. A new hue, a second lime element on one screen, a tile colour on a non-game element, or a hand-rolled component that duplicates a documented one is 🟡 with a pointer to the section it breaks.
+
 ## Block merge
 
 - Publications: still scoped by `gameId`; `rounds` still `isCurrent: true` only; `players` still excludes `attemptedSequence`. Invalid input still `this.ready()`, not a throw.

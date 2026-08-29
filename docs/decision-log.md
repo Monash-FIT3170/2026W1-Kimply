@@ -20,6 +20,21 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-08-29 - The design system gets its own document, and AGENTS.md becomes a hub
+
+`docs/design_system.md` (v0.1, design-authored) is now the source of truth for colour, typography, spacing, radii, elevation, motion, component specs, patterns, and voice.
+`AGENTS.md` points at it instead of carrying a four-row token table.
+Files: `AGENTS.md`, `docs/defect-register.md`, `.agents/skills/ui/SKILL.md`, `.agents/skills/review/SKILL.md`.
+
+The wider change is a rule about what `AGENTS.md` is for. It is the inventory of the running system - collections, publications, methods, routes, invariants - and nothing else.
+Where another file already holds the bulk, it now keeps only what a reviewer needs at a glance and links to the home file. A "Where things live" table near the top names every home.
+Design system, development commands, testing prose, deployment prose, and defect detail were trimmed on that basis; the data model, publication, method, and route tables were not touched, because nothing else holds them.
+
+Two pieces of drift surfaced while doing it, both of which had made a reference unsafe to follow:
+
+- **`design.jsx` disagrees with the design system.** `SURFACE` is `oklch(0.18 …)` against the documented `0.20`, `FG` and `FG3` also differ, and `DANGER` / `ACCENT` are not in the document at all. `tailwind.config.js` matches the document exactly, which is why the `ui` skill now says to prefer the Tailwind class wherever both exist. The code was left alone deliberately: changing `SURFACE` moves every card on every screen, and that is a design call, not a cleanup.
+- **The defect IDs in `AGENTS.md` and `docs/defect-register.md` had drifted by one.** The register had D12 for the root lockfile and D13 for the `AudioContext` leak, where the summary table had D11 and D12, and D14 existed only in the summary table. Since the register's own header states that its IDs match the summary table, the register was reconciled onto that numbering: two headings renumbered, a real D14 section written, and D9 / D10 marked fixed there rather than only in `AGENTS.md`. **There is no D13**, and the gap is documented so nobody closes it - the IDs are cited from skills and pull requests.
+
 ## 2026-08-29 - Stack specialist skills, and this log leaves AGENTS.md
 
 Six skills added under `.agents/skills/`, joining `git`, `test`, `ui`, and `review`: `meteor`, `react`, `mongo`, `docker`, `deploy`, `debug`.
