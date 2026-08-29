@@ -4,9 +4,6 @@ import { PlayersCollection } from '../api/players';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { BG, PRIMARY, FG2, TileLattice, Avatar, TopBar, ArrowIcon, avatarColor } from './components/design';
 
-// Exported so pages/GlobalLeaderboard.jsx can match its top-3 row colors to
-// this end-of-game screen — keep the two in sync rather than hardcoding a
-// second palette there.
 export const MEDAL = [
   { color: 'oklch(0.83 0.16 80)', label: '1st' },
   { color: 'oklch(0.72 0.01 270)', label: '2nd' },
@@ -25,17 +22,10 @@ function accuracyPercent(player) {
 
 export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
   const navigate = useNavigate();
-  // Read directly off location.state rather than a prop from GamePage —
-  // GamePage is rendered under the same route, so this is the same state
-  // it received (including playerAccount, if the player is signed in).
-  // Both exits below route to /play (the menu) carrying it forward, the
-  // same fix applied to the leaderboard and lobby back buttons.
   const { state } = useLocation();
   const playerAccount = state?.playerAccount;
 
   const players = useTracker(() => {
-    // Without a gameId this used to fall back to find({}), rendering every player
-    // of every game in the deployment on the end screen.
     if (!gameId) return [];
     const sub = Meteor.subscribe('players', gameId);
 
@@ -71,11 +61,9 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
     ? sorted.filter((player) => rankKey(player) === rankKey(currentPlayer)).length > 1
     : false;
 
-  // Group top-3 ranks into podium blocks, displayed as 2nd | 1st | 3rd
   const byRank = [0, 1, 2].map((rank) => sorted.filter((p) => ranks[sorted.indexOf(p)] === rank));
   const podiumOrder = [byRank[1], byRank[0], byRank[2]];
   const podiumHeights = [90, 120, 72];
-  const winnerGroup = byRank[0] ?? [];
   const highestEliminatedRound = Math.max(0, ...players.map((player) => player.eliminatedRound ?? 0));
 
   const playerScore = (player) => {
@@ -114,9 +102,6 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
           style={{ animation: 'leaderboardTitleIn 0.7s ease both' }}
         >
           <h1 className="font-outfit text-5xl font-extrabold tracking-tight">Final Leaderboard</h1>
-          {/* <p className="mb-2 font-mono text-[13px] uppercase tracking-[0.22em]" style={{ color: PRIMARY }}>
-            Final Results
-          </p> */}
           {currentRank && (
             <div
               className="mt-4 flex flex-col items-center gap-2"
@@ -144,27 +129,12 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
               </div>
             </div>
           )}
-          {/* {winnerGroup.length > 0 && (
-            <div
-              className="mt-3 rounded-full px-4 py-2 font-outfit text-sm font-extrabold"
-              style={{
-                color: BG,
-                background: `linear-gradient(135deg, ${MEDAL[0].color}, ${PRIMARY})`,
-                boxShadow: `0 0 34px color-mix(in oklab, ${MEDAL[0].color} 28%, transparent)`,
-                animation: 'winnerCrown 1.1s cubic-bezier(0.22,1,0.36,1) 0.35s both',
-              }}
-            >
-              Winner: {winnerGroup.map((player) => player.name).join(' & ')}
-            </div>
-          )} */}
         </div>
 
-        {/* Podium */}
         <div className="mb-10 flex w-full max-w-md items-end justify-center gap-3">
           {podiumOrder.map((group, i) => {
             const medalIndex = i === 0 ? 1 : i === 1 ? 0 : 2;
             const medal = MEDAL[medalIndex];
-            // 3rd rises first (i=2, delay 0s), 2nd next (i=0, delay 0.5s), 1st last (i=1, delay 1s)
             const riseDelay = (i === 2 ? 0 : i === 0 ? 1 : 2) + 0.5;
             const avatarDelay = riseDelay + 0.35;
             if (group.length === 0) return <div key={i} className="flex-1" />;

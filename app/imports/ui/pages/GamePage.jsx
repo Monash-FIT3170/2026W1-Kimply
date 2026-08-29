@@ -10,7 +10,7 @@ import { EndLeaderboard } from '../EndLeaderboard.jsx';
 import { useLocation } from 'react-router-dom';
 import { EliminationFeed } from '../EliminationFeed.jsx';
 
-import { TileLattice, BG } from '../components/design';
+import { TileLattice } from '../components/design';
 export const GamePage = () => {
   const [playerId, setPlayerId] = useState(null);
   const [playerCanInput, setPlayerCanInput] = useState(false);
@@ -24,9 +24,6 @@ export const GamePage = () => {
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(true);
   const location = useLocation();
   const playerNameFromLobby = location.state?.playerName || 'Demo Player';
-  const roomPin = location.state?.pin;
-  // No 'demo' fallback: the publications are scoped by gameId, so a placeholder
-  // would subscribe to a game that does not exist and hang on LOADING forever.
   const gameId = roomPin || null;
   const accountId = location.state?.playerAccount?._id || null;
   const playTurnStartSound = () => {
@@ -52,12 +49,14 @@ export const GamePage = () => {
     oscillator.stop(audioContext.currentTime + 0.24);
   };
   useEffect(() => {
-    if (!gameId) return undefined;
+    if (!gameId) return;
     const roundsSub = Meteor.subscribe('rounds', gameId);
     const playersSub = Meteor.subscribe('players', gameId);
+    const eventsSub = Meteor.subscribe('gameEvents', gameId);
     return () => {
       roundsSub.stop();
       playersSub.stop();
+      eventsSub.stop();
     };
   }, [gameId]);
   const round = useTracker(() => {
@@ -68,13 +67,6 @@ export const GamePage = () => {
     if (!playerId) return null;
     return PlayersCollection.findOne(playerId);
   }, [playerId]);
-  useEffect(() => {
-    if (!gameId) return undefined;
-    const eventsSub = Meteor.subscribe('gameEvents', gameId);
-    return () => {
-      eventsSub.stop();
-    };
-  }, [gameId]);
   const levelUpEvents = useTracker(() => {
     if (!gameId) return [];
     return GameEventsCollection.find({ gameId, type: 'level-up' }, { sort: { createdAt: -1 } }).fetch();
@@ -202,9 +194,6 @@ export const GamePage = () => {
     setAttemptedSequence([]);
     setMessage('Try again. Repeat the flashed sequence.');
   };
-  // Reached by loading /game directly, or after a refresh drops location.state.
-  // Without a room PIN there is no game to subscribe to, so say so instead of
-  // sitting on LOADING indefinitely.
   if (!gameId) {
     return (
       <div
@@ -253,7 +242,7 @@ export const GamePage = () => {
     );
   }
   if (!player) return null;
-  if (player?.gameFinished) {
+  if (player.gameFinished) {
     return <>
       <EliminationFeed gameId={gameId} />
       <EndLeaderboard gameId={player.gameId} currentPlayerId={player._id} />
@@ -398,8 +387,6 @@ export const GamePage = () => {
         </span>
       </div>
       <div className="relative flex flex-1 flex-col items-center justify-start md:justify-center">
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        {/* Lives display */}
         <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2vh' }}>
           {[1, 2, 3].map((heart) => (
             <div
@@ -433,13 +420,6 @@ export const GamePage = () => {
           >
             LEVEL {round.lengthOfSequence - 3}
           </p>
-          <p
-            style={{
-              color: '#ccc',
-              marginBottom: '1vh',
-              fontSize: '0.9vw',
-            }}
-          ></p>
           <div
             style={{
               display: 'flex',
@@ -553,7 +533,6 @@ export const GamePage = () => {
               SUBMIT
             </button>
           </div>
-        </div>
         </div>
         <EliminationFeed gameId={gameId} />
       </div>

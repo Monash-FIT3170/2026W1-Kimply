@@ -122,7 +122,7 @@ app/
 
 Note the design system lives at `imports/ui/components/design.jsx`, **not** `imports/ui/design.jsx`.
 
-**Duplicated code worth knowing about:** `generateSequence` exists twice, identically, in `imports/api/sequence.js:9` and `imports/api/gameMethods.js:9`.
+**Duplicated code worth knowing about:** `generateSequence` exists twice, identically, in `imports/api/sequence.js:9` and `imports/api/gameMethods.js:12`.
 The live game path uses the `gameMethods.js` copy.
 `tests/sequence.test.js` covers the `sequence.js` copy, which the game never calls.
 
@@ -240,12 +240,12 @@ Game-scoped publications take `gameId` (the 5-character room PIN). `globalLeader
 
 | Name | Defined at | Args | Selector | Projection |
 |---|---|---|---|---|
-| `rounds` | `server/publications.js:30` | `gameId` | `{ gameId, isCurrent: true }` | none |
-| `players` | `server/publications.js:37` | `gameId` | `{ gameId }` | excludes `attemptedSequence` |
-| `leaderboard` | `server/publications.js:42` | `gameId` | `{ gameId }` | none |
-| `eliminations` | `server/publications.js:47` | `gameId` | `{ gameId, eliminated: true }`, last 20 | excludes `attemptedSequence` |
-| `gameEvents` | `server/publications.js:55` | `gameId` | `{ gameId }`, last 20 | none |
-| `globalLeaderboard` | `server/publications.js:63` | none | `{}`, sort + limit 50 | none |
+| `rounds` | `server/publications.js:12` | `gameId` | `{ gameId, isCurrent: true }` | none |
+| `players` | `server/publications.js:17` | `gameId` | `{ gameId }` | excludes `attemptedSequence` |
+| `leaderboard` | `server/publications.js:22` | `gameId` | `{ gameId }` | none |
+| `eliminations` | `server/publications.js:27` | `gameId` | `{ gameId, eliminated: true }`, last 20 | excludes `attemptedSequence` |
+| `gameEvents` | `server/publications.js:35` | `gameId` | `{ gameId }`, last 20 | none |
+| `globalLeaderboard` | `server/publications.js:40` | none | `{}`, sort + limit 50 | none |
 | `rooms.lobby` | `imports/api/rooms.js:20` | `pin` | `{ pin }` | `_id, pin, status, gameName, hostName, players.name, players.id` |
 
 Three properties are load-bearing and must not be undone:
@@ -264,14 +264,14 @@ The module carries a `global._publicationsInitialized` guard because under `--fu
 
 | File:line | Publication | Args |
 |---|---|---|
-| `ui/pages/GamePage.jsx:56` | `rounds` | `gameId` |
-| `ui/pages/GamePage.jsx:57` | `players` | `gameId` |
-| `ui/pages/GamePage.jsx:73` | `gameEvents` | `gameId` |
+| `ui/pages/GamePage.jsx:54` | `rounds` | `gameId` |
+| `ui/pages/GamePage.jsx:55` | `players` | `gameId` |
+| `ui/pages/GamePage.jsx:56` | `gameEvents` | `gameId` |
 | `ui/Leaderboard.jsx:12` | `players` | `gameId` |
 | `ui/Leaderboard.jsx:13` | `rounds` | `gameId` |
-| `ui/EndLeaderboard.jsx:40` | `players` | `gameId` |
+| `ui/EndLeaderboard.jsx:30` | `players` | `gameId` |
 | `ui/EliminationFeed.jsx:10` | `eliminations` | `gameId` |
-| `ui/pages/GlobalLeaderboard.jsx:138` | `globalLeaderboard` | none |
+| `ui/pages/GlobalLeaderboard.jsx:114` | `globalLeaderboard` | none |
 | `ui/pages/PlayerLobby.jsx:367` | `rooms.lobby` | `pin` |
 
 The live in-game `Leaderboard` no longer subscribes to the `leaderboard` collection; it derives rows from `players` + the current round.
@@ -304,13 +304,13 @@ PIN alphabet is `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (`rooms.js:12`), generated wi
 
 | Method | Line | Args | Description |
 |---|---|---|---|
-| `rounds.generate` | 177 | `length = 4, gameId = null` | Inserts a new `isCurrent` round |
-| `players.join` | 191 | `roundId, playerName, gameId = null, accountId = null` | Inserts a player with 3 lives. `accountId` is stored as supplied and is **not** bound to the caller |
-| `players.submitSequence` | 213 | `playerId, attemptedSequence` | Grades the attempt. 6-9 DB round-trips, plus 4 more if it triggers a round advance |
-| `players.timeoutTurn` | 309 | `playerId` | Deducts a life for an unanswered turn, then may advance the round. Trusts a client-supplied `playerId` (same as D3) |
-| `rounds.advance` | 350 | `currentRoundId` | Marks the round advanced, inserts the next one, moves active players onto it, writes `level-up` events |
+| `rounds.generate` | 154 | `length = 4, gameId = null` | Inserts a new `isCurrent` round |
+| `players.join` | 167 | `roundId, playerName, gameId = null, accountId = null` | Inserts a player with 3 lives. `accountId` is stored as supplied and is **not** bound to the caller |
+| `players.submitSequence` | 188 | `playerId, attemptedSequence` | Grades the attempt. 6-9 DB round-trips, plus 4 more if it triggers a round advance |
+| `players.timeoutTurn` | 261 | `playerId` | Deducts a life for an unanswered turn, then may advance the round. Trusts a client-supplied `playerId` (same as D3) |
+| `rounds.advance` | 301 | `currentRoundId` | Marks the round advanced, inserts the next one, moves active players onto it, writes `level-up` events |
 
-Private helpers: `recordGlobalResult(accountId, ...)` at `:22`, `checkWinner(gameId)` at `:85`, `advanceRoundIfReady(round)` at `:156`.
+Private helpers: `recordGlobalResult(accountId, ...)` at `:16`, `checkWinner(gameId)` at `:65`, `advanceRoundIfReady(round)` at `:134`.
 
 A round advances only when **every** active player has submitted (`advanceRoundIfReady`).
 There is a 30-second **client** turn timer that calls `players.timeoutTurn`, but there is still no server-side round deadline, so a player who already submitted and then leaves does not stall the same way as one who never starts their turn (see D5).
@@ -321,7 +321,7 @@ There is a 30-second **client** turn timer that calls `players.timeoutTurn`, but
 |---|---|---|---|
 | `playerAccounts.register` | 31 | `{ displayName, email, password }` | Salted SHA-256, min 8-char password |
 | `playerAccounts.signIn` | 69 | `{ email, password }` | Returns `{ displayName, email }`. **Issues no session token** |
-| `globalLeaderboard.myStanding` | `globalLeaderboard.js:45` | `accountId` | Returns that account's stats, or null. **Does not verify the caller owns `accountId`** |
+| `globalLeaderboard.myStanding` | `globalLeaderboard.js:22` | `accountId` | Returns that account's stats, or null. **Does not verify the caller owns `accountId`** |
 
 `PlayerAccountsCollection` is never published, so hashes and salts stay server-side.
 Meteor's `accounts-base` / `accounts-password` packages are **not** installed; this is a hand-rolled implementation.
@@ -336,7 +336,7 @@ There are three unrelated identity mechanisms, none of them Meteor's.
 1. **Lobby identity** - a server-minted `Random.id()` (`rooms.js:50` for the host, `:116` for joiners).
    Joiners persist it to `localStorage.reconnectData` at `JoinRoom.jsx:53-58`.
    The host branch that would persist it is commented out at `PlayRoute.jsx:144-150`, so a host who reloads has no reconnect path.
-2. **In-game identity** - the `_id` of a `players` document, held only in React state at `GamePage.jsx:12`.
+2. **In-game identity** - the `_id` of a `players` document, held only in React state at `GamePage.jsx:15`.
    Not persisted, so it is lost on refresh (see D7).
 3. **Account identity** - passed via `location.state.playerAccount`, with no token and no DDP session binding.
 
@@ -399,8 +399,8 @@ Detail lives in `docs/defect-register.md` once Phase 1 lands.
 |---|---|---|
 | D1 | `server/main.js:13` | The startup wipe of `RoundsCollection` and its orphaned demo seed are gone. Rounds now expire via a TTL index |
 | D2 | `server/main.js:28-30` | Publications moved to `server/publications.js`, scoped by `gameId`, and `attemptedSequence` excluded |
-| D9 | `PlayerLobby.jsx:376-379` | The dead `useEffect` after the early return was deleted, so no hook follows the conditional return |
-| D10 | `PlayerLobby.jsx:419` | `navigate` is now passed to `<HostView>`. This was throwing `TypeError: navigate is not a function` on **every** game start |
+| D9 | `PlayerLobby.jsx:377` | The dead `useEffect` after the early return was deleted, so no hook follows the conditional return |
+| D10 | `PlayerLobby.jsx:413` | `navigate` is now passed to `<HostView>`. This was throwing `TypeError: navigate is not a function` on **every** game start |
 
 ### Outstanding
 
@@ -408,11 +408,11 @@ Full detail, including the fix for each, is in [docs/defect-register.md](docs/de
 
 | ID | Where | Issue |
 |---|---|---|
-| D3 | `gameMethods.js:122` | `players.submitSequence` trusts a client-supplied `playerId`, so any browser can drain another player's lives. The fix is binding `this.connection.id` at `players.join`, **not** a login wall - anonymous play is intended |
-| D4 | `gameMethods.js:220-230`, `:14-22`, `:162-171` | Read-then-write races: double round advance, double winner, and `$set` life deduction from a stale read instead of `$inc`. The PIN-collision race is now closed by the unique index |
-| D5 | `gameMethods.js:79-81` | No server-side round deadline. One player leaving mid-round stalls that game forever |
+| D3 | `gameMethods.js:188` | `players.submitSequence` trusts a client-supplied `playerId`, so any browser can drain another player's lives. The fix is binding `this.connection.id` at `players.join`, **not** a login wall - anonymous play is intended |
+| D4 | `gameMethods.js:231`, `:65`, `:134` | Read-then-write races: double round advance, double winner, and `$set` life deduction from a stale read instead of `$inc`. The PIN-collision race is now closed by the unique index |
+| D5 | `gameMethods.js:140` | No server-side round deadline. One player leaving mid-round stalls that game forever |
 | D6 | `rooms.js:172` | `rooms.reconnect` returns `isHost: room.hostId === playerId`, but `hostId` is never persisted, so it is always `false` |
-| D7 | `GamePage.jsx:43-53` | `playerId` lives only in React state, so a refresh re-fires `players.join` and mints a second player with fresh lives |
+| D7 | `GamePage.jsx:15` | `playerId` lives only in React state, so a refresh re-fires `players.join` and mints a second player with fresh lives |
 | D8 | `playerAccounts.js:20-22` | Single unstretched SHA-256, non-constant-time comparison, no rate limiting, and an account-enumeration oracle at `:83` vs `:88` |
 | D11 | root `package-lock.json` | Declares `@meteorjs/rspack@^2.0.1` while root `package.json` has no dependencies, so `npm ci` at the repo root fails |
 | D12 | `ColourSequence.jsx:80-92` | A new `AudioContext` is created on every tile click and never closed |
@@ -503,6 +503,10 @@ When new durable information is learned, update the relevant memory file immedia
 
 Newest first.
 One entry per substantive change: what changed, which files, and any consequence that is not obvious from the diff.
+
+### 2026-08-29 - Cut essay comments and duplicated round-advance logic
+Stripped the long “why this exists” blocks that had accumulated on publications, indexes, health, global leaderboard, and the game methods. `players.submitSequence` now calls `advanceRoundIfReady` on a correct submit instead of inlining the same check. Dead commented-out markup on the end leaderboard is gone.
+Files: `app/server/publications.js`, `app/server/indexes.js`, `app/server/health.js`, `app/imports/api/globalLeaderboard.js`, `app/imports/api/gameMethods.js`, `app/imports/ui/pages/GamePage.jsx`, `app/imports/ui/pages/GlobalLeaderboard.jsx`, `app/imports/ui/EndLeaderboard.jsx`, `app/imports/ui/pages/PlayerLobby.jsx`, `CLAUDE.md`.
 
 ### 2026-08-29 - Merged `dev` into `Agile-Team-3` without undoing scoped publications
 `dev` already had `server/publications.js`, health endpoints, and indexes. This branch's unscoped pubs and startup wipe of `RoundsCollection` would have overwritten that, so `app/server/main.js` keeps the `dev` shape and the three new pubs (`eliminations`, `gameEvents`, `globalLeaderboard`) live in `publications.js` instead.
