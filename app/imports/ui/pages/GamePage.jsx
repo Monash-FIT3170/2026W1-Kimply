@@ -7,6 +7,7 @@ import { ColourSequence } from '../ColourSequence.jsx';
 import { Leaderboard } from '../Leaderboard.jsx';
 import { EndLeaderboard } from '../EndLeaderboard.jsx';
 import { useLocation } from 'react-router-dom';
+import { RoomsCollection } from '../../api/rooms.js';
 
 export const GamePage = () => {
   const [playerId, setPlayerId] = useState(null);
@@ -20,16 +21,25 @@ export const GamePage = () => {
   const location = useLocation();
   const playerNameFromLobby = location.state?.playerName || 'Demo Player';
   const roomPin = location.state?.pin;
-  const gameId = roomPin || 'demo';
+  const gameId = roomPin;
+  const lobbyPlayerId = location.state?.playerId;
+
+  useEffect(() => {
+    if (!gameId) return;
+    const saved = localStorage.getItem(`playerId:${gameId}`);
+    if (saved) setPlayerId(saved);
+  }, [gameId]);
 
   useEffect(() => {
     const roundsSub = Meteor.subscribe('rounds');
     const playersSub = Meteor.subscribe('players');
+    const roomSub = Meteor.subscribe('rooms.lobby', gameId);
     return () => {
       roundsSub.stop();
       playersSub.stop();
+      roomSub.stop();
     };
-  }, []);
+  }, [gameId]);
 
   const round = useTracker(() => {
     return RoundsCollection.findOne({ gameId, isCurrent: true });
@@ -40,9 +50,17 @@ export const GamePage = () => {
     return PlayersCollection.findOne(playerId);
   }, [playerId]);
 
+  const room = useTracker(() => {
+    return RoomsCollection.findOne({ pin: gameId });
+  }, [gameId]);
+
   useEffect(() => {
     if (!round?._id || playerId) return;
-    Meteor.call('players.join', round._id, playerNameFromLobby, gameId, (error, result) => {
+    if (!gameId || !playerNameFromLobby) {
+      setMessage('Missing game info. Please join from the lobby.');
+      return;
+    }
+    Meteor.call('players.join', round._id, playerNameFromLobby, gameId, lobbyPlayerId, (error, result) => {
       if (error) {
         console.error(error);
         setMessage('Could not join the game.');
@@ -50,7 +68,7 @@ export const GamePage = () => {
       }
       setPlayerId(result);
     });
-  }, [round?._id, playerId]);
+  }, [round?._id, playerId, gameId, playerNameFromLobby, lobbyPlayerId]);
 
   useEffect(() => {
     setPlayerCanInput(false);
@@ -232,7 +250,7 @@ export const GamePage = () => {
     >
       {/* Lives display */}
       <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '8px', marginBottom: '16px' }}>
-        {[1, 2, 3].map((heart) => (
+        {Array.from({ length: Math.max(player?.lives ?? 3, 3) }, (_, i) => i + 1).map((heart) => (
           <div
             key={heart}
             style={{
@@ -262,7 +280,7 @@ export const GamePage = () => {
             letterSpacing: '2px',
           }}
         >
-          LEVEL {round.lengthOfSequence - 3}
+          LEVEL {round.roundNumber}
         </p>
         <p
           style={{
@@ -301,6 +319,7 @@ export const GamePage = () => {
             setMessage('Your turn. Repeat the sequence.');
           }}
           onColourClick={handleColourClick}
+          flashingSpeed={room?.gameMode === 'custom' ? room.customSettings?.flashingSpeed : 'medium'}
         />
         <p
           style={{
