@@ -27,7 +27,7 @@ if (Meteor.isServer && !global._publicationsInitialized) {
   // Only the current round, so past rounds' sequences are never sent.
   Meteor.publish('rounds', function (gameId) {
     if (typeof gameId !== 'string' || !gameId) return this.ready();
-    return RoundsCollection.find({ gameId });
+    return RoundsCollection.find({ gameId, advanced: false });
   });
 
   // `attemptedSequence` is excluded: it holds the answer a player submitted, so
