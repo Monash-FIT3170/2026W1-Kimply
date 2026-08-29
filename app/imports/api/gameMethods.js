@@ -172,7 +172,8 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       }
 
       const room = await RoomsCollection.findOneAsync({ pin: gameId });
-      const startingLives = room?.customSettings?.startingLives ? room.customSettings.startingLives : 3;
+      const isBattleRoyaleMode = room?.gameMode === 'battle_royale' || isBattleRoyale === true;
+      const startingLives = isBattleRoyaleMode ? 1 : room?.customSettings?.startingLives ?? 3;
 
       return PlayersCollection.insertAsync({
         gameId,

@@ -17,7 +17,7 @@ const GAME_MODE_PRESETS = {
   easy: { flashingSpeed: 'slow', startingLives: 5, startingSequenceLength: 1 },
   medium: { flashingSpeed: 'medium', startingLives: 3, startingSequenceLength: 3 },
   hard: { flashingSpeed: 'fast', startingLives: 1, startingSequenceLength: 3 },
-  battle_royale: { flashingSpeed: 'medium', startingLives: 3, startingSequenceLength: 4 },
+  battle_royale: { flashingSpeed: 'medium', startingLives: 1, startingSequenceLength: 4 },
 };
 
 function generatePin() {

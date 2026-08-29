@@ -59,7 +59,7 @@ export const GamePage = () => {
     }
     return RoundsCollection.findOne({ gameId, isCurrent: true });
   }, [gameId, player?.roundId]);
-  const totalLives = room?.gameMode === 'custom' ? (room.customSettings?.startingLives ?? 3) : 3;
+  const totalLives = room?.gameMode === 'custom' ? room.customSettings?.startingLives ?? 3 : isBattleRoyale ? 1 : 3;
   useEffect(() => {
     if (!round?._id || playerId) return;
     // get game mode
@@ -301,19 +301,19 @@ export const GamePage = () => {
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         {/* Lives display */}
         <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2vh' }}>
-          {Array.from({ length: Math.max(player?.lives ?? 3, 3) }, (_, i) => i + 1).map((heart) => (
+          {Array.from({ length: Math.max(1, totalLives) }, (_, i) => i + 1).map((heart) => (
             <div
               key={heart}
               style={{
                 width: '4vw',
                 height: '4vw',
-                backgroundColor: heart <= (player?.lives ?? 3) ? '#e03030' : '#333',
+                backgroundColor: heart <= (player?.lives ?? totalLives) ? '#e03030' : '#333',
                 borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 fontSize: '2vw',
-                boxShadow: heart <= (player?.lives ?? 3) ? '0 0 10px #e0303088' : 'none',
+                boxShadow: heart <= (player?.lives ?? totalLives) ? '0 0 10px #e0303088' : 'none',
                 transition: 'all 0.3s ease',
               }}
             >
