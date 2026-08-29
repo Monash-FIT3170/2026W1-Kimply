@@ -16,8 +16,8 @@ export const GamePage = () => {
   const [message, setMessage] = useState('');
   const [shake, setShake] = useState(false);
   const [correctGlow, setCorrectGlow] = useState(false);
-  const [completedRoundId, setCompletedRoundId] = useState(null);
   const [replayKey, setReplayKey] = useState(0);
+  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(true);
   const location = useLocation();
   const playerNameFromLobby = location.state?.playerName || 'Demo Player';
   const gameMode = location.state?.gameMode || 'standard';
@@ -272,7 +272,8 @@ export const GamePage = () => {
       style={{
         minHeight: '100vh',
         position: 'relative',
-        overflow: 'hidden',
+        overflowX: 'hidden',
+        overflowY: 'auto',
         background: 'linear-gradient(135deg, #1a0533 0%, #0d1b4b 100%)',
         display: 'flex',
         flexDirection: 'column',
@@ -296,16 +297,8 @@ export const GamePage = () => {
           KIMPLY
         </span>
       </div>
-      <div
-        style={{
-          position: 'relative',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flex: 1,
-        }}
-      >
+      <div className="relative flex flex-1 flex-col items-center justify-start md:justify-center">
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         {/* Lives display */}
         <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2vh' }}>
           {Array.from({ length: Math.max(player?.lives ?? 3, 3) }, (_, i) => i + 1).map((heart) => (
@@ -446,9 +439,25 @@ export const GamePage = () => {
               SUBMIT
             </button>
           </div>
-          {completedRoundId && <Leaderboard gameId={gameId} roundId={completedRoundId} />}
         </div>
       </div>
     </div>
+      <button
+        type="button"
+        onClick={() => setIsLeaderboardOpen((open) => !open)}
+        aria-expanded={isLeaderboardOpen}
+        className="fixed right-4 top-4 z-50 rounded-full border border-hairline bg-surface px-4 py-3 font-outfit text-xs font-bold text-fg shadow-lg sm:right-6 sm:top-6 sm:text-sm"
+      >
+        {isLeaderboardOpen ? 'Collapse leaderboard' : 'Leaderboard'}
+      </button>
+
+      <aside
+        className={`relative z-30 mx-auto mt-6 w-full max-w-[calc(100vw-2rem)] px-4 pb-8 transition-all duration-300 ease-in-out md:fixed md:right-6 md:top-20 md:mx-0 md:mt-0 md:w-[28rem] md:max-w-[calc(100vw-3rem)] md:px-0 md:pb-0 md:transition-transform ${
+          isLeaderboardOpen ? 'block md:translate-x-0' : 'hidden md:block md:translate-x-full'
+        }`}
+      >
+        <Leaderboard gameId={gameId} currentPlayerId={playerId} />
+      </aside>
+  </div>
   );
 };
