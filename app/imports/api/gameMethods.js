@@ -205,6 +205,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         winner: false,
         completeRound: false,
         gameFinished: false,
+        eliminatedAt: null,
       });
     },
 
@@ -263,6 +264,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
             totalGuesses,
             eliminated,
             eliminatedRound: eliminated ? round.lengthOfSequence - 3 : player.eliminatedRound,
+            eliminatedAt: eliminated ? new Date() : player.eliminatedAt,
           },
         });
 

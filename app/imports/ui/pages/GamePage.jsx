@@ -8,6 +8,8 @@ import { ColourSequence } from '../ColourSequence.jsx';
 import { Leaderboard } from '../Leaderboard.jsx';
 import { EndLeaderboard } from '../EndLeaderboard.jsx';
 import { useLocation } from 'react-router-dom';
+import { EliminationFeed } from '../EliminationFeed.jsx';
+
 import { TileLattice, BG } from '../components/design';
 export const GamePage = () => {
   const [playerId, setPlayerId] = useState(null);
@@ -224,7 +226,10 @@ export const GamePage = () => {
   }
   if (!player) return null;
   if (player?.gameFinished) {
-    return <EndLeaderboard gameId={player.gameId} currentPlayerId={player._id} />;
+    return <>
+      <EliminationFeed gameId={gameId} />
+      <EndLeaderboard gameId={player.gameId} currentPlayerId={player._id} />
+    </>;
   }
   if (player?.eliminated) {
     const longestStreak = player.longestStreak ?? 0;
@@ -295,6 +300,7 @@ export const GamePage = () => {
             {correctGuesses}/{totalGuesses} correct guesses
           </p>
         </div>
+        <EliminationFeed gameId={gameId} />
       </div>
     );
   }
@@ -528,6 +534,7 @@ export const GamePage = () => {
           </div>
           {completedRoundId && <Leaderboard roundId={completedRoundId} />}
         </div>
+        <EliminationFeed gameId={gameId} />
       </div>
     </div>
   );

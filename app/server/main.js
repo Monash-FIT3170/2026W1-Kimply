@@ -30,6 +30,18 @@ Meteor.startup(async () => {
 Meteor.publish('rounds', () => RoundsCollection.find());
 Meteor.publish('players', () => PlayersCollection.find());
 Meteor.publish('leaderboard', () => LeaderboardCollection.find());
+
+Meteor.publish('eliminations', function (gameId) {
+  if (typeof gameId !== 'string' || !gameId.trim()) {
+    return this.ready();
+  }
+
+  return PlayersCollection.find(
+    { gameId: gameId.trim(), eliminated: true },
+    { sort: { eliminatedAt: -1 }, limit: 20 }
+  );
+});
+
 Meteor.publish('gameEvents', function (gameId) {
   if (typeof gameId !== 'string' || !gameId.trim()) {
     return this.ready();
@@ -40,6 +52,7 @@ Meteor.publish('gameEvents', function (gameId) {
     { sort: { createdAt: -1 }, limit: 20 }
   );
 });
+
 Meteor.publish('globalLeaderboard', () =>
   GlobalLeaderboardCollection.find({}, { sort: { bestRound: -1, wins: -1, achievedAt: 1 } })
 );
