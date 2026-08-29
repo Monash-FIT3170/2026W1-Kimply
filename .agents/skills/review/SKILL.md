@@ -20,7 +20,7 @@ Read `AGENTS.md` tables and `docs/defect-register.md` before commenting. Anonymo
 - Life changes use `$inc`, not `$set` from a stale read (D4). Round advance and winner selection stay idempotent under two concurrent callers.
 - `deploy/`, `nginx/`, `docker-compose.prod.yml` are not forked per environment. Local `docker-compose.yml` still boots.
 - Invented npm scripts (`lint`, `e2e`, `typecheck`, `build`, `dev`) are rejected. Format is Prettier only.
-- `AGENTS.md` tables + Feature Log updated in the same change when collections, publications, methods, routes, tests, or defects moved.
+- `AGENTS.md` tables updated, and a `docs/decision-log.md` entry added, in the same change when collections, publications, methods, routes, tests, or defects moved.
 
 ## Call out, do not rediscover
 
