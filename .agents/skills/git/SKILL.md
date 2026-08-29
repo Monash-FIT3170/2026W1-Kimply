@@ -37,8 +37,6 @@ Use the returned number as `<n>` below. Do not invent a number.
 
 ## 2. Branch from origin/dev, linked on the issue
 
-Prefix by kind of work:
-
 | Prefix | When |
 |---|---|
 | `feature/` | New behaviour |
@@ -46,7 +44,7 @@ Prefix by kind of work:
 | `bug/` | Same as `fix/` if the user says "bug" |
 | `chore/` | Docs, skills, formatting, tooling |
 
-`<slug>` is lowercase, hyphenated, 3–6 words. Example: `feature/42-live-elimination-feed`.
+`<slug>` is lowercase, hyphenated, 3–6 words. Example: `feature/42-short-slug`.
 
 Create the branch **through GitHub** so it appears under the issue's Development sidebar:
 
@@ -57,7 +55,7 @@ gh issue develop <n> --name <prefix>/<n>-<slug> --base dev --checkout
 
 `gh issue develop` is what links the branch on the issue. `git checkout -b` alone does not.
 
-If `gh issue develop` fails (branch name taken, no permission), fall back and tell the user to link it in the UI:
+If `gh issue develop` fails, fall back and tell the user to link it in the UI (issue → **Development**). Do not paste the tree URL into the issue body:
 
 ```bash
 git checkout dev
@@ -65,17 +63,7 @@ git pull --ff-only origin dev
 git checkout -b <prefix>/<n>-<slug>
 ```
 
-Then: open the issue → **Development** → **Create a branch** / link this branch. Print that path; do not paste the tree URL into the issue body.
-
-Already on a branch with no issue? Create the issue, then:
-
-```bash
-git branch -m <prefix>/<n>-<slug>
-git push -u origin HEAD
-gh issue develop <n> --name <prefix>/<n>-<slug> --base dev
-```
-
-If develop still will not attach, tell the user to link the branch from the issue Development sidebar.
+Already on a branch with no issue? Create the issue, rename, push, then `gh issue develop <n> --name <prefix>/<n>-<slug> --base dev`.
 
 ## 3. Pull request → `dev`, closing the issue
 
@@ -95,44 +83,24 @@ EOF
 )"
 ```
 
-`Closes #<n>` must be its own paragraph in the PR body (not in a code fence, not only in chat). That is what produces **"linked a pull request that will close this issue"** on the issue. Same keywords: `Closes`, `Fixes`, `Resolves`.
+`Closes #<n>` must be its own paragraph in the PR body (not in a code fence). That is what produces **"linked a pull request that will close this issue"**. Same keywords: `Closes`, `Fixes`, `Resolves`.
 
 Target `main` only when the user is cutting a production release.
 
-If the branch has no issue yet, create the issue before the PR, then `Closes #<n>`.
-
-Verify the native link landed:
+Verify the native link:
 
 ```bash
 gh pr view --json closingIssuesReferences --jq '.closingIssuesReferences[].number'
 ```
 
-That must print `<n>`. If it is empty, add the keyword and re-check:
-
-```bash
-gh pr edit --body "$(cat <<'EOF'
-## Summary
-- <same summary>
-
-Closes #<n>
-
-## Test plan
-- [ ] <same plan>
-EOF
-)"
-```
-
-If it is still empty, tell the user: open the issue → **Development** → **Link a pull request** → select this PR. Do not edit the issue body with a markdown URL.
+If it is empty, `gh pr edit` to put `Closes #<n>` in the body, or tell the user: issue → **Development** → **Link a pull request**.
 
 ## Commands to hand the user
-
-When you cannot run the tools, print this filled in rather than a generic reminder:
 
 ```bash
 gh issue create --title "TITLE" --body "## Why\n...\n## What\n...\n## Done when\n- [ ] ..."
 git fetch origin
 gh issue develop N --name feature/N-slug --base dev --checkout
-# after the user asks to open a PR:
 git push -u origin HEAD
 gh pr create --base dev --title "TITLE" --body "## Summary\n- ...\n\nCloses #N\n\n## Test plan\n- [ ] ..."
 gh pr view --json closingIssuesReferences --jq '.closingIssuesReferences[].number'

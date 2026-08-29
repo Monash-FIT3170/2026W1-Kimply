@@ -20,6 +20,12 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-08-29 - Skills are workflows, not product rules
+
+Every skill under `.agents/skills/` was rewritten to drop game-specific rules (defect IDs, publication invariants, route tables, "do not add a login wall", lives / sequences / `'demo'` gameId).
+Those belong in `AGENTS.md` and `docs/`. Skills now only say how to run git, tests, Docker, Meteor, and the rest of the toolchain, and they point at the docs when a change would move an invariant.
+Files: all ten `SKILL.md` files, `AGENTS.md` skills table.
+
 ## 2026-08-29 - The design system gets its own document, and AGENTS.md becomes a hub
 
 `docs/design_system.md` (v0.1, design-authored) is now the source of truth for colour, typography, spacing, radii, elevation, motion, component specs, patterns, and voice.

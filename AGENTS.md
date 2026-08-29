@@ -46,7 +46,7 @@ Everything below has a home of its own. Read the home file rather than expecting
 | [`docs/dev-environment.md`](docs/dev-environment.md) | How the development stack differs from production |
 | [`docs/operations.md`](docs/operations.md) | Monitoring, backups, incident runbook, cost |
 | [`README.md`](README.md) | WSL2 and Docker setup, and the full local command list |
-| `.agents/skills/<name>/SKILL.md` | How to do a specific kind of work in this repo |
+| `.agents/skills/<name>/SKILL.md` | How to do a kind of work in this repo (git, tests, Docker). Not product rules |
 
 ## Agent operating rules
 
@@ -60,26 +60,27 @@ Everything below has a home of its own. Read the home file rather than expecting
 ## Skills
 
 Load the matching skill from `.agents/skills/` (or the `.claude` / `.cursor` symlink — same files) when the trigger matches.
+Skills are workflows and stack mechanics. Game rules, invariants, and "where we are headed" live in this file and `docs/`.
 
-**Workflow** - what to do.
+**Workflow**
 
 | Skill | Use when |
 |---|---|
 | `git` | New branch, GitHub issue, or pull request |
 | `test` | Writing or running tests |
-| `ui` | UI, styling, design tokens, or client pages |
-| `review` | Reviewing a PR, diff, or change set |
-| `debug` | Investigating a bug, a stall, a hang, or "it is not working" |
+| `ui` | UI, styling, or client pages |
+| `review` | Reviewing a PR or diff |
+| `debug` | Investigating a bug or "it is not working" |
 
-**Stack** - how this stack actually behaves.
+**Stack**
 
 | Skill | Use when |
 |---|---|
-| `meteor` | Methods, publications, collections, DDP, packages, the bundler, anything in `server/` or `imports/api/` |
-| `react` | Components, `useTracker` / `useSubscribe`, calling methods from the client, routes, hooks |
-| `mongo` | Queries, document shapes, indexes, TTL, races, Atlas capacity |
-| `docker` | Local environment, compose, volumes, images, "it will not start" |
-| `deploy` | `deploy/`, `nginx/`, `docker-compose.prod.yml`, the deploy workflow, releases, rollbacks, incidents |
+| `meteor` | Methods, publications, collections, DDP, packages, `server/` or `imports/api/` |
+| `react` | Components, subscriptions, calling methods from the client, routes, hooks |
+| `mongo` | Queries, indexes, TTL, races, looking at local data |
+| `docker` | Local compose, volumes, images, "it will not start" |
+| `deploy` | `deploy/`, `nginx/`, `docker-compose.prod.yml`, releases, rollbacks, incidents |
 
 ## Git
 
