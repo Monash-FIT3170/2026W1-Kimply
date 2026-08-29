@@ -22,7 +22,7 @@ const COLOURS = {
 const TILE_ORDER = ['red', 'yellow', 'green', 'blue'];
 
 const FLASH_SPEEDS = {
-  slow:   { flash: 900, gap: 350 },
+  slow:   { flash: 1100, gap: 450 },
   medium: { flash: 600, gap: 250 },
   fast:   { flash: 350, gap: 150 },
 };
@@ -84,7 +84,7 @@ export const ColourSequence = ({
       cancelled = true;
       clearTimeout(startDelay);
     };
-  }, [roundId, replayKey]);
+  }, [roundId, replayKey, flashingSpeed]);
   const playClickSound = () => {
     const audioContext = new AudioContext();
     const oscillator = audioContext.createOscillator();

@@ -23,6 +23,7 @@ export const GamePage = () => {
   const roomPin = location.state?.pin;
   const gameId = roomPin;
   const lobbyPlayerId = location.state?.playerId;
+  const [showPowerupPopup, setShowPowerupPopup] = useState(false);
 
   useEffect(() => {
     if (!gameId) return;
@@ -40,6 +41,7 @@ export const GamePage = () => {
       roomSub.stop();
     };
   }, [gameId]);
+
 
   const round = useTracker(() => {
     return RoundsCollection.findOne({ gameId, isCurrent: true });
@@ -76,6 +78,10 @@ export const GamePage = () => {
     setMessage('');
     setCompletedRoundId(null);
   }, [round?._id]);
+
+  useEffect(() => {
+    setShowPowerupPopup(!!player?.slowMotionActive);
+  }, [player?.slowMotionActive]);
 
   const handleColourClick = (colour) => {
     if (!playerCanInput) return;
@@ -248,6 +254,24 @@ export const GamePage = () => {
         boxShadow: correctGlow ? 'inset 0 0 80px #00aaff' : 'none',
       }}
     >
+      {showPowerupPopup && (
+      <div
+        style={{
+          position: 'fixed',
+          top: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: '#0a84ff',
+          color: 'white',
+          padding: '14px 28px',
+          borderRadius: '12px',
+          fontWeight: 'bold',
+          zIndex: 1000,
+        }}
+      >
+        Powerup Gained: Slow Motion for one round!
+      </div>
+    )}
       {/* Lives display */}
       <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '8px', marginBottom: '16px' }}>
         {Array.from({ length: Math.max(player?.lives ?? 3, 3) }, (_, i) => i + 1).map((heart) => (
