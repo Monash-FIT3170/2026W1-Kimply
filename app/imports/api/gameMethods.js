@@ -140,6 +140,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         winner: false,
         completeRound: false,
         gameFinished: false,
+        slowMotionActive: false,
       });
     },
 
@@ -171,7 +172,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
             totalGuesses,
             correctGuesses,
             completeRound: true,
-            lives, 
+            lives,
           },
         });
 
@@ -279,6 +280,9 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         roundNumber: (currentRound.roundNumber ?? 1) + 1,
       });
 
+      // Completing round 5, grants the player a slow motion powerup for the round right after.
+      const grantsSlowMotion = currentRound.roundNumber === 5;
+
       // move active players into next round
       await PlayersCollection.updateAsync(
         {
@@ -290,6 +294,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
             roundId: nextRoundId,
             completeRound: false,
             attemptedSequence: [],
+            slowMotionActive: grantsSlowMotion,
           },
         },
         { multi: true }
