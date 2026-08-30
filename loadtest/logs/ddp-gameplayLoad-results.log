@@ -1,0 +1,66 @@
+
+======================================================================
+RUN AT: 2026-08-30T04-41-58
+======================================================================
+Target: ws://localhost:3000/websocket
+Players: 100 | Rounds to observe: 5 | Correct-guess rate: 0.7
+
+
+===== RESULTS =====
+Total wall time: 24450ms
+Connections: ok=100 failed=0
+Connect time: n=100 avg=21ms p50=17ms p95=53ms p99=72ms max=72ms
+
+-- Method latencies --
+rooms.create: n=1 avg=5ms p50=5ms p95=5ms p99=5ms max=5ms  errors=0
+rooms.join: n=99 avg=18ms p50=14ms p95=45ms p99=46ms max=46ms  errors=0
+rooms.start: n=1 avg=5ms p50=5ms p95=5ms p99=5ms max=5ms  errors=0
+players.join: n=100 avg=206ms p50=225ms p95=241ms p99=243ms max=243ms  errors=0
+players.submitSequence: n=501 avg=1053ms p50=1092ms p95=1847ms p99=2045ms max=2122ms  errors=0
+
+-- Subscription latencies --
+rooms.lobby: n=100 avg=20ms p50=19ms p95=47ms p99=51ms max=51ms  errors=0
+rounds: n=100 avg=40ms p50=40ms p95=51ms p99=65ms max=65ms  errors=0
+players: n=100 avg=99ms p50=100ms p95=103ms p99=104ms max=104ms  errors=0
+
+-- Round transition fan-out (spread across players seeing the same round) --
+  round cfJvXia2j5jw5zDBW: seen by 100 clients, spread=9ms
+  round WLg36jekvDxR3DuT5: seen by 100 clients, spread=21ms
+  round zH8bejSohpnkCapN7: seen by 100 clients, spread=17ms
+  round 68ip5JBwwmmwSQKBH: seen by 100 clients, spread=22ms
+  round 5KcL7BN8JCkW8EEFo: seen by 100 clients, spread=27ms
+
+Fan-out spread: n=5 avg=19ms p50=21ms p95=27ms p99=27ms max=27ms
+
+======================================================================
+RUN AT: 2026-08-30T04-44-19
+======================================================================
+Target: wss://dev.kimply.online/websocket
+Players: 100 | Rounds to observe: 5 | Correct-guess rate: 0.7
+
+
+===== RESULTS =====
+Total wall time: 50773ms
+Connections: ok=100 failed=0
+Connect time: n=100 avg=319ms p50=364ms p95=416ms p99=428ms max=428ms
+
+-- Method latencies --
+rooms.create: n=1 avg=40ms p50=40ms p95=40ms p99=40ms max=40ms  errors=0
+rooms.join: n=99 avg=193ms p50=189ms p95=438ms p99=486ms max=486ms  errors=0
+rooms.start: n=1 avg=41ms p50=41ms p95=41ms p99=41ms max=41ms  errors=0
+players.join: n=100 avg=683ms p50=854ms p95=982ms p99=1883ms max=1883ms  errors=0
+players.submitSequence: n=504 avg=4031ms p50=4366ms p95=5978ms p99=6593ms max=7666ms  errors=0
+
+-- Subscription latencies --
+rooms.lobby: n=100 avg=139ms p50=157ms p95=212ms p99=213ms max=213ms  errors=0
+rounds: n=100 avg=64ms p50=71ms p95=88ms p99=88ms max=88ms  errors=0
+players: n=100 avg=293ms p50=117ms p95=694ms p99=697ms max=697ms  errors=0
+
+-- Round transition fan-out (spread across players seeing the same round) --
+  round 8fN5CoifThZpMzeyg: seen by 100 clients, spread=12ms
+  round xwAAiYre57rjdFQZS: seen by 100 clients, spread=25ms
+  round P83eEfv8LARgGawPx: seen by 100 clients, spread=18ms
+  round NjybmtozACb48Jx2T: seen by 100 clients, spread=15ms
+  round CnNGZKhcoxqn6LnPe: seen by 100 clients, spread=680ms
+
+Fan-out spread: n=5 avg=150ms p50=18ms p95=680ms p99=680ms max=680ms

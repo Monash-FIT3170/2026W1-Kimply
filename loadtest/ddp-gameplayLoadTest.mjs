@@ -1,12 +1,7 @@
 #!/usr/bin/env node
-
-import WebSocket from "ws";
-
 /**
  * DDP round-latency test: N concurrent players actively playing, not just joining.
  *
- * Builds on ddp-load.mjs, but instead of stopping after everyone joins, this
- * keeps every player submitting sequence guesses for real rounds and measures:
  *
  *   1. players.submitSequence latency (method round-trip, per-call)
  *   2. Round-transition fan-out spread: when a round advances, how long does
@@ -14,17 +9,9 @@ import WebSocket from "ws";
  *      client to see it? This is the number that degrades under load if
  *      the `rounds` publication or its underlying query gets slow to fan out.
  *
- * ASSUMPTIONS (check these against your actual publish functions):
- *   - The `rounds` publication exposes `sequence` and `lengthOfSequence` to
- *     clients (needed so a real client can display the sequence to guess).
- *   - `attemptedSequence` on PLAYER docs is stripped from the `players` pub
- *     (per your existing smoke test) — this script never reads it.
- *   - Each client can identify "its own" player doc by matching `name` in
- *     the `players` publication, since we don't assume a method's return
- *     shape for the player id.
- *
  * Usage:
- *    node ddp-round-latency-test.mjs wss://localhost/websocket --insecure
+ *    Local: node ddp-round-latency-test.mjs wss://localhost/websocket --insecure
+ *    Dev: node loadtest/ddp-gameplayLoadTest.mjs wss://dev.kimply.online/websocket
  *
  * Config (env vars):
  *    PLAYERS = 20            total simulated players (host + guests) in the one room
@@ -36,14 +23,18 @@ import WebSocket from "ws";
  *    HARD_TIMEOUT_MS = 60000 safety cutoff in case rounds stop advancing
  */
 
-// If you switch to the `ws` package instead, replace the line above with:
+import WebSocket from "ws";
+import { appendFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
 const url = process.argv[2] || "wss://localhost/websocket";
 const insecure = process.argv.includes("--insecure");
 if (insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 const CONFIG = {
-  totalPlayers: Number(process.env.PLAYERS || 20),
+  totalPlayers: Number(process.env.PLAYERS || 100),
   joinWindowMs: Number(process.env.JOIN_WINDOW_MS || 500),
   roundsToObserve: Number(process.env.ROUNDS_TO_OBSERVE || 5),
   correctGuessRate: Number(process.env.CORRECT_GUESS_RATE || 0.7),
@@ -111,9 +102,6 @@ class DDPClient {
     this.collections = {};
     this._nextId = 0;
     this._onConnected = null;
-    // External hook: called with every parsed DDP message, before internal
-    // handling. Lets gameplay code observe raw added/changed/removed events
-    // (e.g. to detect round transitions) without changing this class.
     this.onMessage = null;
   }
 
@@ -178,7 +166,7 @@ class DDPClient {
       case "added":
       case "changed": {
         const c = (this.collections[m.collection] ||= new Map());
-        c.set(m.id, { ...(c.get(m.id) || {}), ...(m.fields || {}) });
+        c.set(m.id, { _id: m.id, ...(c.get(m.id) || {}), ...(m.fields || {}) });
         return;
       }
 
@@ -336,16 +324,51 @@ function trackRoundTransitions(participant) {
   };
 }
 
+async function joinGame(participant, pin) {
+  const { client, name } = participant;
+  const deadline = Date.now() + 10000;
+  let currentRound = null;
+
+  while (!currentRound && Date.now() < deadline) {
+    const roundsMap = client.collections.rounds;
+    currentRound = roundsMap ? [...roundsMap.values()][0] : null;
+    if (!currentRound) await sleep(100);
+  }
+
+  if (!currentRound) {
+    stats.errorsLog.push(
+      `[client ${client.id}] never saw a round to join within 10s`,
+    );
+    return null;
+  }
+
+  try {
+    const playerId = await client.call("players.join", [
+      currentRound._id,
+      name,
+      pin,
+    ]);
+    return playerId;
+  } catch (e) {
+    // already logged in call()
+    return null;
+  }
+}
+
 // One player's play loop: waits for a round to be visible, "thinks" for a
 // bit (simulated human delay), then submits a guess — repeating until the
 // player is eliminated, the game finishes, or roundsToObserve is reached.
-async function playLoop(participant, getPlayerId, getOwnPlayerDoc, isGameOver) {
+let _loggedFirstSubmit = false;
+
+async function playLoop(participant, playerId, isGameOver) {
   const { client } = participant;
+
+  if (!playerId) return; // join failed — nothing this player can do
 
   while (!isGameOver()) {
     const roundsMap = client.collections.rounds;
     const currentRound = roundsMap ? [...roundsMap.values()][0] : null;
-    const ownDoc = getOwnPlayerDoc();
+    const ownDoc = client.collections.players?.get(playerId) || null;
 
     // Nothing to do yet, or already eliminated/finished — just wait.
     if (!currentRound || !ownDoc || ownDoc.eliminated || ownDoc.gameFinished) {
@@ -361,12 +384,6 @@ async function playLoop(participant, getPlayerId, getOwnPlayerDoc, isGameOver) {
       continue;
     }
 
-    const playerId = getPlayerId();
-    if (!playerId) {
-      await sleep(150);
-      continue;
-    }
-
     // simulated human delay before acting
     await sleep(randInt(CONFIG.thinkMsMin, CONFIG.thinkMsMax));
 
@@ -377,6 +394,16 @@ async function playLoop(participant, getPlayerId, getOwnPlayerDoc, isGameOver) {
         : randomSequence(currentRound.lengthOfSequence || 4);
 
     try {
+      if (!_loggedFirstSubmit) {
+        _loggedFirstSubmit = true;
+        const debugRoundId = currentRound && currentRound._id;
+        console.log(
+          `\n[debug] first players.submitSequence call -> playerId=${JSON.stringify(playerId)} ` +
+            `guess=${JSON.stringify(guess)} roundId=${JSON.stringify(debugRoundId)} ` +
+            `roundSequence=${JSON.stringify(currentRound && currentRound.sequence)} ` +
+            `ownDocRoundId=${JSON.stringify(ownDoc && ownDoc.roundId)}\n`,
+        );
+      }
       await client.call("players.submitSequence", [playerId, guess]);
     } catch (e) {
       // already logged in call()
@@ -388,33 +415,11 @@ async function playLoop(participant, getPlayerId, getOwnPlayerDoc, isGameOver) {
   }
 }
 
-// Finds this participant's own player doc by matching name, once the
-// `players` publication has delivered it.
-function findOwnPlayerId(client, playerName) {
-  const playersMap = client.collections.players;
-  if (!playersMap) return null;
-  for (const [docId, doc] of playersMap) {
-    if (doc.name === playerName) return docId;
-  }
-  return null;
-}
-
-function findOwnPlayerDoc(client, playerName) {
-  const playersMap = client.collections.players;
-  if (!playersMap) return null;
-  for (const doc of playersMap.values()) {
-    if (doc.name === playerName) return doc;
-  }
-  return null;
-}
-
-function isPlayerDone(client, playerName) {
-  const playersMap = client.collections.players;
-  if (!playersMap) return false;
-  for (const doc of playersMap.values()) {
-    if (doc.name === playerName) return !!(doc.eliminated || doc.gameFinished);
-  }
-  return false;
+function isPlayerDoneById(client, playerId) {
+  if (!playerId) return true; // never joined — treat as done so the loop doesn't spin forever
+  const doc = client.collections.players?.get(playerId);
+  if (!doc) return false;
+  return !!(doc.eliminated || doc.gameFinished);
 }
 
 // ---------- main scenario ----------
@@ -466,14 +471,24 @@ async function runScenario() {
     return;
   }
 
+  // Real clients join the game (create a PlayersCollection doc) themselves,
+  // client-side, once they see the round — this is NOT triggered by the
+  // server on rooms.start. Mirror that here before anyone can play.
+  const playerIds = await Promise.all(
+    participants.map((p) => joinGame(p, host.pin)),
+  );
+  const joinedCount = playerIds.filter(Boolean).length;
+  console.log(
+    `Joined game (players.join): ${joinedCount}/${participants.length}`,
+  );
+
   const gameOver = () => roundObservations.size >= CONFIG.roundsToObserve;
 
-  const playLoops = participants.map((p) =>
+  const playLoops = participants.map((p, i) =>
     playLoop(
       p,
-      () => findOwnPlayerId(p.client, p.name),
-      () => findOwnPlayerDoc(p.client, p.name),
-      () => gameOver() || isPlayerDone(p.client, p.name),
+      playerIds[i],
+      () => gameOver() || isPlayerDoneById(p.client, playerIds[i]),
     ),
   );
 
@@ -485,32 +500,39 @@ async function runScenario() {
 
 // ---------- reporting ----------
 
-function reportRoundFanout() {
-  console.log(
+function buildRoundFanoutReport() {
+  const lines = [
     "\n-- Round transition fan-out (spread across players seeing the same round) --",
-  );
+  ];
   const spreads = [];
   for (const [roundId, observations] of roundObservations) {
     if (observations.length < 2) continue;
     const times = observations.map((o) => o.seenAtMs);
     const spread = Math.max(...times) - Math.min(...times);
     spreads.push(spread);
-    console.log(
+    lines.push(
       `  round ${roundId}: seen by ${observations.length} clients, spread=${spread}ms`,
     );
   }
   if (spreads.length) {
-    console.log("\n" + summarize("Fan-out spread", spreads));
+    lines.push("\n" + summarize("Fan-out spread", spreads));
   } else {
-    console.log(
+    lines.push(
       "  (not enough observations to compute spread — check subscription/method names)",
     );
   }
+  return lines.join("\n");
 }
 
 async function main() {
-  console.log(`Target: ${url}`);
-  console.log(
+  const reportLines = [];
+  const log = (line = "") => {
+    console.log(line);
+    reportLines.push(line);
+  };
+
+  log(`Target: ${url}`);
+  log(
     `Players: ${CONFIG.totalPlayers} | Rounds to observe: ${CONFIG.roundsToObserve} | ` +
       `Correct-guess rate: ${CONFIG.correctGuessRate}\n`,
   );
@@ -519,29 +541,36 @@ async function main() {
   await runScenario();
   const totalMs = Date.now() - start;
 
-  console.log("\n===== RESULTS =====");
-  console.log(`Total wall time: ${totalMs}ms`);
-  console.log(`Connections: ok=${stats.connectOk} failed=${stats.connectFail}`);
-  console.log(summarize("Connect time", stats.connectTimesMs));
+  log("\n===== RESULTS =====");
+  log(`Total wall time: ${totalMs}ms`);
+  log(`Connections: ok=${stats.connectOk} failed=${stats.connectFail}`);
+  log(summarize("Connect time", stats.connectTimesMs));
 
-  console.log("\n-- Method latencies --");
+  log("\n-- Method latencies --");
   for (const [method, arr] of Object.entries(stats.methodLatenciesMs)) {
     const errCount = stats.methodErrors[method] || 0;
-    console.log(summarize(method, arr) + `  errors=${errCount}`);
+    log(summarize(method, arr) + `  errors=${errCount}`);
   }
 
-  console.log("\n-- Subscription latencies --");
+  log("\n-- Subscription latencies --");
   for (const [name, arr] of Object.entries(stats.subLatenciesMs)) {
     const errCount = stats.subErrors[name] || 0;
-    console.log(summarize(name, arr) + `  errors=${errCount}`);
+    log(summarize(name, arr) + `  errors=${errCount}`);
   }
 
-  reportRoundFanout();
+  log(buildRoundFanoutReport());
 
   if (stats.errorsLog.length) {
-    console.log(`\n-- First 15 errors (of ${stats.errorsLog.length}) --`);
-    stats.errorsLog.slice(0, 15).forEach((e) => console.log("  " + e));
+    log(`\n-- First 15 errors (of ${stats.errorsLog.length}) --`);
+    stats.errorsLog.slice(0, 15).forEach((e) => log("  " + e));
   }
+
+  const iso = new Date().toISOString().replace(/:/g, "-").split(".")[0];
+  const header = `\n${"=".repeat(70)}\nRUN AT: ${iso}\n${"=".repeat(70)}`;
+  appendFileSync(
+    join(__dirname, "logs", "ddp-gameplayLoad-results.log"),
+    header + "\n" + reportLines.join("\n") + "\n",
+  );
 
   process.exit(0);
 }
