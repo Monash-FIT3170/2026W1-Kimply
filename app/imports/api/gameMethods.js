@@ -51,42 +51,38 @@ async function checkWinner(gameId, isBattleRoyale = false) {
       },
     });
 
-    await PlayersCollection.updateAsync(
+  const alreadyFinished = await PlayersCollection.findOneAsync(
+    { gameId, gameFinished: true},
+    {fields: {_id: 1}}
+  );
+  if (alreadyFinished) return;
+
+  const activeCount = await PlayersCollection.countDocuments({ gameId, eliminated: false});
+
+  if (activeCount ===1){
+    const winner = await PlayersCollection.findOneAsync(
+      { gameId, eliminated: false },
+      {fields: { _id: 1 } }
+    );
+
+    await PlayersCollection.updateAsync(winner._id, { $set: { winner:true}});
+    await PlayersCollection.updateAsync({ gameId }, {$set:{ gameFinished: true}}, { multi: true});
+  } else if (activeCount === 0){
+    
+    const [top] = await PlayersCollection.find(
       { gameId },
-      {
-        $set: {
-          gameFinished: true,
-        },
-      },
-      { multi: true }
-    );
-  }
-
-  if (active.length === 0 && players.length > 0) {
-    const highestRound = Math.max(...players.map((p) => p.eliminatedRound ?? 0));
-
-    await PlayersCollection.updateAsync(
-      {
-        gameId,
-        eliminatedRound: highestRound,
-      },
-      {
-        $set: {
-          winner: true,
-        },
-      },
-      { multi: true }
-    );
-
-    await PlayersCollection.updateAsync(
-      { gameId },
-      {
-        $set: {
-          gameFinished: true,
-        },
-      },
-      { multi: true }
-    );
+      { sort: {eliminatedRound: -1}, limit: 1, fields: { eliminatedRound: 1}}
+    ).fetchAsync()
+    
+    const highestRound = top?.eliminatedRound ?? 0;
+    if (top) {
+      await PlayersCollection.updateAsync(
+        { gameId, eliminatedRound: highestRound },
+        { $set: {winner: true}},
+        { multi: true}
+      );
+      await PlayersCollection.updateAsync({ gameId}, { $set: { gameFinished: true}}, {multi: true})
+    }
   }
 }
 
