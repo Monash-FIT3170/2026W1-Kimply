@@ -81,8 +81,9 @@ async function checkWinner(gameId, isBattleRoyale = false) {
       }
     }
   }
+}
 
-  async function advanceRoundIfReady(round) {
+async function advanceRoundIfReady(round) {
     if (!round) return false;
 
     const playersInRound = await PlayersCollection.find({
@@ -114,29 +115,29 @@ async function checkWinner(gameId, isBattleRoyale = false) {
     return false;
   }
 
-  // Gets an existing sequence for a level or creates a new one
-  // Gets existing round for a level or creates a new one
-  async function getOrCreateRound(gameId, level) {
-    const existing = await RoundsCollection.findOneAsync({ gameId, level });
+// Gets an existing sequence for a level or creates a new one
+// Gets existing round for a level or creates a new one
+async function getOrCreateRound(gameId, level) {
+  const existing = await RoundsCollection.findOneAsync({ gameId, level });
 
-    if (existing) {
-      return existing._id;
-    }
-    const sequence = generateSequence(level);
-    return await RoundsCollection.insertAsync({
-      gameId,
-      level,
-      lengthOfSequence: level,
-      sequence,
-      createdAt: new Date(),
-      advanced: false,
-      isCurrent: false, //current round is not shared, it is per player to accommodate battle royale
-    });
+  if (existing) {
+    return existing._id;
   }
+  const sequence = generateSequence(level);
+  return await RoundsCollection.insertAsync({
+    gameId,
+    level,
+    lengthOfSequence: level,
+    sequence,
+    createdAt: new Date(),
+    advanced: false,
+    isCurrent: false, //current round is not shared, it is per player to accommodate battle royale
+  });
+}
 
-  if (Meteor.isServer && !global._gameMethodsInitialized) {
-    global._gameMethodsInitialized = true;
-    Meteor.methods({
+if (Meteor.isServer && !global._gameMethodsInitialized) {
+  global._gameMethodsInitialized = true;
+  Meteor.methods({
       // Generate a new round with a colour sequence
       async 'rounds.generate'(gameId = null) {
         const room = await RoomsCollection.findOneAsync({ pin: gameId }); // sync version if this stays a sync method
@@ -360,4 +361,3 @@ async function checkWinner(gameId, isBattleRoyale = false) {
       },
     });
   }
-}
