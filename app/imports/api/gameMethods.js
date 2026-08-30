@@ -192,6 +192,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         completeRound: false,
         gameFinished: false,
         isBattleRoyale,
+        slowMotionActive: false,
       });
     },
 
@@ -339,6 +340,8 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         roundNumber: (currentRound.roundNumber ?? 1) + 1,
       });
 
+      const grantsSlowMotion = currentRound.roundNumber === 5;
+
       // move active players into next round
       await PlayersCollection.updateAsync(
         {
@@ -350,6 +353,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
             roundId: nextRoundId,
             completeRound: false,
             attemptedSequence: [],
+            slowMotionActive: grantsSlowMotion,
           },
         },
         { multi: true }
