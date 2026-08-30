@@ -10,57 +10,42 @@ function generateSequence(length) {
   return Array.from({ length }, () => COLOURS[Math.floor(Math.random() * COLOURS.length)]);
 }
 
-async function checkWinner(gameId) {
-  const players = await PlayersCollection.find({ gameId }).fetchAsync();
 
-  const alreadyFinished = players.some((p) => p.gameFinished);
+async function checkWinner(gameId){
+
+
+  const alreadyFinished = await PlayersCollection.findOneAsync(
+    { gameId, gameFinished: true},
+    {fields: {_id: 1}}
+  );
   if (alreadyFinished) return;
 
-  const active = players.filter((p) => !p.eliminated);
+  const activeCount = await PlayersCollection.countDocuments({ gameId, eliminated: false});
 
-  if (active.length === 1) {
-    await PlayersCollection.updateAsync(active[0]._id, {
-      $set: {
-        winner: true,
-      },
-    });
+  if (activeCount ===1){
+    const winner = await PlayersCollection.findOneAsync(
+      { gameId, eliminated: false },
+      {fields: { _id: 1 } }
+    );
 
-    await PlayersCollection.updateAsync(
+    await PlayersCollection.updateAsync(winner._id, { $set: { winner:true}});
+    await PlayersCollection.updateAsync({ gameId }, {$set:{ gameFinished: true}}, { multi: true});
+  } else if (activeCount === 0){
+    
+    const [top] = await PlayersCollection.find(
       { gameId },
-      {
-        $set: {
-          gameFinished: true,
-        },
-      },
-      { multi: true }
-    );
-  }
-
-  if (active.length === 0 && players.length > 0) {
-    const highestRound = Math.max(...players.map((p) => p.eliminatedRound ?? 0));
-
-    await PlayersCollection.updateAsync(
-      {
-        gameId,
-        eliminatedRound: highestRound,
-      },
-      {
-        $set: {
-          winner: true,
-        },
-      },
-      { multi: true }
-    );
-
-    await PlayersCollection.updateAsync(
-      { gameId },
-      {
-        $set: {
-          gameFinished: true,
-        },
-      },
-      { multi: true }
-    );
+      { sort: {eliminatedRound: -1}, limit: 1, fields: { eliminatedRound: 1}}
+    ).fetchAsync()
+    
+    const highestRound = top?.eliminatedRound ?? 0;
+    if (top) {
+      await PlayersCollection.updateAsync(
+        { gameId, eliminatedRound: highestRound },
+        { $set: {winner: true}},
+        { multi: true}
+      );
+      await PlayersCollection.updateAsync({ gameId}, { $set: { gameFinished: true}}, {multi: true})
+    }
   }
 }
 
