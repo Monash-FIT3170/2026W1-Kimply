@@ -59,8 +59,13 @@ export const GamePage = () => {
     }
     return RoundsCollection.findOne({ gameId, isCurrent: true });
   }, [gameId, player?.roundId]);
-  const totalLives = room?.gameMode === 'custom' ? (room.customSettings?.startingLives ?? 3) : 3;
-  useEffect(() => {
+ const totalLives =
+  room?.gameMode === 'custom'
+    ? (room.customSettings?.startingLives ?? 3)
+    : isBattleRoyale
+      ? 1  // // In battle royale mode, players start with 1 life
+      : 3;
+        useEffect(() => {
     if (!round?._id || playerId) return;
     // get game mode
     const gameMode = location.state?.gameMode || 'standard';
@@ -301,7 +306,6 @@ export const GamePage = () => {
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         {/* Lives display */}
         <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2vh' }}>
-          {Array.from({ length: Math.max(player?.lives ?? 3, 3) }, (_, i) => i + 1).map((heart) => (
             <div
               key={heart}
               style={{
