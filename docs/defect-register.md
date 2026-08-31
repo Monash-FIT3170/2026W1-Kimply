@@ -5,9 +5,12 @@ Defects found during the production-readiness inspection that were **deliberatel
 They are recorded here so no future session has to rediscover them, and so the decision to defer them is explicit rather than accidental.
 Each entry states what is wrong, how it actually fails, and what the fix would be.
 
-The IDs match the summary table in [CLAUDE.md](../CLAUDE.md#known-defects).
+The IDs match the summary table in [AGENTS.md](../AGENTS.md#known-defects), which carries one line per defect and points here for the detail.
+Keep the two in step: an ID means the same thing in both files, or neither file can be trusted.
 
-**Last verified:** 2026-08-04
+There is no D13. The register and the summary table had drifted by one on the last three IDs; reconciling them on 2026-08-29 onto the summary table's numbering left the gap. Do not renumber to close it - the IDs are cited from skills and pull requests.
+
+**Last verified:** 2026-08-29
 
 ---
 
@@ -17,6 +20,8 @@ The IDs match the summary table in [CLAUDE.md](../CLAUDE.md#known-defects).
 |---|---|---|
 | D1 | `server/main.js:13` wiped `RoundsCollection` on every startup | Removed. Old rounds now expire via a TTL index in `server/indexes.js` |
 | D2 | Three unfiltered whole-collection publications | Scoped by `gameId`; `players` also excludes `attemptedSequence` |
+| D9 | A conditional `return null` sat between two hooks in `PlayerLobby.jsx` | The dead `useEffect` after the early return was deleted, so no hook follows the conditional return |
+| D10 | `<HostView>` was rendered without its `navigate` prop | `navigate` is now passed down. It was throwing on **every** game start |
 | - | No health endpoint | `server/health.js` adds `/health/live` and `/health/ready` |
 | - | No indexes at all | `server/indexes.js` creates 11 indexes on startup |
 | - | `istanbul-lib-instrument` used by `scripts/include-all-coverage.js:3` but undeclared | Added to `devDependencies` |
@@ -184,6 +189,8 @@ Note that adding `accounts-password` pulls in `bcrypt`, which introduces a nativ
 
 ## D9 - Conditional `return null` between two hooks
 
+**Status: fixed.** Kept because the analysis below is still the reason the code looks the way it does.
+
 `PlayerLobby.jsx:376-379` sits **between** the `useEffect` at `:369` and the `useEffect` at `:380`.
 
 When that branch is taken, React renders 8 hooks instead of 9 and throws `Rendered fewer hooks than expected`.
@@ -198,6 +205,8 @@ Two further problems in the same block:
 
 ## D10 - `HostView` is missing its `navigate` prop
 
+**Status: fixed.** Kept for the failure mode, which was masked by a race and so looked like it worked.
+
 `PlayerLobby.jsx:419` renders `<HostView room={room} playerName={playerName} onBack={onBack} />`, but `HostView` destructures `navigate` at `:110` and calls it at `:124`.
 
 The host's "Start Game" callback throws `TypeError: navigate is not a function` after `rooms.start` succeeds.
@@ -207,7 +216,7 @@ It only appears to work because the parent effect at `:369-374` races it and nav
 
 ---
 
-## D12 - Root `package-lock.json` is desynced
+## D11 - Root `package-lock.json` is desynced
 
 Root `package-lock.json` declares a dependency on `@meteorjs/rspack@^2.0.1`, while root `package.json` has no `dependencies` block at all and `app/package.json` pins `^1.0.0` (a different major).
 It also carries a stale `"name": "2026W1-Kimply"` against the actual `"kimply-workspace"`.
@@ -220,12 +229,23 @@ This is currently harmless because everything runs with `working-directory: app`
 
 ---
 
-## D13 - A new `AudioContext` per tile click
+## D12 - A new `AudioContext` per tile click
 
 `ColourSequence.jsx:80-92` constructs a new `AudioContext` on every tile click and never closes it.
 Browsers cap the number of live contexts per document, so a long game eventually throws and click feedback silently stops.
 
 **Fix:** create one context lazily, reuse it, and resume it on first user gesture.
+
+---
+
+## D14 - `npm run format:check` fails on `main`
+
+Twelve files are Prettier-dirty on `main`, predating any deployment work.
+Prettier is the only style gate in this repository (there is no ESLint), and it cannot become a CI gate while the default branch fails it.
+
+The cost of leaving it is that every branch inherits the dirt, so no diff can be trusted to be formatting-clean.
+
+**Fix:** one dedicated commit that runs `meteor npm run format` and changes nothing else, so it can be reviewed as a no-op and skipped in `git blame`.
 
 ---
 

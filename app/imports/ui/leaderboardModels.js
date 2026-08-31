@@ -6,7 +6,7 @@ export function getPlayerStatus(player) {
 }
 
 export function createLiveLeaderboardRows(players, currentRound) {
-  const currentLevel = currentRound ? currentRound.lengthOfSequence - 3 : 0;
+  const currentLevel = currentRound ? (currentRound.roundNumber ?? currentRound.lengthOfSequence - 3) : 0;
 
   return players
     .map((player) => ({

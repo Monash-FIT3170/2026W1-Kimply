@@ -11,7 +11,7 @@ if (Meteor.isServer && !global._publicationsInitialized) {
 
   Meteor.publish('rounds', function (gameId) {
     if (typeof gameId !== 'string' || !gameId) return this.ready();
-    return RoundsCollection.find({ gameId, isCurrent: true });
+    return RoundsCollection.find({ gameId, advanced: false });
   });
 
   Meteor.publish('players', function (gameId) {

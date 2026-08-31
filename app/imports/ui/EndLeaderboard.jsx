@@ -39,6 +39,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
         id: player._id,
         name: player.name,
         eliminatedRound: player.eliminatedRound ?? null,
+        currentLevel: player.currentLevel ?? 4,
         longestStreak: player.longestStreak ?? 0,
         totalGuesses: player.totalGuesses ?? 0,
         correctGuesses: player.correctGuesses ?? 0,
@@ -49,10 +50,10 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
   const sorted = [...players].sort((a, b) => {
     if (a.isWinner && !b.isWinner) return -1;
     if (!a.isWinner && b.isWinner) return 1;
-    return (b.eliminatedRound ?? 0) - (a.eliminatedRound ?? 0);
+    return (b.currentLevel ?? b.eliminatedRound ?? 0) - (a.currentLevel ?? a.eliminatedRound ?? 0);
   });
 
-  const rankKey = (player) => (player.isWinner ? 'winner' : player.eliminatedRound);
+  const rankKey = (player) => (player.isWinner ? 'winner' : (player.currentLevel ?? player.eliminatedRound));
   const uniqueRanks = [...new Set(sorted.map(rankKey))];
   const ranks = sorted.map((player) => uniqueRanks.indexOf(rankKey(player)));
   const currentPlayer = sorted.find((player) => player.id === currentPlayerId);
@@ -312,7 +313,16 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
         </div>
 
         <button
-          onClick={() => navigate('/play', { state: { playerAccount } })}
+          onClick={() => {
+            if (gameId) {
+              Meteor.call('game.resetSequences', gameId, (err) => {
+                if (err) console.error('Failed to reset sequences:', err);
+                navigate('/play', { state: { playerAccount } });
+              });
+            } else {
+              navigate('/play', { state: { playerAccount } });
+            }
+          }}
           className="mt-8 inline-flex items-center gap-2 rounded-full px-5 py-3 font-outfit text-[13px] font-extrabold uppercase tracking-[0.16em] transition-transform hover:scale-[1.02]"
           style={{
             background: `color-mix(in oklab, ${PRIMARY} 16%, transparent)`,

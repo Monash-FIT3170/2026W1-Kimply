@@ -3,14 +3,15 @@ import { Meteor } from 'meteor/meteor';
 import { useTracker } from 'meteor/react-meteor-data';
 import { RoundsCollection } from '../../api/rounds';
 import { PlayersCollection } from '../../api/players';
+import { RoomsCollection } from '../../api/rooms';
 import { GameEventsCollection } from '../../api/gameEvents';
 import { ColourSequence } from '../ColourSequence.jsx';
 import { Leaderboard } from '../Leaderboard.jsx';
 import { EndLeaderboard } from '../EndLeaderboard.jsx';
-import { useLocation } from 'react-router-dom';
 import { EliminationFeed } from '../EliminationFeed.jsx';
-
+import { useLocation } from 'react-router-dom';
 import { TileLattice } from '../components/design';
+
 export const GamePage = () => {
   const [playerId, setPlayerId] = useState(null);
   const [playerCanInput, setPlayerCanInput] = useState(false);
@@ -22,10 +23,20 @@ export const GamePage = () => {
   const [correctGlow, setCorrectGlow] = useState(false);
   const [replayKey, setReplayKey] = useState(0);
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(true);
+  const [showPowerupPopup, setShowPowerupPopup] = useState(false);
+  const [completedRoundId, setCompletedRoundId] = useState(null);
+
   const location = useLocation();
   const playerNameFromLobby = location.state?.playerName || 'Demo Player';
-  const gameId = roomPin || null;
+  const gameMode = location.state?.gameMode || 'standard';
+  const isBattleRoyale = gameMode === 'battle_royale';
+  const roomPin = location.state?.pin;
+  const lobbyPlayerId = location.state?.playerId;
   const accountId = location.state?.playerAccount?._id || null;
+  // No 'demo' fallback: the publications are scoped by gameId, so a placeholder
+  // would subscribe to a game that does not exist and hang on LOADING forever.
+  const gameId = roomPin || null;
+
   const playTurnStartSound = () => {
     const AudioCtor = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtor) return;
@@ -48,46 +59,87 @@ export const GamePage = () => {
     oscillator.start();
     oscillator.stop(audioContext.currentTime + 0.24);
   };
+
   useEffect(() => {
-    if (!gameId) return;
+    if (!gameId || lobbyPlayerId) return;
+    const savedPlayerId = localStorage.getItem(`gamePlayerId:${gameId}`);
+    if (savedPlayerId) setPlayerId(savedPlayerId);
+  }, [gameId, lobbyPlayerId]);
+
+  useEffect(() => {
+    if (!gameId) return undefined;
     const roundsSub = Meteor.subscribe('rounds', gameId);
     const playersSub = Meteor.subscribe('players', gameId);
+    const roomSub = Meteor.subscribe('rooms.lobby', gameId);
     const eventsSub = Meteor.subscribe('gameEvents', gameId);
     return () => {
       roundsSub.stop();
       playersSub.stop();
+      roomSub.stop();
       eventsSub.stop();
     };
   }, [gameId]);
-  const round = useTracker(() => {
-    if (!gameId) return null;
-    return RoundsCollection.findOne({ gameId, isCurrent: true });
-  }, [gameId]);
+
   const player = useTracker(() => {
     if (!playerId) return null;
     return PlayersCollection.findOne(playerId);
   }, [playerId]);
+
+  const room = useTracker(() => {
+    if (!gameId) return null;
+    return RoomsCollection.findOne({ pin: gameId });
+  }, [gameId]);
+
+  const round = useTracker(() => {
+    if (!gameId) return null;
+    // in battle royale follow the player's specific round
+    if (player?.roundId) {
+      return RoundsCollection.findOne(player.roundId);
+    }
+    return RoundsCollection.findOne({ gameId, isCurrent: true });
+  }, [gameId, player?.roundId]);
+
   const levelUpEvents = useTracker(() => {
     if (!gameId) return [];
     return GameEventsCollection.find({ gameId, type: 'level-up' }, { sort: { createdAt: -1 } }).fetch();
   }, [gameId]);
+
   useEffect(() => {
     if (!round?._id || playerId) return;
-    Meteor.call('players.join', round._id, playerNameFromLobby, gameId, accountId, (error, result) => {
-      if (error) {
-        console.error(error);
-        setMessage('Could not join the game.');
-        return;
+    Meteor.call(
+      'players.join',
+      round._id,
+      playerNameFromLobby,
+      gameId,
+      lobbyPlayerId,
+      isBattleRoyale,
+      accountId,
+      (error, result) => {
+        if (error) {
+          console.error(error);
+          setMessage('Could not join the game.');
+          return;
+        }
+        setPlayerId(result);
+        localStorage.setItem(`gamePlayerId:${gameId}`, result);
       }
-      setPlayerId(result);
-    });
-  }, [round?._id, playerId]);
+    );
+  }, [round?._id, playerId, gameId, playerNameFromLobby, lobbyPlayerId, isBattleRoyale, accountId]);
+
   useEffect(() => {
     setPlayerCanInput(false);
     setAttemptedSequence([]);
     setMessage('');
     setSecondsLeft(30);
-  }, [round?._id]);
+    setCompletedRoundId(null);
+    setReplayKey((prev) => prev + 1); // play sequence flash for new round
+  }, [player?.roundId]); // watch sequence of player's specific roundId
+
+  // Show the slow-motion powerup popup whenever the player picks it up
+  useEffect(() => {
+    setShowPowerupPopup(!!player?.slowMotionActive);
+  }, [player?.slowMotionActive]);
+
   useEffect(() => {
     if (levelUpEvents.length === 0) return;
 
@@ -104,12 +156,14 @@ export const GamePage = () => {
 
     setLevelUpNotices(newest);
   }, [levelUpEvents]);
+
   const handleColourClick = (colour) => {
     if (!playerCanInput) return;
     if (!round?.sequence) return;
     if (attemptedSequence.length >= round.sequence.length) return;
     setAttemptedSequence([...attemptedSequence, colour]);
   };
+
   useEffect(() => {
     if (!playerCanInput || !playerId) {
       return undefined;
@@ -154,6 +208,7 @@ export const GamePage = () => {
       window.clearInterval(intervalId);
     };
   }, [playerCanInput, playerId, round?._id]);
+
   const handleSubmit = () => {
     if (!playerId) {
       setMessage('Player is not ready yet.');
@@ -170,7 +225,12 @@ export const GamePage = () => {
         return;
       }
       if (result.success) {
-        setMessage('Correct sequence! Please wait for other players to finish.');
+        if (isBattleRoyale) {
+          setMessage('Correct! Moving to next round...');
+        } else {
+          setMessage('Correct sequence! Please wait for other players to finish.');
+        }
+        setCompletedRoundId(round._id);
         setCorrectGlow(true);
         setTimeout(() => setCorrectGlow(false), 800);
         setPlayerCanInput(false);
@@ -190,10 +250,15 @@ export const GamePage = () => {
       }
     });
   };
+
   const handleClear = () => {
     setAttemptedSequence([]);
     setMessage('Try again. Repeat the flashed sequence.');
   };
+
+  // Reached by loading /game directly, or after a refresh drops location.state.
+  // Without a room PIN there is no game to subscribe to, so say so instead of
+  // sitting on LOADING indefinitely.
   if (!gameId) {
     return (
       <div
@@ -216,6 +281,7 @@ export const GamePage = () => {
       </div>
     );
   }
+
   if (!round) {
     return (
       <div
@@ -241,13 +307,18 @@ export const GamePage = () => {
       </div>
     );
   }
+
   if (!player) return null;
+
   if (player.gameFinished) {
-    return <>
-      <EliminationFeed gameId={gameId} />
-      <EndLeaderboard gameId={player.gameId} currentPlayerId={player._id} />
-    </>;
+    return (
+      <>
+        <EliminationFeed gameId={gameId} />
+        <EndLeaderboard gameId={player.gameId} currentPlayerId={player._id} />
+      </>
+    );
   }
+
   if (player?.eliminated) {
     const longestStreak = player.longestStreak ?? 0;
     const totalGuesses = player.totalGuesses ?? 0;
@@ -321,6 +392,7 @@ export const GamePage = () => {
       </div>
     );
   }
+
   return (
     <div
       style={{
@@ -338,6 +410,24 @@ export const GamePage = () => {
       }}
     >
       <TileLattice opacity={0.06} />
+      {showPowerupPopup && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '20px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: '#0a84ff',
+            color: 'white',
+            padding: '14px 28px',
+            borderRadius: '12px',
+            fontWeight: 'bold',
+            zIndex: 1000,
+          }}
+        >
+          Powerup Gained: Slow Motion for one round!
+        </div>
+      )}
       <div
         style={{
           position: 'fixed',
@@ -388,7 +478,7 @@ export const GamePage = () => {
       </div>
       <div className="relative flex flex-1 flex-col items-center justify-start md:justify-center">
         <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2vh' }}>
-          {[1, 2, 3].map((heart) => (
+          {Array.from({ length: Math.max(player?.lives ?? 3, 3) }, (_, i) => i + 1).map((heart) => (
             <div
               key={heart}
               style={{
@@ -404,7 +494,7 @@ export const GamePage = () => {
                 transition: 'all 0.3s ease',
               }}
             >
-              {'\u2764'}
+              {'❤'}
             </div>
           ))}
         </div>
@@ -418,7 +508,7 @@ export const GamePage = () => {
               fontSize: '1.2vw',
             }}
           >
-            LEVEL {round.lengthOfSequence - 3}
+            LEVEL {round.roundNumber ?? round.lengthOfSequence - 3}
           </p>
           <div
             style={{
@@ -451,6 +541,13 @@ export const GamePage = () => {
               setMessage('Your turn. Repeat the sequence.');
             }}
             onColourClick={handleColourClick}
+            flashingSpeed={
+              player?.slowMotionActive
+                ? 'slow'
+                : room?.gameMode === 'custom'
+                ? room.customSettings?.flashingSpeed
+                : 'medium'
+            }
           />
           <p
             style={{

@@ -27,6 +27,23 @@ describe('live leaderboard model', function () {
     assert.strictEqual(rows[0].status, 'Playing');
   });
 
+  it('uses roundNumber for Easy mode instead of producing a negative level', function () {
+    const rows = createLiveLeaderboardRows(
+      [
+        {
+          _id: 'easy-player',
+          name: 'Easy Player',
+          lives: 3,
+          eliminated: false,
+          completeRound: false,
+        },
+      ],
+      { lengthOfSequence: 1, roundNumber: 1 }
+    );
+
+    assert.strictEqual(rows[0].level, 1);
+  });
+
   it('uses eliminatedRound as the level for eliminated players', function () {
     const rows = createLiveLeaderboardRows(
       [

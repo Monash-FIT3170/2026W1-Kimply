@@ -148,7 +148,7 @@ export function PlayRoute() {
       // };
 
       // localStorage.setItem('reconnectData', JSON.stringify(reconnectData));
-      navigate(`/play/${result.pin}`, {
+      navigate(`/play/modes/${result.pin}`, {
         state: { playerName: trimmedName, isHost: true, playerId: result.hostId, playerAccount: signedInAccount },
       });
     });
