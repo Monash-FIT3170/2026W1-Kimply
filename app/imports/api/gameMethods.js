@@ -242,9 +242,13 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
 
     // Add a player to a round
     async 'players.join'(roundId, playerName, gameId = null, lobbyPlayerId = null, isBattleRoyale = false, accountId = null) {
+      const connectionId = this.connection?.id ?? null;
       if (lobbyPlayerId) {
         const existing = await PlayersCollection.findOneAsync({ gameId, lobbyPlayerId });
-        if (existing) return existing._id;
+        if (existing) {
+          await PlayersCollection.updateAsync(existing._id, { $set: { connectionId } });
+          return existing._id;
+        }
       }
 
       const room = await RoomsCollection.findOneAsync({ pin: gameId });
@@ -271,6 +275,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         isBattleRoyale,
         slowMotionActive: false,
         eliminatedAt: null,
+        connectionId,
       });
     },
 
@@ -422,6 +427,35 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       };
     },
 
+    // Round timer ran out: eliminate the player so the round can advance.
+    async 'players.timeoutRound'(playerId) {
+      const player = await PlayersCollection.findOneAsync(playerId);
+      if (!player || player.eliminated || player.winner || player.gameFinished || player.completeRound) {
+        return { ignored: true };
+      }
+      const round = await RoundsCollection.findOneAsync(player.roundId);
+      const isBattleRoyale = player.isBattleRoyale ?? false;
+      const longestStreak = Math.max(player.longestStreak ?? 0, player.currentStreak ?? 0);
+
+      await PlayersCollection.updateAsync(playerId, {
+        $set: {
+          lives: 0,
+          currentStreak: 0,
+          longestStreak,
+          eliminated: true,
+          eliminatedRound: round ? (round.roundNumber ?? round.lengthOfSequence - 3) : (player.eliminatedRound ?? 0),
+          eliminatedAt: new Date(),
+        },
+      });
+
+      await checkWinner(player.gameId, isBattleRoyale);
+      if (!isBattleRoyale) {
+        const updatedRound = await RoundsCollection.findOneAsync(player.roundId);
+        if (updatedRound) await advanceRoundIfReady(updatedRound);
+      }
+      return { success: true, eliminated: true };
+    },
+
     // advance game to next round
     async 'rounds.advance'(currentRoundId) {
       // get current round
@@ -501,5 +535,31 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
     async 'game.resetSequences'(gameId) {
       await RoundsCollection.removeAsync({ gameId });
     },
+  });
+
+  // Remove a player who disconnects and does not reconnect within the grace
+  // window, so a leaver does not stall the round for everyone else.
+  const DISCONNECT_GRACE_MS = 15000;
+  Meteor.onConnection((connection) => {
+    connection.onClose(() => {
+      const closedId = connection.id;
+      Meteor.setTimeout(async () => {
+        const gone = await PlayersCollection.find({
+          connectionId: closedId,
+          eliminated: false,
+          gameFinished: false,
+        }).fetchAsync();
+        for (const p of gone) {
+          await PlayersCollection.removeAsync(p._id);
+          await LeaderboardCollection.removeAsync({ gameId: p.gameId, playerId: p._id });
+          if (p.lobbyPlayerId) {
+            await RoomsCollection.updateAsync({ pin: p.gameId }, { $pull: { players: { id: p.lobbyPlayerId } } });
+          }
+          await checkWinner(p.gameId, p.isBattleRoyale ?? false);
+          const round = await RoundsCollection.findOneAsync(p.roundId);
+          if (round) await advanceRoundIfReady(round);
+        }
+      }, DISCONNECT_GRACE_MS);
+    });
   });
 }

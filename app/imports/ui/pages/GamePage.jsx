@@ -12,13 +12,15 @@ import { EliminationFeed } from '../EliminationFeed.jsx';
 import { useLocation } from 'react-router-dom';
 import { TileLattice } from '../components/design';
 
+const ROUND_SECONDS = 60; // whole-round timer
+
 export const GamePage = () => {
   const [playerId, setPlayerId] = useState(null);
   const [playerCanInput, setPlayerCanInput] = useState(false);
   const [attemptedSequence, setAttemptedSequence] = useState([]);
   const [message, setMessage] = useState('');
   const [levelUpNotices, setLevelUpNotices] = useState([]);
-  const [secondsLeft, setSecondsLeft] = useState(30);
+  const [secondsLeft, setSecondsLeft] = useState(ROUND_SECONDS);
   const [shake, setShake] = useState(false);
   const [correctGlow, setCorrectGlow] = useState(false);
   const [replayKey, setReplayKey] = useState(0);
@@ -168,49 +170,32 @@ export const GamePage = () => {
   };
 
   useEffect(() => {
-    if (!playerCanInput || !playerId) {
-      return undefined;
-    }
+    if (isBattleRoyale) return undefined; // battle royale is a free-for-all: no timer
+    if (!round?._id || !playerId) return undefined;
+    if (player?.eliminated || player?.gameFinished) return undefined;
+    if (completedRoundId === round._id) return undefined; // already finished this round
 
-    setSecondsLeft(30);
+    // One timer for the whole round; wrong guesses and lost lives do not reset it.
+    // If it runs out the player is eliminated so the game can continue.
+    setSecondsLeft(ROUND_SECONDS);
 
     const timeoutId = window.setTimeout(() => {
-      setMessage('Time is up! You lost a life.');
-      Meteor.call('players.timeoutTurn', playerId, (error, result) => {
-        if (error) {
-          console.error(error);
-          setMessage('Something went wrong while handling the timer.');
-          return;
-        }
-
-        if (result?.remainingLives <= 0) {
-          setMessage('Time is up! You have been eliminated!');
-          setPlayerCanInput(false);
-        } else if (typeof result?.remainingLives === 'number') {
-          setMessage(`Time is up! ${result.remainingLives} ${result.remainingLives === 1 ? 'life' : 'lives'} remaining.`);
-          setAttemptedSequence([]);
-          setPlayerCanInput(true);
-          setReplayKey((prev) => prev + 1);
-        }
+      setMessage('Time is up! You have been eliminated.');
+      setPlayerCanInput(false);
+      Meteor.call('players.timeoutRound', playerId, (error) => {
+        if (error) console.error(error);
       });
-    }, 30000);
+    }, ROUND_SECONDS * 1000);
 
     const intervalId = window.setInterval(() => {
-      setSecondsLeft((prev) => {
-        if (prev <= 1) {
-          window.clearInterval(intervalId);
-          return 0;
-        }
-
-        return prev - 1;
-      });
+      setSecondsLeft((prev) => (prev <= 1 ? 0 : prev - 1));
     }, 1000);
 
     return () => {
       window.clearTimeout(timeoutId);
       window.clearInterval(intervalId);
     };
-  }, [playerCanInput, playerId, round?._id]);
+  }, [round?._id, playerId, isBattleRoyale, player?.eliminated, player?.gameFinished, completedRoundId]);
 
   const handleSubmit = () => {
     if (!playerId) {
@@ -577,7 +562,7 @@ export const GamePage = () => {
           >
             {message}
           </p>
-          {playerCanInput && (
+          {!isBattleRoyale && playerCanInput && (
             <p
               style={{
                 color: secondsLeft <= 5 ? '#ff7a7a' : '#9ce8ff',
