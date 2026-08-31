@@ -10,7 +10,7 @@ Keep the two in step: an ID means the same thing in both files, or neither file 
 
 There is no D13. The register and the summary table had drifted by one on the last three IDs; reconciling them on 2026-08-29 onto the summary table's numbering left the gap. Do not renumber to close it - the IDs are cited from skills and pull requests.
 
-**Last verified:** 2026-08-29
+**Last verified:** 2026-08-31
 
 ---
 
@@ -262,6 +262,21 @@ setReplayKey((prev) => prev + 1);
 `replayKey` restarts `ColourSequence` playback, but `playerCanInput` was already `true`, so the tiles accepted clicks throughout the replay - a player could click each tile as it lit up and copy the answer. A fresh round instead starts with input disabled and only re-enables it from `onSequenceComplete`.
 
 **Fix (applied):** set `playerCanInput` to `false` on the retry path; the replay re-enables input via `onSequenceComplete` when it finishes. `app/imports/ui/pages/GamePage.jsx`.
+## D15 - Room code input drops keystrokes - **fixed 2026-08-31**
+
+On `/play/join`, `JoinRoom.handleInput` read the freshly typed character inside a `setCode` functional updater, then cleared the hidden capture input in the same handler:
+
+```js
+setCode((prev) => appendRoomCodeInput(prev, e.target.value, SLOTS));
+setError('');
+clearCapturedInput(e); // e.target.value = ''
+```
+
+React evaluates a `useState` functional updater eagerly only when the fiber has no pending work. When it cannot (fast typing, or a render already scheduled), the updater runs at render time - after `clearCapturedInput` has blanked `e.target.value` - so `appendRoomCodeInput` appends `''` and the keystroke is lost. Players saw the first letter (and intermittently later ones) vanish and had to type the code twice.
+
+**Fix (applied):** capture `e.target.value` into a local, clear the input, then update state from the local so the updater never depends on the mutated DOM node. `app/imports/ui/pages/JoinRoom.jsx:30`.
+
+The ID is D15 because D13 is a deliberate gap (see the note at the top of this file).
 
 ---
 

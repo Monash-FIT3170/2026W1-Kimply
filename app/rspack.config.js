@@ -18,7 +18,7 @@ module.exports = defineConfig((Meteor) => {
       include: path.resolve(__dirname, 'imports'),
       use: [
         {
-          loader: 'babel-loader',
+          loader: require.resolve('babel-loader'),
           options: {
             presets: [['@babel/preset-react', { runtime: 'automatic' }]],
             plugins: [['istanbul', { include: ['imports/**'] }]],
