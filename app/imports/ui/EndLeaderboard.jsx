@@ -1,6 +1,7 @@
 import { Meteor } from 'meteor/meteor';
 import { useTracker } from 'meteor/react-meteor-data';
 import { PlayersCollection } from '../api/players';
+import { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { BG, PRIMARY, FG2, TileLattice, Avatar, TopBar, ArrowIcon, avatarColor } from './components/design';
 
@@ -24,6 +25,11 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
   const navigate = useNavigate();
   const { state } = useLocation();
   const playerAccount = state?.playerAccount;
+
+  // Game is over: drop reconnect data so /play doesn't offer to rejoin it.
+  useEffect(() => {
+    localStorage.removeItem('reconnectData');
+  }, []);
 
   const players = useTracker(() => {
     if (!gameId) return [];
