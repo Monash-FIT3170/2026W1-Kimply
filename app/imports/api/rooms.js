@@ -3,6 +3,7 @@ import { Meteor } from 'meteor/meteor';
 import { Random } from 'meteor/random';
 import { PlayersCollection } from './players.js';
 import { RoundsCollection } from './rounds.js';
+import { PIN_ALPHABET, PIN_LENGTH, GAME_MODE_PRESETS } from '../constants';
 
 // Guard against --full-app test mode evaluating this module twice
 // (app bundle + test bundle both load it; global is shared across both).
@@ -11,17 +12,10 @@ if (!global._RoomsCollection) {
 }
 export const RoomsCollection = global._RoomsCollection;
 
-const PIN_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const GAME_MODE_PRESETS = {
-  default: { flashingSpeed: 'medium', startingLives: 3, startingSequenceLength: 4 },
-  easy: { flashingSpeed: 'slow', startingLives: 5, startingSequenceLength: 1 },
-  medium: { flashingSpeed: 'medium', startingLives: 3, startingSequenceLength: 3 },
-  hard: { flashingSpeed: 'fast', startingLives: 1, startingSequenceLength: 3 },
-  battle_royale: { flashingSpeed: 'medium', startingLives: 3, startingSequenceLength: 4 },
-};
-
 function generatePin() {
-  return Array.from({ length: 5 }, () => PIN_CHARS[Math.floor(Math.random() * PIN_CHARS.length)]).join('');
+  return Array.from({ length: PIN_LENGTH }, () => PIN_ALPHABET[Math.floor(Math.random() * PIN_ALPHABET.length)]).join(
+    ''
+  );
 }
 
 if (Meteor.isServer && !global._roomsServerInitialized) {
@@ -74,11 +68,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
         players: [{ id: hostId, name, accountId: hostAccountId, connected: true, connectionId: this.connection?.id ?? null }],
         createdAt: new Date(),
         gameMode: 'default',
-        customSettings: {
-          flashingSpeed: 'medium',
-          startingLives: 3,
-          startingSequenceLength: 4,
-        },
+        customSettings: { ...GAME_MODE_PRESETS.default },
       });
 
       return { pin: pin, hostId: hostId };

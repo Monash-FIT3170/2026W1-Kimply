@@ -2,8 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Meteor } from 'meteor/meteor';
 import { useTracker } from 'meteor/react-meteor-data';
 import { PlayersCollection } from '../api/players';
-
-const DISPLAY_MS = 4000;
+import { ELIMINATION_FEED_MS as DISPLAY_MS } from '../constants';
 
 export const EliminationFeed = ({ gameId }) => {
   const eliminations = useTracker(() => {

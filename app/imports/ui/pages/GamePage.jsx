@@ -11,8 +11,8 @@ import { EndLeaderboard } from '../EndLeaderboard.jsx';
 import { EliminationFeed } from '../EliminationFeed.jsx';
 import { useLocation } from 'react-router-dom';
 import { TileLattice } from '../components/design';
+import { ROUND_TIMER_SECONDS as ROUND_SECONDS, LEVEL_UP_TOAST_MS } from '../../constants';
 
-const ROUND_SECONDS = 60; // whole-round timer
 const seqSeenKey = (gameId, roundId) => `seqSeen:${gameId}:${roundId}`;
 
 export const GamePage = () => {
@@ -166,7 +166,7 @@ export const GamePage = () => {
       };
       setLevelUpNotices((prev) => [...prev, notice]);
       // auto-dismiss like the elimination feed
-      setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), 4000);
+      setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), LEVEL_UP_TOAST_MS);
     });
   }, [levelUpEvents]);
 
