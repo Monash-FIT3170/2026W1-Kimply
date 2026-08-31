@@ -53,9 +53,6 @@ export const Leaderboard = ({ gameId, currentPlayerId }) => {
               <span className="text-right font-mono text-sm">{player.lives}</span>
               <span className="text-right font-mono text-xs text-fg2">{player.status}</span>
             </div>
-
-
-
           ))}
         </div>
       )}
