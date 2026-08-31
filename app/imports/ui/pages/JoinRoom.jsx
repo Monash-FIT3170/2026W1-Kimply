@@ -28,9 +28,13 @@ export function JoinRoom() {
   };
 
   const handleInput = (e) => {
-    setCode((prev) => appendRoomCodeInput(prev, e.target.value, SLOTS));
-    setError('');
+    // Read the typed value before clearing: clearCapturedInput blanks e.target.value
+    // synchronously, and React may evaluate the setCode updater afterwards, which would
+    // otherwise read '' and drop the keystroke (forcing users to type each letter twice).
+    const typed = e.target.value;
     clearCapturedInput(e);
+    setCode((prev) => appendRoomCodeInput(prev, typed, SLOTS));
+    setError('');
   };
 
   const handleJoin = () => {
