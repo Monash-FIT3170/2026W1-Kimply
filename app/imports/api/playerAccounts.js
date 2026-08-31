@@ -1,6 +1,7 @@
 import { Meteor } from 'meteor/meteor';
 import { Mongo } from 'meteor/mongo';
 import { createHash, randomBytes } from 'crypto';
+import { MIN_PASSWORD_LENGTH } from '../constants';
 
 // Guard against --full-app test mode evaluating this module twice
 // (app bundle + test bundle both load it; global is shared across both).
@@ -41,8 +42,8 @@ if (Meteor.isServer && !global._playerAccountsServerInitialized) {
         throw new Meteor.Error('invalid-email', 'Please enter a valid email address.');
       }
 
-      if (password.length < 8) {
-        throw new Meteor.Error('weak-password', 'Password must be at least 8 characters.');
+      if (password.length < MIN_PASSWORD_LENGTH) {
+        throw new Meteor.Error('weak-password', `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
       }
 
       const existingAccount = await PlayerAccountsCollection.findOneAsync({ email });
