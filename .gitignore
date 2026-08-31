@@ -39,8 +39,6 @@ build/
 build/Release
 
 # Logs
-logs
-*.log
 
 # Runtime data
 pids
