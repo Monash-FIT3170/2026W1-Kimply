@@ -1,5 +1,4 @@
 
-
 import React from 'react';
 import { Meteor } from 'meteor/meteor';
 import { useTracker } from 'meteor/react-meteor-data';
@@ -26,23 +25,21 @@ export const Leaderboard = ({ gameId, currentPlayerId }) => {
   }, [gameId]);
 
   return (
-    <section className="w-full rounded-2xl border border-hairline bg-[color:oklch(0.20_0.02_270_/_0.68)] p-5 text-fg shadow-xl backdrop-blur-md">
+    <section className="w-full max-h-[80vh] rounded-2xl border border-hairline bg-[color:oklch(0.20_0.02_270_/_0.68)] p-5 text-fg shadow-xl backdrop-blur-md flex flex-col">
       <h2 className="mb-1 text-center font-outfit text-xl font-extrabold">Live Leaderboard</h2>
       <p className="mb-4 text-center font-mono text-[10px] uppercase tracking-widest text-fg3">
         Updates live during the game
       </p>
-
       <div className="mb-2 grid grid-cols-[1fr_52px_52px_88px] gap-2 font-mono text-[10px] uppercase tracking-wider text-fg3">
         <span>Player</span>
         <span className="text-right">Level</span>
         <span className="text-right">Lives</span>
         <span className="text-right">Status</span>
       </div>
-
       {!ready ? (
         <p className="py-4 text-center text-sm text-fg3">Loading players...</p>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 overflow-y-auto">
           {rows.map((player) => (
             <div
               key={player.id}
