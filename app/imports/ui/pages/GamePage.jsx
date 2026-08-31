@@ -388,6 +388,24 @@ export const GamePage = () => {
             {correctGuesses}/{totalGuesses} correct guesses
           </p>
         </div>
+        <a
+          href="/play"
+          style={{
+            marginTop: '24px',
+            padding: '12px 28px',
+            borderRadius: '999px',
+            border: '1px solid rgba(124,255,178,0.5)',
+            background: 'rgba(124,255,178,0.12)',
+            color: '#7CFFB2',
+            fontWeight: 'bold',
+            letterSpacing: '2px',
+            textTransform: 'uppercase',
+            fontSize: '0.85rem',
+            textDecoration: 'none',
+          }}
+        >
+          New Game
+        </a>
         <EliminationFeed gameId={gameId} />
       </div>
     );
