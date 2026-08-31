@@ -5,11 +5,31 @@ import { useSubscribe, useTracker } from 'meteor/react-meteor-data';
 import { RoomsCollection } from '/imports/api/rooms';
 import { ConfirmationPopup } from '../components/ConfirmationPopup';
 import {
-  PRIMARY, TILE, HAIRLINE, FG2,
-  TileLattice, Wordmark, Avatar, avatarColor, ReadyChip, CopyIcon, BackChevron, PencilIcon, RainbowBar,
+  PRIMARY,
+  TILE,
+  HAIRLINE,
+  FG2,
+  TileLattice,
+  Wordmark,
+  Avatar,
+  avatarColor,
+  ReadyChip,
+  CopyIcon,
+  BackChevron,
+  PencilIcon,
+  RainbowBar,
 } from '../components/design';
 
-const MAX_PLAYERS = 8;
+function getGameModeColor(mode) {
+  const colors = {
+    easy: 'oklch(0.75 0.20 120)',
+    medium: 'oklch(0.70 0.22 70)',
+    hard: 'oklch(0.65 0.22 25)',
+    custom: 'oklch(0.60 0.20 270)',
+    battle_royale: 'oklch(0.50 0.25 340)',
+  };
+  return colors[mode] || 'oklch(0.60 0.20 270)';
+}
 
 function BackButton({ onClick }) {
   return (
@@ -51,15 +71,6 @@ function PlayerRow({ player, isYou, onKick }) {
       ) : (
         <ReadyChip ready />
       )}
-    </div>
-  );
-}
-
-function EmptySlot() {
-  return (
-    <div className="flex items-center gap-3 rounded-xl border border-dashed border-hairline px-3.5 py-2.5">
-      <div className="h-8 w-8 shrink-0 rounded-full border border-dashed border-hairline" />
-      <span className="font-outfit text-[13px] font-medium text-fg3">Empty slot</span>
     </div>
   );
 }
@@ -107,21 +118,21 @@ function SharePanel({ link }) {
   );
 }
 
-function HostView({ room, playerName, onBack, navigate }) {
+function HostView({ room, playerName, playerId, playerAccount, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
   const joinLink = `${window.location.origin}/play/join?code=${room.pin}`;
   const [editing, setEditing] = useState(true);
   const [gameName, setGameName] = useState('');
-  const trimmedGameName = gameName.trim()
+  const trimmedGameName = gameName.trim();
   const hasGameName = trimmedGameName.length > 0;
 
   const handleStart = () => {
-    Meteor.call('rooms.start', room.pin, (err) => {
+    Meteor.call('rooms.start', room.pin, gameMode, (err) => {
       if (err) {
         console.error(err);
         return;
       }
-      navigate('/game', { state: { playerName, pin: room.pin } });
+      navigate('/game', { state: { playerName, playerId, pin: room.pin, gameMode, playerAccount } });
     });
   };
 
@@ -129,8 +140,8 @@ function HostView({ room, playerName, onBack, navigate }) {
     Meteor.call('rooms.kick', room.pin, playerId);
   };
 
-  const saveGameName = async() =>{
-    await Meteor.callAsync("rooms.updateGameName", room.pin, hasGameName ? trimmedGameName : `Game${room.pin}`)
+  const saveGameName = async () => {
+    await Meteor.callAsync('rooms.updateGameName', room.pin, hasGameName ? trimmedGameName : `Game${room.pin}`);
     setEditing(false);
   };
 
@@ -147,13 +158,13 @@ function HostView({ room, playerName, onBack, navigate }) {
         {/* room code panel */}
         <div className="relative flex w-full max-w-lg flex-col items-center gap-4 overflow-hidden rounded-[22px] border border-hairline bg-surface px-6 pb-5 pt-8">
           {/* tile band */}
-          <RainbowBar
-            className="absolute top-0 left-0 right-0 h-1"
-          />
+          <RainbowBar className="absolute left-0 right-0 top-0 h-1" />
 
           {/* Game Name */}
-          <div className='flex items-center gap-1'>
-            <p className="font-mono height-[32px] text-[11px] text-fg3 uppercase tracking-[0.16em] text-center leading-none whitespace-nowrap shrink-0">Game Name: </p>
+          <div className="flex items-center gap-1">
+            <p className="height-[32px] shrink-0 whitespace-nowrap text-center font-mono text-[11px] uppercase leading-none tracking-[0.16em] text-fg3">
+              Game Name:{' '}
+            </p>
 
             {editing ? (
               <input
@@ -164,15 +175,17 @@ function HostView({ room, playerName, onBack, navigate }) {
                 onKeyDown={(e) => e.key === 'Enter' && saveGameName()}
                 placeholder={`Game${room.pin}`}
                 maxLength={30}
-                className="w-48 bg-surface border border-hairline rounded-[12px] px-3 py-1 font-outfit font-semibold text-base text-fg outline-none placeholder:text-fg3 text-center"
+                className="w-48 rounded-[12px] border border-hairline bg-surface px-3 py-1 text-center font-outfit text-base font-semibold text-fg outline-none placeholder:text-fg3"
                 style={{ caretColor: PRIMARY }}
               />
             ) : (
-              <div className='flex items-center gap-1'> 
-                <span className="font-outfit font-semibold text-base text-fg">{hasGameName ? trimmedGameName : `Game${room.pin}`}</span>
+              <div className="flex items-center gap-1">
+                <span className="font-outfit text-base font-semibold text-fg">
+                  {hasGameName ? trimmedGameName : `Game${room.pin}`}
+                </span>
                 <button
                   onClick={() => setEditing(true)}
-                  className="w-8 h-8 rounded-lg bg-transparent border-none text-fg2 cursor-pointer inline-flex items-center justify-center"
+                  className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent text-fg2"
                 >
                   <PencilIcon size={14} />
                 </button>
@@ -180,8 +193,19 @@ function HostView({ room, playerName, onBack, navigate }) {
             )}
           </div>
 
+          {/* Game Mode Badge */}
+          <div
+            className="flex items-center gap-2 rounded-full px-4 py-2"
+            style={{ background: getGameModeColor(gameMode) }}
+          >
+            <span className="font-outfit text-sm font-semibold text-bg">
+              {gameMode === 'battle_royale'
+                ? 'Battle Royale Mode'
+                : gameMode.charAt(0).toUpperCase() + gameMode.slice(1) + ' Mode'}
+            </span>
+          </div>
 
-          <p className="font-mono text-[11px] text-fg3 uppercase tracking-[0.18em]">Your Room Code</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-fg3">Your Room Code</p>
 
           <div className="flex gap-2.5">
             {room.pin.split('').map((ch, i) => (
@@ -216,7 +240,7 @@ function HostView({ room, playerName, onBack, navigate }) {
             <p className="font-outfit text-[13px] font-bold uppercase tracking-widest text-fg2">
               Players{' '}
               <span className="text-fg3">
-                ({players.length}/{MAX_PLAYERS})
+                ({players.length})
               </span>
             </p>
             <div className="inline-flex items-center gap-1.5 font-mono text-[11px]" style={{ color: TILE.amber }}>
@@ -256,18 +280,17 @@ function HostView({ room, playerName, onBack, navigate }) {
   );
 }
 
-function JoinedView({ room, playerName, onBack, navigate }) {
+function JoinedView({ room, playerName, playerId, playerAccount, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
-  const emptySlots = Math.max(0, MAX_PLAYERS - players.length);
 
-  const stillInRoom = !playerName || players.some(p => p.name === playerName);
+  const stillInRoom = !playerName || players.some((p) => p.name === playerName);
   useEffect(() => {
     if (!stillInRoom) navigate('/play', { replace: true, state: { kicked: true } });
   }, [stillInRoom]);
 
   useEffect(() => {
     if (!playerName) {
-      // State lost on refresh — let the reconnect popup handle it
+      // State lost on refresh let the reconnect popup handle it
       navigate('/play', { replace: true });
       return;
     }
@@ -279,11 +302,11 @@ function JoinedView({ room, playerName, onBack, navigate }) {
 
   useEffect(() => {
     if (room?.status === 'in_progress') {
-      navigate('/game', { state: { playerName, pin: room.pin } });
+      navigate('/game', {
+        state: { playerName, playerId, pin: room.pin, gameMode: room.gameMode || 'standard', playerAccount },
+      });
     }
   }, [room?.status]);
-
-  const progress = (players.length / MAX_PLAYERS) * 100;
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden bg-bg text-fg">
@@ -299,19 +322,33 @@ function JoinedView({ room, playerName, onBack, navigate }) {
           {/* title row */}
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <div>
-              <p className="font-mono text-[11px] text-fg3 uppercase tracking-[0.18em] mb-1">You're in</p>
-              <h1 className="font-outfit font-extrabold text-4xl text-fg tracking-tight leading-none">{room.gameName}</h1>
+              <p className="mb-1 font-mono text-[11px] uppercase tracking-[0.18em] text-fg3">You're in</p>
+              <h1 className="font-outfit text-4xl font-extrabold leading-none tracking-tight text-fg">
+                {room.gameName}
+              </h1>
             </div>
             <div className="inline-flex items-center gap-2 rounded-[10px] border border-hairline bg-surface px-2.5 py-1.5">
               <span className="font-mono text-[10px] uppercase tracking-widest text-fg3">Room</span>
               <span className="font-mono text-[13px] font-bold text-fg">{room.pin}</span>
             </div>
           </div>
+
+          {/* Game Mode Badge */}
+          <div
+            className="flex w-fit items-center gap-2 rounded-full px-4 py-2"
+            style={{ background: getGameModeColor(gameMode) }}
+          >
+            <span className="font-outfit text-sm font-semibold text-bg">
+              {gameMode === 'battle_royale'
+                ? 'Battle Royale Mode'
+                : gameMode.charAt(0).toUpperCase() + gameMode.slice(1) + ' Mode'}
+            </span>
+          </div>
           <div className="flex items-center justify-between">
             <p className="font-outfit text-sm font-bold uppercase tracking-widest text-fg2">
               Players{' '}
               <span className="text-fg3">
-                ({players.length}/{MAX_PLAYERS})
+                ({players.length})
               </span>
             </p>
             <span className="font-mono text-[11px] text-fg3">
@@ -319,24 +356,10 @@ function JoinedView({ room, playerName, onBack, navigate }) {
             </span>
           </div>
 
-          {/* progress bar */}
-          <div className="h-1.5 overflow-hidden rounded-full bg-surface">
-            <div
-              className="h-full rounded-full"
-              style={{
-                width: `${progress}%`,
-                background: `linear-gradient(90deg, ${TILE.pink}, ${TILE.amber}, ${TILE.teal}, ${TILE.violet})`,
-              }}
-            />
-          </div>
-
           {/* players grid */}
           <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
             {players.map((p, i) => (
               <PlayerRow key={p.id || i} player={p} isYou={p.name === playerName} />
-            ))}
-            {Array.from({ length: emptySlots }).map((_, i) => (
-              <EmptySlot key={`e${i}`} />
             ))}
           </div>
           <div className="mt-auto flex justify-center pt-3">
@@ -345,7 +368,7 @@ function JoinedView({ room, playerName, onBack, navigate }) {
               style={{ color: TILE.amber }}
             >
               <span className="h-2 w-2 animate-kimply-pulse rounded-full" style={{ background: TILE.amber }} />
-              Waiting for host to start the game…
+              Waiting for host to start the game...
             </div>
           </div>
         </div>
@@ -361,7 +384,10 @@ export function PlayerLobby() {
   const playerName = state?.playerName || '';
   const playerId = state?.playerId || '';
   const isHost = state?.isHost === true;
-  const gameStarted = useRef(false);  
+  const playerAccount = state?.playerAccount;
+  const gameMode = state?.gameMode || 'standard';
+  const customSettings = state?.customSettings || null;
+  const gameStarted = useRef(false);
   const [showExitPopup, setShowExitPopup] = useState(false);
   const isLoading = useSubscribe('rooms.lobby', pin);
   const room = useTracker(() => RoomsCollection.findOne({ pin }));
@@ -369,7 +395,9 @@ export function PlayerLobby() {
   useEffect(() => {
     if (room?.status === 'in_progress' && !gameStarted.current) {
       gameStarted.current = true;
-      navigate('/game', { state: { playerName, pin: room.pin } });
+      navigate('/game', {
+        state: { playerName, playerId, pin: room.pin, gameMode: room.gameMode || 'standard', playerAccount },
+      });
     }
   }, [room?.status]);
 
@@ -377,12 +405,6 @@ export function PlayerLobby() {
     navigate('/play', { replace: true });
     return null;
   }
-  useEffect(()=>{
-    if (room === undefined && !isLoading){
-      navigate('/play', {replace: true});
-    }
-  }, [room]);
-
 
   if (!room) {
     return (
@@ -394,34 +416,52 @@ export function PlayerLobby() {
 
   const onBack = () => setShowExitPopup(true);
 
-
   return (
     <>
       <ConfirmationPopup
-        isOpen = {showExitPopup}
-        onConfirm ={() => {
+        isOpen={showExitPopup}
+        onConfirm={() => {
           setShowExitPopup(false);
-          Meteor.call('rooms.disconnect', pin, playerId) 
+          Meteor.call('rooms.disconnect', pin, playerId);
 
-          // removing session storage of reconnect data
           localStorage.removeItem('reconnectData');
-          navigate('/play', {replace: true});
+          navigate('/play', { replace: true, state: { playerAccount } });
 
         }}
-        onCancel = {() =>{
+        onCancel={() => {
           setShowExitPopup(false);
         }}
-        title='Leave Game'
-        message= { isHost ? 'Are you sure you want to disconnect from the game, this will terminate the game sesssion.' :'Are you sure you want to disconnect from the game?'}
+        title="Leave Game"
+        message={
+          isHost
+            ? 'Are you sure you want to disconnect from the game, this will terminate the game sesssion.'
+            : 'Are you sure you want to disconnect from the game?'
+        }
       />
 
-      { isHost? (
-        <HostView room={room} playerName={playerName} onBack={onBack} />
+      {isHost ? (
+        <HostView
+          room={room}
+          playerName={playerName}
+          playerId={playerId}
+          playerAccount={playerAccount}
+          onBack={onBack}
+          navigate={navigate}
+          gameMode={gameMode}
+          customSettings={customSettings}
+        />
       ) : (
-        <JoinedView room={room} playerName={playerName} onBack={onBack} navigate={navigate} />
+        <JoinedView
+          room={room}
+          playerName={playerName}
+          playerId={playerId}
+          playerAccount={playerAccount}
+          onBack={onBack}
+          navigate={navigate}
+          gameMode={gameMode}
+          customSettings={customSettings}
+        />
       )}
     </>
-  )
-
-
+  );
 }

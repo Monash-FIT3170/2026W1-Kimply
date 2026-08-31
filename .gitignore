@@ -39,8 +39,6 @@ build/
 build/Release
 
 # Logs
-logs
-*.log
 
 # Runtime data
 pids
@@ -56,5 +54,7 @@ lib-cov
 .grunt
 .lock-wscript
 
-# Claude
-.claude
+# Local-only agent state. Project skills in .claude/skills are committed
+# (that path is a symlink to .agents/skills).
+.claude/settings.local.json
+.claude/worktrees/
