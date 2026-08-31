@@ -183,18 +183,30 @@ export const GamePage = () => {
     if (player?.eliminated || player?.gameFinished) return undefined;
     if (completedRoundId === round._id) return undefined; // already finished this round
 
-    // One timer for the whole round; wrong guesses and lost lives do not reset it.
-    // If it runs out the player is eliminated so the game can continue.
-    setSecondsLeft(ROUND_SECONDS);
+    // One timer for the whole round, persisted so a refresh continues the same
+    // countdown instead of restarting it. Wrong guesses/lost lives don't reset it.
+    const startKey = `roundStart:${gameId}:${round._id}`;
+    let startedAt = Number(localStorage.getItem(startKey));
+    if (!startedAt) {
+      startedAt = Date.now();
+      localStorage.setItem(startKey, String(startedAt));
+    }
+    const remaining = Math.max(0, ROUND_SECONDS - Math.floor((Date.now() - startedAt) / 1000));
+    setSecondsLeft(remaining);
 
-    const timeoutId = window.setTimeout(() => {
+    const eliminate = () => {
       setMessage('Time is up! You have been eliminated.');
       setPlayerCanInput(false);
       Meteor.call('players.timeoutRound', playerId, (error) => {
         if (error) console.error(error);
       });
-    }, ROUND_SECONDS * 1000);
+    };
+    if (remaining <= 0) {
+      eliminate();
+      return undefined;
+    }
 
+    const timeoutId = window.setTimeout(eliminate, remaining * 1000);
     const intervalId = window.setInterval(() => {
       setSecondsLeft((prev) => (prev <= 1 ? 0 : prev - 1));
     }, 1000);
