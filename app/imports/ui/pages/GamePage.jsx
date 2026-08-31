@@ -239,7 +239,6 @@ export const GamePage = () => {
         background: 'linear-gradient(135deg, #1a0533 0%, #0d1b4b 100%)',
         display: 'flex',
         flexDirection: 'column',
-        padding: '2vh 2vw',
         transform: shake ? 'translateX(-6px)' : 'translateX(0)',
         transition: 'transform 0.1s ease',
         boxShadow: correctGlow ? 'inset 0 0 80px #00aaff' : 'none',
@@ -275,14 +274,14 @@ export const GamePage = () => {
             <div
               key={heart}
               style={{
-                width: '4vw',
-                height: '4vw',
+                width: 'clamp(60px, 8vw, 80px)',
+                height: 'clamp(60px, 8vw, 80px)',
                 backgroundColor: heart <= (player?.lives ?? 3) ? '#e03030' : '#333',
                 borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '2vw',
+                fontSize: 'clamp(30px, 4vw, 32px)',
                 boxShadow: heart <= (player?.lives ?? 3) ? '0 0 10px #e0303088' : 'none',
                 transition: 'all 0.3s ease',
               }}
@@ -298,7 +297,7 @@ export const GamePage = () => {
               marginBottom: '1vh',
               fontWeight: 'bold',
               letterSpacing: '2px',
-              fontSize: '1.2vw',
+              fontSize: 'clamp(16px, 1.2vw, 22px)',
             }}
           >
             LEVEL {round.lengthOfSequence - 3}
@@ -322,8 +321,8 @@ export const GamePage = () => {
               <div
                 key={i}
                 style={{
-                  width: '1vw',
-                  height: '1vw',
+                  width: 'clamp(10px, 1vw, 50px)',
+                  height: 'clamp(10px, 1vw, 50px)',
                   borderRadius: '50%',
                   backgroundColor: i < attemptedSequence.length ? '#fff' : '#556',
                 }}
@@ -346,7 +345,7 @@ export const GamePage = () => {
               color: 'white',
               marginTop: '1.5vh',
               minHeight: '2vh',
-              fontSize: '1vw',
+              fontSize: 'clamp(12px, 1.2vw, 24px)',
             }}
           >
             Selected: {attemptedSequence.length}/{round.sequence.length}
@@ -356,7 +355,7 @@ export const GamePage = () => {
               color: '#ffd369',
               marginTop: '0.8vh',
               minHeight: '2vh',
-              fontSize: '1vw',
+              fontSize: 'clamp(12px, 1.2vw, 20px)',
             }}
           >
             {message}
@@ -373,12 +372,12 @@ export const GamePage = () => {
               onClick={handleClear}
               disabled={!playerCanInput || attemptedSequence.length === 0}
               style={{
-                width: '8vw',
-                padding: '1vw',
+                width: 'clamp(100px, 8vw, 300px)',
+                height: 'clamp(40px, 3vw, 200px)',
                 backgroundColor: playerCanInput && attemptedSequence.length > 0 ? '#444' : '#222',
                 color: playerCanInput && attemptedSequence.length > 0 ? 'white' : '#555',
                 fontWeight: 'bold',
-                fontSize: '0.9vw',
+                fontSize: 'clamp(10px, 1vw, 20px)',
                 border: 'none',
                 borderRadius: '8px',
                 cursor: playerCanInput && attemptedSequence.length > 0 ? 'pointer' : 'not-allowed',
@@ -391,13 +390,13 @@ export const GamePage = () => {
               onClick={handleSubmit}
               disabled={!playerCanInput || attemptedSequence.length !== round.sequence.length}
               style={{
-                width: '9vw',
-                padding: '1vw',
+                width: 'clamp(100px, 8vw, 300px)',
+                height: 'clamp(40px, 3vw, 200px)',
                 backgroundColor:
                   playerCanInput && attemptedSequence.length === round.sequence.length ? '#666' : '#2a2a3a',
                 color: playerCanInput && attemptedSequence.length === round.sequence.length ? 'white' : '#444',
                 fontWeight: 'bold',
-                fontSize: '0.9vw',
+                fontSize: 'clamp(10px, 1vw, 20px)',
                 border: 'none',
                 borderRadius: '8px',
                 cursor:

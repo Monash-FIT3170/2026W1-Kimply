@@ -64,3 +64,37 @@ players: n=100 avg=293ms p50=117ms p95=694ms p99=697ms max=697ms  errors=0
   round CnNGZKhcoxqn6LnPe: seen by 100 clients, spread=680ms
 
 Fan-out spread: n=5 avg=150ms p50=18ms p95=680ms p99=680ms max=680ms
+
+======================================================================
+RUN AT: 2026-08-30T07-44-11
+======================================================================
+Target: wss://dev.kimply.online/websocket
+Players: 100 | Rounds to observe: 5 | Correct-guess rate: 0.7
+
+
+===== RESULTS =====
+Total wall time: 66898ms
+Connections: ok=100 failed=0
+Connect time: n=100 avg=378ms p50=433ms p95=578ms p99=596ms max=596ms
+
+-- Method latencies --
+rooms.create: n=1 avg=51ms p50=51ms p95=51ms p99=51ms max=51ms  errors=0
+rooms.join: n=99 avg=449ms p50=394ms p95=1052ms p99=1181ms max=1181ms  errors=0
+rooms.start: n=1 avg=56ms p50=56ms p95=56ms p99=56ms max=56ms  errors=0
+players.join: n=100 avg=1094ms p50=1013ms p95=1866ms p99=3184ms max=3184ms  errors=0
+players.submitSequence: n=430 avg=6950ms p50=7119ms p95=10580ms p99=10789ms max=11183ms  errors=0
+
+-- Subscription latencies --
+rooms.lobby: n=100 avg=82ms p50=74ms p95=159ms p99=161ms max=161ms  errors=0
+rounds: n=100 avg=64ms p50=58ms p95=99ms p99=135ms max=135ms  errors=0
+players: n=100 avg=322ms p50=191ms p95=730ms p99=736ms max=736ms  errors=0
+
+-- Round transition fan-out (spread across players seeing the same round) --
+  round fuKaC52XF2RdYwpNC: seen by 100 clients, spread=19ms
+  round 7geqQyPcwGqCGw5ch: seen by 100 clients, spread=217ms
+  round FhaAW5HjHjq2admfX: seen by 100 clients, spread=24ms
+  round A4agepYNCKi8Qbxgs: seen by 100 clients, spread=16ms
+  round mAEtYwkBtiCPdtupK: seen by 100 clients, spread=10ms
+  round PF2EbfCXTXi5SkD67: seen by 100 clients, spread=18ms
+
+Fan-out spread: n=6 avg=51ms p50=19ms p95=217ms p99=217ms max=217ms
