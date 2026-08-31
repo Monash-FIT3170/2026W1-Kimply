@@ -84,15 +84,6 @@ export function Wordmark() {
   return (
     <div className="flex items-center gap-2">
       <span className="font-outfit text-2xl font-extrabold leading-none tracking-tight text-fg">KIMPLY</span>
-      <span
-        className="mt-0.5 grid self-start"
-        style={{ gridTemplateColumns: '6px 6px', gridTemplateRows: '6px 6px', gap: 2 }}
-      >
-        <span className="rounded-sm" style={{ background: TILE.pink }} />
-        <span className="rounded-sm" style={{ background: TILE.amber }} />
-        <span className="rounded-sm" style={{ background: TILE.teal }} />
-        <span className="rounded-sm" style={{ background: TILE.violet }} />
-      </span>
     </div>
   );
 }

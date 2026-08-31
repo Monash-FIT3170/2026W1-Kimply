@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Meteor } from 'meteor/meteor';
 import { useTracker } from 'meteor/react-meteor-data';
 import { RoundsCollection } from '../../api/rounds';
@@ -12,17 +12,20 @@ import { EliminationFeed } from '../EliminationFeed.jsx';
 import { useLocation } from 'react-router-dom';
 import { TileLattice } from '../components/design';
 
+const ROUND_SECONDS = 60; // whole-round timer
+const seqSeenKey = (gameId, roundId) => `seqSeen:${gameId}:${roundId}`;
+
 export const GamePage = () => {
   const [playerId, setPlayerId] = useState(null);
   const [playerCanInput, setPlayerCanInput] = useState(false);
   const [attemptedSequence, setAttemptedSequence] = useState([]);
   const [message, setMessage] = useState('');
   const [levelUpNotices, setLevelUpNotices] = useState([]);
-  const [secondsLeft, setSecondsLeft] = useState(30);
+  const [secondsLeft, setSecondsLeft] = useState(ROUND_SECONDS);
   const [shake, setShake] = useState(false);
   const [correctGlow, setCorrectGlow] = useState(false);
   const [replayKey, setReplayKey] = useState(0);
-  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(true);
+  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [showPowerupPopup, setShowPowerupPopup] = useState(false);
   const [completedRoundId, setCompletedRoundId] = useState(null);
 
@@ -130,34 +133,41 @@ export const GamePage = () => {
   }, [round?._id, playerId, gameId, playerNameFromLobby, lobbyPlayerId, isBattleRoyale, accountId]);
 
   useEffect(() => {
-    setPlayerCanInput(false);
+    if (!player?.roundId) return;
     setAttemptedSequence([]);
     setMessage('');
     setSecondsLeft(30);
     setCompletedRoundId(null);
-    setReplayKey((prev) => prev + 1); // play sequence flash for new round
-  }, [player?.roundId]); // watch sequence of player's specific roundId
+    if (gameId && localStorage.getItem(seqSeenKey(gameId, player.roundId))) {
+      // already watched this round (e.g. refresh): skip the replay
+      setPlayerCanInput(true);
+    } else {
+      setPlayerCanInput(false);
+      setReplayKey((prev) => prev + 1);
+    }
+  }, [player?.roundId, gameId]);
 
   // Show the slow-motion powerup popup whenever the player picks it up
   useEffect(() => {
     setShowPowerupPopup(!!player?.slowMotionActive);
   }, [player?.slowMotionActive]);
 
+  const seenLevelUpIds = useRef(new Set());
   useEffect(() => {
-    if (levelUpEvents.length === 0) return;
-
-    const newest = [...levelUpEvents]
-      .reverse()
-      .slice(0, 4)
-      .map((event) => ({
+    levelUpEvents.forEach((event) => {
+      if (seenLevelUpIds.current.has(event._id)) return;
+      seenLevelUpIds.current.add(event._id);
+      const notice = {
         key: event._id,
         text:
           event.playerId === playerId
             ? `You have leveled up to level ${event.level}`
             : `${event.playerName} has reached level ${event.level}`,
-      }));
-
-    setLevelUpNotices(newest);
+      };
+      setLevelUpNotices((prev) => [...prev, notice]);
+      // auto-dismiss like the elimination feed
+      setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), 4000);
+    });
   }, [levelUpEvents]);
 
   const handleColourClick = (colour) => {
@@ -168,49 +178,32 @@ export const GamePage = () => {
   };
 
   useEffect(() => {
-    if (!playerCanInput || !playerId) {
-      return undefined;
-    }
+    if (isBattleRoyale) return undefined; // battle royale is a free-for-all: no timer
+    if (!round?._id || !playerId) return undefined;
+    if (player?.eliminated || player?.gameFinished) return undefined;
+    if (completedRoundId === round._id) return undefined; // already finished this round
 
-    setSecondsLeft(30);
+    // One timer for the whole round; wrong guesses and lost lives do not reset it.
+    // If it runs out the player is eliminated so the game can continue.
+    setSecondsLeft(ROUND_SECONDS);
 
     const timeoutId = window.setTimeout(() => {
-      setMessage('Time is up! You lost a life.');
-      Meteor.call('players.timeoutTurn', playerId, (error, result) => {
-        if (error) {
-          console.error(error);
-          setMessage('Something went wrong while handling the timer.');
-          return;
-        }
-
-        if (result?.remainingLives <= 0) {
-          setMessage('Time is up! You have been eliminated!');
-          setPlayerCanInput(false);
-        } else if (typeof result?.remainingLives === 'number') {
-          setMessage(`Time is up! ${result.remainingLives} ${result.remainingLives === 1 ? 'life' : 'lives'} remaining.`);
-          setAttemptedSequence([]);
-          setPlayerCanInput(true);
-          setReplayKey((prev) => prev + 1);
-        }
+      setMessage('Time is up! You have been eliminated.');
+      setPlayerCanInput(false);
+      Meteor.call('players.timeoutRound', playerId, (error) => {
+        if (error) console.error(error);
       });
-    }, 30000);
+    }, ROUND_SECONDS * 1000);
 
     const intervalId = window.setInterval(() => {
-      setSecondsLeft((prev) => {
-        if (prev <= 1) {
-          window.clearInterval(intervalId);
-          return 0;
-        }
-
-        return prev - 1;
-      });
+      setSecondsLeft((prev) => (prev <= 1 ? 0 : prev - 1));
     }, 1000);
 
     return () => {
       window.clearTimeout(timeoutId);
       window.clearInterval(intervalId);
     };
-  }, [playerCanInput, playerId, round?._id]);
+  }, [round?._id, playerId, isBattleRoyale, player?.eliminated, player?.gameFinished, completedRoundId]);
 
   const handleSubmit = () => {
     if (!playerId) {
@@ -407,6 +400,8 @@ export const GamePage = () => {
         height: '100dvh',
         position: 'relative',
         overflow: 'hidden',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
         background: 'linear-gradient(135deg, #1a0533 0%, #0d1b4b 100%)',
         display: 'flex',
         flexDirection: 'column',
@@ -472,7 +467,7 @@ export const GamePage = () => {
       <div className="relative flex shrink-0 justify-between px-7 py-5" style={{ width: '100%' }}>
         <span
           style={{
-            fontSize: '2vw',
+            fontSize: 'clamp(20px, 2vw, 40px)',
             fontWeight: 800,
             color: 'white',
             letterSpacing: '-0.02em',
@@ -540,11 +535,13 @@ export const GamePage = () => {
             roundId={round._id}
             sequence={round.sequence}
             replayKey={replayKey}
+            autoPlay={!(gameId && player?.roundId && localStorage.getItem(seqSeenKey(gameId, player.roundId)))}
             playerCanInput={playerCanInput}
             onSequenceComplete={() => {
               playTurnStartSound();
               setPlayerCanInput(true);
               setMessage('Your turn. Repeat the sequence.');
+              if (gameId && player?.roundId) localStorage.setItem(seqSeenKey(gameId, player.roundId), '1');
             }}
             onColourClick={handleColourClick}
             flashingSpeed={
@@ -575,7 +572,7 @@ export const GamePage = () => {
           >
             {message}
           </p>
-          {playerCanInput && (
+          {!isBattleRoyale && playerCanInput && (
             <p
               style={{
                 color: secondsLeft <= 5 ? '#ff7a7a' : '#9ce8ff',
@@ -649,8 +646,8 @@ export const GamePage = () => {
       </button>
 
       <aside
-        className={`relative z-30 mx-auto mt-6 w-full max-w-[calc(100vw-2rem)] px-4 pb-8 transition-all duration-300 ease-in-out md:fixed md:right-6 md:top-20 md:mx-0 md:mt-0 md:w-[28rem] md:max-w-[calc(100vw-3rem)] md:px-0 md:pb-0 md:transition-transform ${
-          isLeaderboardOpen ? 'block md:translate-x-0' : 'hidden md:block md:translate-x-full'
+        className={`fixed right-4 top-20 z-30 w-[calc(100vw-2rem)] max-w-[28rem] transition-transform duration-300 ease-in-out ${
+          isLeaderboardOpen ? 'translate-x-0' : 'translate-x-[120%]'
         }`}
       >
         <Leaderboard gameId={gameId} currentPlayerId={playerId} />
