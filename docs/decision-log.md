@@ -20,6 +20,13 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-08-31 - Fixed the room-code input dropping keystrokes (D15)
+
+`JoinRoom.handleInput` passed a functional updater to `setCode` that read `e.target.value`, then cleared that same value synchronously with `clearCapturedInput(e)` further down the handler.
+React only evaluates a functional updater eagerly when the fiber has no pending work; otherwise it defers the updater until render, by which point the clear has already blanked `e.target.value`, so `appendRoomCodeInput` received `''` and the keystroke was lost. That is why players had to type each code letter twice.
+The fix reads the typed value into a local before clearing and references that local inside the updater, so the update no longer depends on the mutated DOM node. The non-obvious part: reordering `clearCapturedInput` above `setCode` is not cosmetic — it removes a read-after-mutate race, not just a style preference.
+Files: `app/imports/ui/pages/JoinRoom.jsx`, `docs/defect-register.md` (D15).
+
 ## 2026-08-29 - Skills are workflows, not product rules
 
 Every skill under `.agents/skills/` was rewritten to drop game-specific rules (defect IDs, publication invariants, route tables, "do not add a login wall", lives / sequences / `'demo'` gameId).
