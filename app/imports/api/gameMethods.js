@@ -174,13 +174,19 @@ async function advanceRoundIfReady(round) {
   }).fetchAsync();
   const room = await RoomsCollection.findOneAsync({ pin: round.gameId });
   const lobbyPlayerIds = (room?.players || []).map((player) => player.id).filter(Boolean);
-  const expectedPlayerCount = lobbyPlayerIds.length;
 
-  const playersToEvaluate = lobbyPlayerIds.length
-    ? lobbyPlayerIds
+  // Eliminated players stay on their old round and never join later rounds, so
+  // they must not count towards the players this round waits for.
+  const eliminatedPlayers = await PlayersCollection.find({ gameId: round.gameId, eliminated: true }).fetchAsync();
+  const eliminatedLobbyIds = new Set(eliminatedPlayers.map((p) => p.lobbyPlayerId).filter(Boolean));
+  const activeLobbyIds = lobbyPlayerIds.filter((id) => !eliminatedLobbyIds.has(id));
+  const expectedPlayerCount = activeLobbyIds.length;
+
+  const playersToEvaluate = activeLobbyIds.length
+    ? activeLobbyIds
         .map((lobbyPlayerId) => playersInRound.find((player) => player.lobbyPlayerId === lobbyPlayerId))
         .filter(Boolean)
-    : playersInRound;
+    : playersInRound.filter((p) => !p.eliminated);
 
   if (playersToEvaluate.length < expectedPlayerCount) return false;
 
@@ -246,7 +252,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       if (lobbyPlayerId) {
         const existing = await PlayersCollection.findOneAsync({ gameId, lobbyPlayerId });
         if (existing) {
-          await PlayersCollection.updateAsync(existing._id, { $set: { connectionId } });
+          await PlayersCollection.updateAsync(existing._id, { $set: { connectionId, connected: true } });
           return existing._id;
         }
       }
@@ -276,6 +282,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         slowMotionActive: false,
         eliminatedAt: null,
         connectionId,
+        connected: true,
       });
     },
 
@@ -336,6 +343,16 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
               completeRound: false,
               attemptedSequence: [],
             },
+          });
+
+          // announce the level-up so it shows in the live levels feed
+          await GameEventsCollection.insertAsync({
+            gameId: player.gameId,
+            type: 'level-up',
+            playerId: player._id,
+            playerName: player.name,
+            level: nextLevel - 3,
+            createdAt: new Date(),
           });
 
           return { success: true, sequenceComplete: true };
@@ -543,9 +560,22 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
   Meteor.onConnection((connection) => {
     connection.onClose(() => {
       const closedId = connection.id;
+
+      // Flag as disconnected right away. In the lobby the player is kept and
+      // pruned at rooms.start; in game they are grace-removed below unless they
+      // reconnect (which flips connected back to true).
+      (async () => {
+        await RoomsCollection.updateAsync(
+          { status: 'lobby', 'players.connectionId': closedId },
+          { $set: { 'players.$.connected': false } }
+        );
+        await PlayersCollection.updateAsync({ connectionId: closedId }, { $set: { connected: false } });
+      })();
+
       Meteor.setTimeout(async () => {
         const gone = await PlayersCollection.find({
           connectionId: closedId,
+          connected: false,
           eliminated: false,
           gameFinished: false,
         }).fetchAsync();
