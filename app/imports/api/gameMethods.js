@@ -333,6 +333,16 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
             },
           });
 
+          // announce the level-up so it shows in the live levels feed
+          await GameEventsCollection.insertAsync({
+            gameId: player.gameId,
+            type: 'level-up',
+            playerId: player._id,
+            playerName: player.name,
+            level: nextLevel - 3,
+            createdAt: new Date(),
+          });
+
           return { success: true, sequenceComplete: true };
         }
 
