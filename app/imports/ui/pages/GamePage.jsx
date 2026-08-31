@@ -395,11 +395,11 @@ export const GamePage = () => {
 
   return (
     <div
+      className='relative'
       style={{
-        minHeight: '100vh',
+        height: '100dvh',
         position: 'relative',
-        overflowX: 'hidden',
-        overflowY: 'auto',
+        overflow: 'hidden',
         userSelect: 'none',
         WebkitUserSelect: 'none',
         background: 'linear-gradient(135deg, #1a0533 0%, #0d1b4b 100%)',
