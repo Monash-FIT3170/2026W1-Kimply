@@ -20,6 +20,12 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-08-31 - Lives display now shows the full starting-lives track (D17)
+
+The game page sized its hearts off `Math.max(player.lives, 3)` and computed `totalLives` only for `gameMode === 'custom'`, so preset modes (easy = 5 lives, etc.) fell back to 3 and a lost life removed a heart instead of greying it out.
+`customSettings.startingLives` is populated for every preset, so `totalLives` now reads it regardless of mode and the display renders a fixed `totalLives` track, greying circles above the current life count. `players.join` already stores the correct starting lives, so this was display-only.
+Files: `app/imports/ui/pages/GamePage.jsx`, `docs/defect-register.md` (D17).
+
 ## 2026-08-29 - Skills are workflows, not product rules
 
 Every skill under `.agents/skills/` was rewritten to drop game-specific rules (defect IDs, publication invariants, route tables, "do not add a login wall", lives / sequences / `'demo'` gameId).
