@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Meteor } from 'meteor/meteor';
 import { useTracker } from 'meteor/react-meteor-data';
 import { RoundsCollection } from '../../api/rounds';
@@ -151,21 +151,22 @@ export const GamePage = () => {
     setShowPowerupPopup(!!player?.slowMotionActive);
   }, [player?.slowMotionActive]);
 
+  const seenLevelUpIds = useRef(new Set());
   useEffect(() => {
-    if (levelUpEvents.length === 0) return;
-
-    const newest = [...levelUpEvents]
-      .reverse()
-      .slice(0, 4)
-      .map((event) => ({
+    levelUpEvents.forEach((event) => {
+      if (seenLevelUpIds.current.has(event._id)) return;
+      seenLevelUpIds.current.add(event._id);
+      const notice = {
         key: event._id,
         text:
           event.playerId === playerId
             ? `You have leveled up to level ${event.level}`
             : `${event.playerName} has reached level ${event.level}`,
-      }));
-
-    setLevelUpNotices(newest);
+      };
+      setLevelUpNotices((prev) => [...prev, notice]);
+      // auto-dismiss like the elimination feed
+      setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), 4000);
+    });
   }, [levelUpEvents]);
 
   const handleColourClick = (colour) => {
