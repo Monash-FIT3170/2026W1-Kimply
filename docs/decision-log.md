@@ -20,6 +20,11 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-08-31 - Locked tile input during the post-mistake sequence replay (D16)
+
+After a wrong guess with lives remaining, `GamePage.handleSubmit` set `playerCanInput` to `true` and bumped `replayKey` in the same breath, so the colour tiles stayed clickable while the sequence replayed and a player could copy the answer as each tile lit up.
+Set `playerCanInput` to `false` on the retry path and let `onSequenceComplete` re-enable it after the replay, matching the fresh-round flow. Non-obvious: the retry replay reuses the same `roundId`, so re-enabling has to be driven by the replay finishing, not by a round change.
+Files: `app/imports/ui/pages/GamePage.jsx`, `docs/defect-register.md` (D16).
 ## 2026-08-31 - Fixed the room-code input dropping keystrokes (D15)
 
 `JoinRoom.handleInput` passed a functional updater to `setCode` that read `e.target.value`, then cleared that same value synchronously with `clearCapturedInput(e)` further down the handler.
