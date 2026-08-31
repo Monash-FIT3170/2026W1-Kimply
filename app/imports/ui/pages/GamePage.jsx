@@ -403,10 +403,7 @@ export const GamePage = () => {
   return (
     <div
       style={{
-        // 100dvh (dynamic viewport height) tracks the visible area as mobile browser
-        // chrome shows/hides. Plain 100vh resolves to the largest viewport, so on mobile
-        // the container was taller than the screen and left empty space to scroll into.
-        minHeight: '100dvh',
+        height: '100dvh',
         position: 'relative',
         overflowX: 'hidden',
         overflowY: 'auto',
