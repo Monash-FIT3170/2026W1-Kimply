@@ -137,7 +137,7 @@ export function PlayRoute() {
     setLoading(true);
     setError('');
 
-    Meteor.call('rooms.create', trimmedName, (err, result) => {
+    Meteor.call('rooms.create', trimmedName, signedInAccount?._id, (err, result) => {
       setLoading(false);
       if (err) { setError('Could not create room. Try again.'); return; }
 
@@ -146,9 +146,11 @@ export function PlayRoute() {
       //   playerId : result.hostId,
       //   gameId : result.gameId
       // };
-      
+
       // localStorage.setItem('reconnectData', JSON.stringify(reconnectData));
-      navigate(`/play/modes/${result.pin}`, { state: { playerName: trimmedName, isHost: true, playerId: result.hostId } });
+      navigate(`/play/modes/${result.pin}`, {
+        state: { playerName: trimmedName, isHost: true, playerId: result.hostId, playerAccount: signedInAccount },
+      });
     });
   };
 
@@ -165,7 +167,16 @@ export function PlayRoute() {
       {/* top bar */}
       <div className="relative flex shrink-0 items-center justify-between px-7 py-5">
         <Wordmark />
-        <span className="font-mono text-[11px] uppercase tracking-widest text-fg3">v1.0.0</span>
+        <div className="flex items-center gap-3">
+          <Link
+            to="/leaderboard"
+            state={{ playerAccount: signedInAccount }}
+            className="rounded-full border border-hairline px-3.5 py-1.5 font-outfit text-[11px] font-bold uppercase tracking-wider text-fg2 transition-colors hover:text-fg"
+          >
+            Leaderboard
+          </Link>
+          <span className="font-mono text-[11px] uppercase tracking-widest text-fg3">v1.0.0</span>
+        </div>
       </div>
 
       <div className="relative flex flex-1 flex-col items-center justify-center gap-7 overflow-y-auto px-7 pb-14">

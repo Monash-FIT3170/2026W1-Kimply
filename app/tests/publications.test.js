@@ -3,16 +3,10 @@ import { Meteor } from 'meteor/meteor';
 import { RoundsCollection } from '../imports/api/rounds';
 import { PlayersCollection } from '../imports/api/players';
 import { LeaderboardCollection } from '../imports/api/leaderboard';
-// Registers the publications. Required because plain `meteor test` does not load
-// server/main.js; only `meteor test --full-app` does.
 import '../server/publications.js';
 
-// Sentinel returned by our fake `this.ready()` so a test can tell "the publication
-// declined to publish anything" apart from "the publication returned a cursor".
 const READY = Symbol('ready');
 
-// Publication handlers are plain functions on the server. Calling them directly
-// with a stub context is the least ceremonious way to assert what they expose.
 function runPublication(name, ...args) {
   const handler = Meteor.server.publish_handlers[name];
   assert.ok(handler, `publication "${name}" is not registered`);
