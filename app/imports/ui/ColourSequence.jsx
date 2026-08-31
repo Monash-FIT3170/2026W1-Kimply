@@ -21,6 +21,12 @@ const COLOURS = {
 
 const TILE_ORDER = ['red', 'yellow', 'green', 'blue'];
 
+const FLASH_SPEEDS = {
+  slow:   { flash: 900, gap: 350 },
+  medium: { flash: 600, gap: 250 },
+  fast:   { flash: 350, gap: 150 },
+};
+
 export const ColourSequence = ({
   roundId,
   sequence = [],
@@ -28,6 +34,7 @@ export const ColourSequence = ({
   onSequenceComplete,
   playerCanInput,
   onColourClick,
+  flashingSpeed = 'medium',
 }) => {
   const [activeColour, setActiveColour] = useState(null);
   const [clickedColour, setClickedColour] = useState(null);
@@ -43,6 +50,8 @@ export const ColourSequence = ({
     setIsPlaying(true);
     setIsDone(false);
     setActiveColour(null);
+
+    const { flash, gap } = FLASH_SPEEDS[flashingSpeed] ?? FLASH_SPEEDS.medium;
 
     const showNext = () => {
       if (cancelled) return;
@@ -65,8 +74,8 @@ export const ColourSequence = ({
       setTimeout(() => {
         setActiveColour(null);
         i++;
-        setTimeout(showNext, 250);
-      }, 600);
+        setTimeout(showNext, gap);
+      }, flash);
     };
 
     const startDelay = setTimeout(showNext, 800);
