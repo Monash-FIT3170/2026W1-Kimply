@@ -168,6 +168,7 @@ export const GamePage = () => {
   };
 
   useEffect(() => {
+    if (isBattleRoyale) return undefined; // battle royale is a free-for-all: no timer
     if (!playerCanInput || !playerId) {
       return undefined;
     }
@@ -210,7 +211,7 @@ export const GamePage = () => {
       window.clearTimeout(timeoutId);
       window.clearInterval(intervalId);
     };
-  }, [playerCanInput, playerId, round?._id]);
+  }, [playerCanInput, playerId, round?._id, isBattleRoyale]);
 
   const handleSubmit = () => {
     if (!playerId) {
@@ -577,7 +578,7 @@ export const GamePage = () => {
           >
             {message}
           </p>
-          {playerCanInput && (
+          {!isBattleRoyale && playerCanInput && (
             <p
               style={{
                 color: secondsLeft <= 5 ? '#ff7a7a' : '#9ce8ff',
