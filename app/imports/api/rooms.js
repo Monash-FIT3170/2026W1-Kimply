@@ -35,6 +35,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
           gameMode: 1,
           'players.name': 1,
           'players.id': 1,
+          'players.connected': 1,
         },
       }
     );
@@ -64,7 +65,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
         hostName: name,
         gameName: `Game${pin}`,
         status: 'lobby',
-        players: [{ id: hostId, name, accountId: hostAccountId }],
+        players: [{ id: hostId, name, accountId: hostAccountId, connected: true, connectionId: this.connection?.id ?? null }],
         createdAt: new Date(),
         gameMode: 'default',
         customSettings: { ...GAME_MODE_PRESETS.default },
@@ -127,6 +128,9 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       if (!room) throw new Meteor.Error('not-found', 'Room not found');
       if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
 
+      // Drop anyone who disconnected in the lobby and did not reconnect.
+      await RoomsCollection.updateAsync({ _id: room._id }, { $pull: { players: { connected: false } } });
+
       // Clear old game data so new game starts fresh
       await PlayersCollection.removeAsync({ gameId: pin });
       await RoundsCollection.removeAsync({ gameId: pin });
@@ -185,7 +189,17 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
 
       await RoomsCollection.updateAsync(
         { _id: room._id },
-        { $push: { players: { id: playerId, name: playerName.trim(), accountId: joinAccountId } } }
+        {
+          $push: {
+            players: {
+              id: playerId,
+              name: playerName.trim(),
+              accountId: joinAccountId,
+              connected: true,
+              connectionId: this.connection?.id ?? null,
+            },
+          },
+        }
       );
 
       return { roomId: room.pin, playerId: playerId };
@@ -230,6 +244,11 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       if (!player) {
         throw new Meteor.Error('player-not-found');
       }
+
+      await RoomsCollection.updateAsync(
+        { pin: pin.trim(), 'players.id': playerId },
+        { $set: { 'players.$.connected': true, 'players.$.connectionId': this.connection?.id ?? null } }
+      );
 
       return {
         playerName: player.name,

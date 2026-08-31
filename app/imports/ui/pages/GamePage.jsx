@@ -25,7 +25,7 @@ export const GamePage = () => {
   const [shake, setShake] = useState(false);
   const [correctGlow, setCorrectGlow] = useState(false);
   const [replayKey, setReplayKey] = useState(0);
-  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(true);
+  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [showPowerupPopup, setShowPowerupPopup] = useState(false);
   const [completedRoundId, setCompletedRoundId] = useState(null);
 
@@ -395,11 +395,11 @@ export const GamePage = () => {
 
   return (
     <div
+      className='relative'
       style={{
-        minHeight: '100vh',
+        height: '100dvh',
         position: 'relative',
-        overflowX: 'hidden',
-        overflowY: 'auto',
+        overflow: 'hidden',
         userSelect: 'none',
         WebkitUserSelect: 'none',
         background: 'linear-gradient(135deg, #1a0533 0%, #0d1b4b 100%)',
@@ -467,7 +467,7 @@ export const GamePage = () => {
       <div className="relative flex shrink-0 justify-between px-7 py-5" style={{ width: '100%' }}>
         <span
           style={{
-            fontSize: '2vw',
+            fontSize: 'clamp(20px, 2vw, 40px)',
             fontWeight: 800,
             color: 'white',
             letterSpacing: '-0.02em',
@@ -646,8 +646,8 @@ export const GamePage = () => {
       </button>
 
       <aside
-        className={`relative z-30 mx-auto mt-6 w-full max-w-[calc(100vw-2rem)] px-4 pb-8 transition-all duration-300 ease-in-out md:fixed md:right-6 md:top-20 md:mx-0 md:mt-0 md:w-[28rem] md:max-w-[calc(100vw-3rem)] md:px-0 md:pb-0 md:transition-transform ${
-          isLeaderboardOpen ? 'block md:translate-x-0' : 'hidden md:block md:translate-x-full'
+        className={`fixed right-4 top-20 z-30 w-[calc(100vw-2rem)] max-w-[28rem] transition-transform duration-300 ease-in-out ${
+          isLeaderboardOpen ? 'translate-x-0' : 'translate-x-[120%]'
         }`}
       >
         <Leaderboard gameId={gameId} currentPlayerId={playerId} />

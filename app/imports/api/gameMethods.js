@@ -260,7 +260,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       if (lobbyPlayerId) {
         const existing = await PlayersCollection.findOneAsync({ gameId, lobbyPlayerId });
         if (existing) {
-          await PlayersCollection.updateAsync(existing._id, { $set: { connectionId } });
+          await PlayersCollection.updateAsync(existing._id, { $set: { connectionId, connected: true } });
           return existing._id;
         }
       }
@@ -290,6 +290,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         slowMotionActive: false,
         eliminatedAt: null,
         connectionId,
+        connected: true,
       });
     },
 
@@ -350,6 +351,16 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
               completeRound: false,
               attemptedSequence: [],
             },
+          });
+
+          // announce the level-up so it shows in the live levels feed
+          await GameEventsCollection.insertAsync({
+            gameId: player.gameId,
+            type: 'level-up',
+            playerId: player._id,
+            playerName: player.name,
+            level: nextLevel - 3,
+            createdAt: new Date(),
           });
 
           return { success: true, sequenceComplete: true };
@@ -556,9 +567,22 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
   Meteor.onConnection((connection) => {
     connection.onClose(() => {
       const closedId = connection.id;
+
+      // Flag as disconnected right away. In the lobby the player is kept and
+      // pruned at rooms.start; in game they are grace-removed below unless they
+      // reconnect (which flips connected back to true).
+      (async () => {
+        await RoomsCollection.updateAsync(
+          { status: 'lobby', 'players.connectionId': closedId },
+          { $set: { 'players.$.connected': false } }
+        );
+        await PlayersCollection.updateAsync({ connectionId: closedId }, { $set: { connected: false } });
+      })();
+
       Meteor.setTimeout(async () => {
         const gone = await PlayersCollection.find({
           connectionId: closedId,
+          connected: false,
           eliminated: false,
           gameFinished: false,
         }).fetchAsync();

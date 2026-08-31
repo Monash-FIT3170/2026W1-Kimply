@@ -249,6 +249,11 @@ The cost of leaving it is that every branch inherits the dirt, so no diff can be
 
 ---
 
+## D18 - Game page scrolls into empty space below the play area - **fixed 2026-08-31**
+
+The gameplay container in `GamePage` used `minHeight: '100vh'` with `overflowY: 'auto'`. On mobile browsers `100vh` resolves to the largest viewport height (as if the toolbar were hidden), so the container was taller than the visible area and left a strip of empty space the user could scroll into.
+
+**Fix (applied):** size the container with `100dvh` (dynamic viewport height), which follows the visible area as the browser chrome shows/hides, so there is no empty space to scroll into. Legitimate overflow on short screens still scrolls via `overflowY: 'auto'`. `app/imports/ui/pages/GamePage.jsx`.
 ## D17 - Lives display hardcoded to 3 and shrinks instead of greying out - **fixed 2026-08-31**
 
 `GamePage` computed `totalLives` only for the `'custom'` mode:
