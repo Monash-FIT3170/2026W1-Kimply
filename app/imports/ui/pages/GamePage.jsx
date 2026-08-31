@@ -99,6 +99,9 @@ export const GamePage = () => {
     return RoundsCollection.findOne({ gameId, isCurrent: true });
   }, [gameId, player?.roundId]);
 
+  // startingLives is copied into customSettings for every preset mode (easy=5, hard=1, ...),
+  // not just 'custom', so size the lives track off customSettings regardless of gameMode.
+  const totalLives = room?.customSettings?.startingLives ?? 3;
   const levelUpEvents = useTracker(() => {
     if (!gameId) return [];
     return GameEventsCollection.find({ gameId, type: 'level-up' }, { sort: { createdAt: -1 } }).fetch();
@@ -481,19 +484,19 @@ export const GamePage = () => {
       </div>
       <div className="relative flex flex-1 flex-col items-center justify-start md:justify-center">
         <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2vh' }}>
-          {Array.from({ length: Math.max(player?.lives ?? 3, 3) }, (_, i) => i + 1).map((heart) => (
+          {Array.from({ length: totalLives }, (_, i) => i + 1).map((heart) => (
             <div
               key={heart}
               style={{
                 width: 'clamp(60px, 8vw, 80px)',
                 height: 'clamp(60px, 8vw, 80px)',
-                backgroundColor: heart <= (player?.lives ?? 3) ? '#e03030' : '#333',
+                backgroundColor: heart <= (player?.lives ?? totalLives) ? '#e03030' : '#333',
                 borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 fontSize: 'clamp(30px, 4vw, 32px)',
-                boxShadow: heart <= (player?.lives ?? 3) ? '0 0 10px #e0303088' : 'none',
+                boxShadow: heart <= (player?.lives ?? totalLives) ? '0 0 10px #e0303088' : 'none',
                 transition: 'all 0.3s ease',
               }}
             >

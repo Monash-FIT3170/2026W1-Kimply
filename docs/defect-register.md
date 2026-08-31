@@ -249,6 +249,17 @@ The cost of leaving it is that every branch inherits the dirt, so no diff can be
 
 ---
 
+## D17 - Lives display hardcoded to 3 and shrinks instead of greying out - **fixed 2026-08-31**
+
+`GamePage` computed `totalLives` only for the `'custom'` mode:
+
+```js
+const totalLives = room?.gameMode === 'custom' ? (room.customSettings?.startingLives ?? 3) : 3;
+```
+
+but preset modes (`easy`, `medium`, `hard`, `battle_royale`) also store their lives in `customSettings.startingLives` and are not `'custom'`, so this fell back to 3. The heart track also ignored `totalLives` and sized itself off `Math.max(player.lives, 3)`, so losing a life removed a circle rather than greying it out. `players.join` already sets `lives: startingLives`, so the value was right - only the display was wrong.
+
+**Fix (applied):** read `totalLives` from `customSettings.startingLives` for every mode, render a fixed `totalLives`-circle track, and grey circles above the current life count. `app/imports/ui/pages/GamePage.jsx`.
 ## D16 - Tiles clickable during the post-mistake sequence replay - **fixed 2026-08-31**
 
 On a wrong guess with lives left, `GamePage.handleSubmit` re-enabled input and restarted the sequence replay together:
