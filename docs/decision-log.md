@@ -20,6 +20,11 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-08-31 - Game page uses 100dvh so it stops scrolling into empty space (D18)
+
+The gameplay container used `minHeight: 100vh`. On mobile `100vh` is the largest viewport (address bar hidden), so the container was taller than the visible screen and left an empty strip to scroll into. Switched it to `100dvh`, which tracks the visible area as browser chrome shows/hides. `overflowY: 'auto'` stays, so genuine overflow on short screens still scrolls.
+Files: `app/imports/ui/pages/GamePage.jsx`, `docs/defect-register.md` (D18).
+
 ## 2026-08-29 - Skills are workflows, not product rules
 
 Every skill under `.agents/skills/` was rewritten to drop game-specific rules (defect IDs, publication invariants, route tables, "do not add a login wall", lives / sequences / `'demo'` gameId).
