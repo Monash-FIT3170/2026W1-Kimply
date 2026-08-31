@@ -402,11 +402,11 @@ export const GamePage = () => {
 
   return (
     <div
+      className='relative'
       style={{
         height: '100dvh',
         position: 'relative',
-        overflowX: 'hidden',
-        overflowY: 'auto',
+        overflow: 'hidden',
         background: 'linear-gradient(135deg, #1a0533 0%, #0d1b4b 100%)',
         display: 'flex',
         flexDirection: 'column',
