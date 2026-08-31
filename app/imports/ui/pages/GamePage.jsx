@@ -6,7 +6,7 @@ import { PlayersCollection } from '../../api/players';
 import { ColourSequence } from '../ColourSequence.jsx';
 import { Leaderboard } from '../Leaderboard.jsx';
 import { EndLeaderboard } from '../EndLeaderboard.jsx';
-import { useLocation} from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { TileLattice, BG } from '../components/design';
 import { RoomsCollection } from '../../api/rooms';
 
