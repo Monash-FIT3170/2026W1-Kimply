@@ -20,8 +20,6 @@ import {
   RainbowBar,
 } from '../components/design';
 
-const MAX_PLAYERS = 8;
-
 function getGameModeColor(mode) {
   const colors = {
     easy: 'oklch(0.75 0.20 120)',
@@ -73,15 +71,6 @@ function PlayerRow({ player, isYou, onKick }) {
       ) : (
         <ReadyChip ready />
       )}
-    </div>
-  );
-}
-
-function EmptySlot() {
-  return (
-    <div className="flex items-center gap-3 rounded-xl border border-dashed border-hairline px-3.5 py-2.5">
-      <div className="h-8 w-8 shrink-0 rounded-full border border-dashed border-hairline" />
-      <span className="font-outfit text-[13px] font-medium text-fg3">Empty slot</span>
     </div>
   );
 }
@@ -251,7 +240,7 @@ function HostView({ room, playerName, playerId, playerAccount, onBack, navigate,
             <p className="font-outfit text-[13px] font-bold uppercase tracking-widest text-fg2">
               Players{' '}
               <span className="text-fg3">
-                ({players.length}/{MAX_PLAYERS})
+                ({players.length})
               </span>
             </p>
             <div className="inline-flex items-center gap-1.5 font-mono text-[11px]" style={{ color: TILE.amber }}>
@@ -293,7 +282,6 @@ function HostView({ room, playerName, playerId, playerAccount, onBack, navigate,
 
 function JoinedView({ room, playerName, playerId, playerAccount, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
-  const emptySlots = Math.max(0, MAX_PLAYERS - players.length);
 
   const stillInRoom = !playerName || players.some((p) => p.name === playerName);
   useEffect(() => {
@@ -319,8 +307,6 @@ function JoinedView({ room, playerName, playerId, playerAccount, onBack, navigat
       });
     }
   }, [room?.status]);
-
-  const progress = (players.length / MAX_PLAYERS) * 100;
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden bg-bg text-fg">
@@ -362,7 +348,7 @@ function JoinedView({ room, playerName, playerId, playerAccount, onBack, navigat
             <p className="font-outfit text-sm font-bold uppercase tracking-widest text-fg2">
               Players{' '}
               <span className="text-fg3">
-                ({players.length}/{MAX_PLAYERS})
+                ({players.length})
               </span>
             </p>
             <span className="font-mono text-[11px] text-fg3">
@@ -370,24 +356,10 @@ function JoinedView({ room, playerName, playerId, playerAccount, onBack, navigat
             </span>
           </div>
 
-          {/* progress bar */}
-          <div className="h-1.5 overflow-hidden rounded-full bg-surface">
-            <div
-              className="h-full rounded-full"
-              style={{
-                width: `${progress}%`,
-                background: `linear-gradient(90deg, ${TILE.pink}, ${TILE.amber}, ${TILE.teal}, ${TILE.violet})`,
-              }}
-            />
-          </div>
-
           {/* players grid */}
           <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
             {players.map((p, i) => (
               <PlayerRow key={p.id || i} player={p} isYou={p.name === playerName} />
-            ))}
-            {Array.from({ length: emptySlots }).map((_, i) => (
-              <EmptySlot key={`e${i}`} />
             ))}
           </div>
           <div className="mt-auto flex justify-center pt-3">
