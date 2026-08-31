@@ -12,6 +12,8 @@ import { EliminationFeed } from '../EliminationFeed.jsx';
 import { useLocation } from 'react-router-dom';
 import { TileLattice } from '../components/design';
 
+const seqSeenKey = (gameId, roundId) => `seqSeen:${gameId}:${roundId}`;
+
 export const GamePage = () => {
   const [playerId, setPlayerId] = useState(null);
   const [playerCanInput, setPlayerCanInput] = useState(false);
@@ -130,13 +132,19 @@ export const GamePage = () => {
   }, [round?._id, playerId, gameId, playerNameFromLobby, lobbyPlayerId, isBattleRoyale, accountId]);
 
   useEffect(() => {
-    setPlayerCanInput(false);
+    if (!player?.roundId) return;
     setAttemptedSequence([]);
     setMessage('');
     setSecondsLeft(30);
     setCompletedRoundId(null);
-    setReplayKey((prev) => prev + 1); // play sequence flash for new round
-  }, [player?.roundId]); // watch sequence of player's specific roundId
+    if (gameId && localStorage.getItem(seqSeenKey(gameId, player.roundId))) {
+      // already watched this round (e.g. refresh): skip the replay
+      setPlayerCanInput(true);
+    } else {
+      setPlayerCanInput(false);
+      setReplayKey((prev) => prev + 1);
+    }
+  }, [player?.roundId, gameId]);
 
   // Show the slow-motion powerup popup whenever the player picks it up
   useEffect(() => {
@@ -543,11 +551,13 @@ export const GamePage = () => {
             roundId={round._id}
             sequence={round.sequence}
             replayKey={replayKey}
+            autoPlay={!(gameId && player?.roundId && localStorage.getItem(seqSeenKey(gameId, player.roundId)))}
             playerCanInput={playerCanInput}
             onSequenceComplete={() => {
               playTurnStartSound();
               setPlayerCanInput(true);
               setMessage('Your turn. Repeat the sequence.');
+              if (gameId && player?.roundId) localStorage.setItem(seqSeenKey(gameId, player.roundId), '1');
             }}
             onColourClick={handleColourClick}
             flashingSpeed={

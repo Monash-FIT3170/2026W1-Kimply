@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 const SHAPE_ICONS = {
   red: () => <rect x="18" y="18" width="28" height="28" rx="4" fill="none" stroke="white" strokeWidth="3" />,
@@ -35,14 +35,25 @@ export const ColourSequence = ({
   playerCanInput,
   onColourClick,
   flashingSpeed = 'medium',
+  autoPlay = true,
 }) => {
   const [activeColour, setActiveColour] = useState(null);
   const [clickedColour, setClickedColour] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isDone, setIsDone] = useState(false);
+  const hasRunRef = useRef(false);
 
   useEffect(() => {
     if (!sequence || sequence.length === 0) return;
+
+    const initialRun = !hasRunRef.current;
+    hasRunRef.current = true;
+    if (initialRun && !autoPlay) {
+      // already watched (refresh): skip replay, go straight to input
+      setIsPlaying(false);
+      setIsDone(true);
+      return;
+    }
 
     let i = 0;
     let cancelled = false;
