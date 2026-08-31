@@ -6,9 +6,15 @@ import { PlayerAccountsCollection } from './playerAccounts';
 import { GameEventsCollection } from './gameEvents';
 import { GlobalLeaderboardCollection } from './globalLeaderboard';
 import { RoomsCollection } from './rooms';
-
-const COLOURS = ['red', 'blue', 'green', 'yellow'];
-const GLOBAL_LEADERBOARD_SIZE = 50;
+import {
+  SEQUENCE_COLOURS as COLOURS,
+  GLOBAL_LEADERBOARD_SIZE,
+  DEFAULT_SEQUENCE_LENGTH,
+  DEFAULT_STARTING_LIVES,
+  INITIAL_LEVEL,
+  BONUS_LIFE_ROUND,
+  DISCONNECT_GRACE_MS,
+} from '../constants';
 
 // generate random colour sequence
 function generateSequence(length) {
@@ -230,7 +236,9 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
     // Generate a new round with a colour sequence
     async 'rounds.generate'(gameId = null) {
       const room = await RoomsCollection.findOneAsync({ pin: gameId });
-      const length = room?.customSettings?.startingSequenceLength ? room.customSettings.startingSequenceLength : 4;
+      const length = room?.customSettings?.startingSequenceLength
+        ? room.customSettings.startingSequenceLength
+        : DEFAULT_SEQUENCE_LENGTH;
 
       const sequence = generateSequence(length);
 
@@ -258,7 +266,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       }
 
       const room = await RoomsCollection.findOneAsync({ pin: gameId });
-      const startingLives = room?.customSettings?.startingLives ? room.customSettings.startingLives : 3;
+      const startingLives = room?.customSettings?.startingLives ? room.customSettings.startingLives : DEFAULT_STARTING_LIVES;
 
       return PlayersCollection.insertAsync({
         gameId,
@@ -272,7 +280,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         longestStreak: 0,
         totalGuesses: 0,
         correctGuesses: 0,
-        currentLevel: 4,
+        currentLevel: INITIAL_LEVEL,
         eliminatedRound: null,
         eliminated: false,
         winner: false,
@@ -302,7 +310,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         const totalGuesses = (player.totalGuesses ?? 0) + 1;
         const correctGuesses = (player.correctGuesses ?? 0) + 1;
 
-        const bonusLife = round.roundNumber === 7 ? 1 : 0;
+        const bonusLife = round.roundNumber === BONUS_LIFE_ROUND ? 1 : 0;
         const lives = (player.lives ?? 0) + bonusLife;
 
         // mark player as completed
@@ -545,7 +553,6 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
 
   // Remove a player who disconnects and does not reconnect within the grace
   // window, so a leaver does not stall the round for everyone else.
-  const DISCONNECT_GRACE_MS = 15000;
   Meteor.onConnection((connection) => {
     connection.onClose(() => {
       const closedId = connection.id;
