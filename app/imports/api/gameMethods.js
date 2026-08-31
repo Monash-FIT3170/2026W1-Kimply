@@ -108,7 +108,7 @@ async function checkWinner(gameId, isBattleRoyale = false) {
   }
 
   // Standard mode - last player standing wins.
-  if (hasMultiplePlayers && active.length === 1) {
+  if (active.length === 1) {
     const winner = active[0];
     await PlayersCollection.updateAsync(winner._id, {
       $set: {
