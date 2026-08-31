@@ -174,13 +174,19 @@ async function advanceRoundIfReady(round) {
   }).fetchAsync();
   const room = await RoomsCollection.findOneAsync({ pin: round.gameId });
   const lobbyPlayerIds = (room?.players || []).map((player) => player.id).filter(Boolean);
-  const expectedPlayerCount = lobbyPlayerIds.length;
 
-  const playersToEvaluate = lobbyPlayerIds.length
-    ? lobbyPlayerIds
+  // Eliminated players stay on their old round and never join later rounds, so
+  // they must not count towards the players this round waits for.
+  const eliminatedPlayers = await PlayersCollection.find({ gameId: round.gameId, eliminated: true }).fetchAsync();
+  const eliminatedLobbyIds = new Set(eliminatedPlayers.map((p) => p.lobbyPlayerId).filter(Boolean));
+  const activeLobbyIds = lobbyPlayerIds.filter((id) => !eliminatedLobbyIds.has(id));
+  const expectedPlayerCount = activeLobbyIds.length;
+
+  const playersToEvaluate = activeLobbyIds.length
+    ? activeLobbyIds
         .map((lobbyPlayerId) => playersInRound.find((player) => player.lobbyPlayerId === lobbyPlayerId))
         .filter(Boolean)
-    : playersInRound;
+    : playersInRound.filter((p) => !p.eliminated);
 
   if (playersToEvaluate.length < expectedPlayerCount) return false;
 
