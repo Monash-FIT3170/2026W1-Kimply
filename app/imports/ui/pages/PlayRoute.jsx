@@ -92,6 +92,7 @@ export function PlayRoute() {
   const hasName = trimmedName.length > 0;
 
   const [reconnectData, setReconnectData] = useState(null);
+  const [cannotReconnectMessage, setCannotReconnectMessage] = useState('');
 
   useEffect(() => {
     const raw = localStorage.getItem('reconnectData');
@@ -99,6 +100,11 @@ export function PlayRoute() {
       setReconnectData(JSON.parse(raw));
     }
   }, []);
+
+  const clearReconnectStorage = () =>{
+    localStorage.removeItem('reconnectData');
+    setReconnectData(null);
+  };
 
   const handleReconnect = () =>{
     const reconnectData = localStorage.getItem('reconnectData');
@@ -108,10 +114,12 @@ export function PlayRoute() {
 
     Meteor.call('rooms.reconnect', gameId, playerId, (err, result)=>{
       if (err){
-        localStorage.removeItem('reconnectData');
+        if (err.error === 'not-lobby'){
+          setCannotReconnectMessage('That game has already started, so you can\u2019t rejoin it.');
+        }
+        clearReconnectStorage()
         return;
       }
-
       navigate(`/play/${gameId}`, { state: { 
         playerName: result.playerName, 
         isHost: result.isHost, 
@@ -119,6 +127,8 @@ export function PlayRoute() {
       }});
     })
   }
+
+  
 
   const handleDismiss = () =>{
     //  Get recconnect data for game 
@@ -128,8 +138,7 @@ export function PlayRoute() {
     const playerId = reconnectData?.playerId;
 
     Meteor.call('rooms.disconnect', gamePin, playerId) 
-    localStorage.removeItem('reconnectData');
-    setReconnectData(null);
+    clearReconnectStorage();
   }
 
   const handleCreate = () => {
@@ -141,13 +150,6 @@ export function PlayRoute() {
       setLoading(false);
       if (err) { setError('Could not create room. Try again.'); return; }
 
-      //! For host reconnection
-      // const reconnectData = {
-      //   playerId : result.hostId,
-      //   gameId : result.gameId
-      // };
-
-      // localStorage.setItem('reconnectData', JSON.stringify(reconnectData));
       navigate(`/play/modes/${result.pin}`, {
         state: { playerName: trimmedName, isHost: true, playerId: result.hostId, playerAccount: signedInAccount },
       });
@@ -277,6 +279,28 @@ export function PlayRoute() {
         onReconnect={handleReconnect}
         onDismiss={handleDismiss}
       />
+
+      {cannotReconnectMessage && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center px-6"
+          style={{ background: 'rgba(0,0,0,0.6)' }}
+        >
+          <div
+            className="w-full max-w-sm rounded-[18px] border border-hairline bg-surface p-6 text-center"
+            style={{ background: 'oklch(0.20 0.02 270)' }}
+          >
+            <p className="mb-4 font-outfit text-lg font-bold text-fg">Can't rejoin</p>
+            <p className="mb-6 font-manrope text-[14px] text-fg2">{cannotReconnectMessage}</p>
+            <button
+              onClick={() => setCannotReconnectMessage('')}
+              className="w-full rounded-full px-5 py-3 font-outfit text-[13px] font-extrabold uppercase tracking-[0.16em]"
+              style={{ background: PRIMARY, color: BG }}
+            >
+              Okay
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
