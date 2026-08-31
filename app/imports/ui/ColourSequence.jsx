@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { FLASH_SPEEDS } from '../constants';
 
 const SHAPE_ICONS = {
   red: () => <rect x="18" y="18" width="28" height="28" rx="4" fill="none" stroke="white" strokeWidth="3" />,
@@ -20,12 +21,6 @@ const COLOURS = {
 };
 
 const TILE_ORDER = ['red', 'yellow', 'green', 'blue'];
-
-const FLASH_SPEEDS = {
-  slow:   { flash: 900, gap: 350 },
-  medium: { flash: 600, gap: 250 },
-  fast:   { flash: 350, gap: 150 },
-};
 
 export const ColourSequence = ({
   roundId,

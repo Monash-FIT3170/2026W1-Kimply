@@ -6,9 +6,15 @@ import { PlayerAccountsCollection } from './playerAccounts';
 import { GameEventsCollection } from './gameEvents';
 import { GlobalLeaderboardCollection } from './globalLeaderboard';
 import { RoomsCollection } from './rooms';
-
-const COLOURS = ['red', 'blue', 'green', 'yellow'];
-const GLOBAL_LEADERBOARD_SIZE = 50;
+import {
+  SEQUENCE_COLOURS as COLOURS,
+  GLOBAL_LEADERBOARD_SIZE,
+  DEFAULT_SEQUENCE_LENGTH,
+  DEFAULT_STARTING_LIVES,
+  INITIAL_LEVEL,
+  BONUS_LIFE_ROUND,
+  DISCONNECT_GRACE_MS,
+} from '../constants';
 
 // generate random colour sequence
 function generateSequence(length) {
@@ -230,7 +236,9 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
     // Generate a new round with a colour sequence
     async 'rounds.generate'(gameId = null) {
       const room = await RoomsCollection.findOneAsync({ pin: gameId });
-      const length = room?.customSettings?.startingSequenceLength ? room.customSettings.startingSequenceLength : 4;
+      const length = room?.customSettings?.startingSequenceLength
+        ? room.customSettings.startingSequenceLength
+        : DEFAULT_SEQUENCE_LENGTH;
 
       const sequence = generateSequence(length);
 
@@ -252,13 +260,13 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       if (lobbyPlayerId) {
         const existing = await PlayersCollection.findOneAsync({ gameId, lobbyPlayerId });
         if (existing) {
-          await PlayersCollection.updateAsync(existing._id, { $set: { connectionId } });
+          await PlayersCollection.updateAsync(existing._id, { $set: { connectionId, connected: true } });
           return existing._id;
         }
       }
 
       const room = await RoomsCollection.findOneAsync({ pin: gameId });
-      const startingLives = room?.customSettings?.startingLives ? room.customSettings.startingLives : 3;
+      const startingLives = room?.customSettings?.startingLives ? room.customSettings.startingLives : DEFAULT_STARTING_LIVES;
 
       return PlayersCollection.insertAsync({
         gameId,
@@ -272,7 +280,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         longestStreak: 0,
         totalGuesses: 0,
         correctGuesses: 0,
-        currentLevel: 4,
+        currentLevel: INITIAL_LEVEL,
         eliminatedRound: null,
         eliminated: false,
         winner: false,
@@ -282,6 +290,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         slowMotionActive: false,
         eliminatedAt: null,
         connectionId,
+        connected: true,
       });
     },
 
@@ -302,7 +311,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         const totalGuesses = (player.totalGuesses ?? 0) + 1;
         const correctGuesses = (player.correctGuesses ?? 0) + 1;
 
-        const bonusLife = round.roundNumber === 7 ? 1 : 0;
+        const bonusLife = round.roundNumber === BONUS_LIFE_ROUND ? 1 : 0;
         const lives = (player.lives ?? 0) + bonusLife;
 
         // mark player as completed
@@ -342,6 +351,16 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
               completeRound: false,
               attemptedSequence: [],
             },
+          });
+
+          // announce the level-up so it shows in the live levels feed
+          await GameEventsCollection.insertAsync({
+            gameId: player.gameId,
+            type: 'level-up',
+            playerId: player._id,
+            playerName: player.name,
+            level: nextLevel - 3,
+            createdAt: new Date(),
           });
 
           return { success: true, sequenceComplete: true };
@@ -545,13 +564,25 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
 
   // Remove a player who disconnects and does not reconnect within the grace
   // window, so a leaver does not stall the round for everyone else.
-  const DISCONNECT_GRACE_MS = 15000;
   Meteor.onConnection((connection) => {
     connection.onClose(() => {
       const closedId = connection.id;
+
+      // Flag as disconnected right away. In the lobby the player is kept and
+      // pruned at rooms.start; in game they are grace-removed below unless they
+      // reconnect (which flips connected back to true).
+      (async () => {
+        await RoomsCollection.updateAsync(
+          { status: 'lobby', 'players.connectionId': closedId },
+          { $set: { 'players.$.connected': false } }
+        );
+        await PlayersCollection.updateAsync({ connectionId: closedId }, { $set: { connected: false } });
+      })();
+
       Meteor.setTimeout(async () => {
         const gone = await PlayersCollection.find({
           connectionId: closedId,
+          connected: false,
           eliminated: false,
           gameFinished: false,
         }).fetchAsync();

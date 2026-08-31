@@ -56,7 +56,7 @@ export function TileLattice({ opacity = 0.07 }) {
         gridTemplateColumns: `repeat(${cells}, 1fr)`,
         gridTemplateRows: `repeat(${cells}, 1fr)`,
         gap: '2.5%',
-        transform: 'rotate(-8deg) scale(1.2)',
+        transform: 'rotate(-8deg) scale(1)',
         filter: 'blur(0.3px)',
       }}
     >
