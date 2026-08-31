@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Meteor } from 'meteor/meteor';
 import { useTracker } from 'meteor/react-meteor-data';
 import { RoundsCollection } from '../../api/rounds';
@@ -11,6 +11,8 @@ import { EndLeaderboard } from '../EndLeaderboard.jsx';
 import { EliminationFeed } from '../EliminationFeed.jsx';
 import { useLocation } from 'react-router-dom';
 import { TileLattice } from '../components/design';
+
+const seqSeenKey = (gameId, roundId) => `seqSeen:${gameId}:${roundId}`;
 
 export const GamePage = () => {
   const [playerId, setPlayerId] = useState(null);
@@ -130,34 +132,41 @@ export const GamePage = () => {
   }, [round?._id, playerId, gameId, playerNameFromLobby, lobbyPlayerId, isBattleRoyale, accountId]);
 
   useEffect(() => {
-    setPlayerCanInput(false);
+    if (!player?.roundId) return;
     setAttemptedSequence([]);
     setMessage('');
     setSecondsLeft(30);
     setCompletedRoundId(null);
-    setReplayKey((prev) => prev + 1); // play sequence flash for new round
-  }, [player?.roundId]); // watch sequence of player's specific roundId
+    if (gameId && localStorage.getItem(seqSeenKey(gameId, player.roundId))) {
+      // already watched this round (e.g. refresh): skip the replay
+      setPlayerCanInput(true);
+    } else {
+      setPlayerCanInput(false);
+      setReplayKey((prev) => prev + 1);
+    }
+  }, [player?.roundId, gameId]);
 
   // Show the slow-motion powerup popup whenever the player picks it up
   useEffect(() => {
     setShowPowerupPopup(!!player?.slowMotionActive);
   }, [player?.slowMotionActive]);
 
+  const seenLevelUpIds = useRef(new Set());
   useEffect(() => {
-    if (levelUpEvents.length === 0) return;
-
-    const newest = [...levelUpEvents]
-      .reverse()
-      .slice(0, 4)
-      .map((event) => ({
+    levelUpEvents.forEach((event) => {
+      if (seenLevelUpIds.current.has(event._id)) return;
+      seenLevelUpIds.current.add(event._id);
+      const notice = {
         key: event._id,
         text:
           event.playerId === playerId
             ? `You have leveled up to level ${event.level}`
             : `${event.playerName} has reached level ${event.level}`,
-      }));
-
-    setLevelUpNotices(newest);
+      };
+      setLevelUpNotices((prev) => [...prev, notice]);
+      // auto-dismiss like the elimination feed
+      setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), 4000);
+    });
   }, [levelUpEvents]);
 
   const handleColourClick = (colour) => {
@@ -543,11 +552,13 @@ export const GamePage = () => {
             roundId={round._id}
             sequence={round.sequence}
             replayKey={replayKey}
+            autoPlay={!(gameId && player?.roundId && localStorage.getItem(seqSeenKey(gameId, player.roundId)))}
             playerCanInput={playerCanInput}
             onSequenceComplete={() => {
               playTurnStartSound();
               setPlayerCanInput(true);
               setMessage('Your turn. Repeat the sequence.');
+              if (gameId && player?.roundId) localStorage.setItem(seqSeenKey(gameId, player.roundId), '1');
             }}
             onColourClick={handleColourClick}
             flashingSpeed={
