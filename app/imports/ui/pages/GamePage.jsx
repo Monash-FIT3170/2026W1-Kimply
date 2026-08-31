@@ -407,6 +407,8 @@ export const GamePage = () => {
         position: 'relative',
         overflowX: 'hidden',
         overflowY: 'auto',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
         background: 'linear-gradient(135deg, #1a0533 0%, #0d1b4b 100%)',
         display: 'flex',
         flexDirection: 'column',
