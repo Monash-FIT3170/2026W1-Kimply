@@ -150,7 +150,11 @@ export const GamePage = () => {
           setShake(true);
           setTimeout(() => setShake(false), 400);
           setAttemptedSequence([]);
-          setPlayerCanInput(true);
+          // Keep input locked while the sequence replays, otherwise the tiles stay
+          // clickable and the player can copy the answer as it lights up. The replay
+          // (triggered by the replayKey bump) re-enables input via onSequenceComplete
+          // once it finishes, exactly like a fresh round does.
+          setPlayerCanInput(false);
           setReplayKey((prev) => prev + 1);
         }
       }

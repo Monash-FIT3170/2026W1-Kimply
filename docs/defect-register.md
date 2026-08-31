@@ -249,6 +249,22 @@ The cost of leaving it is that every branch inherits the dirt, so no diff can be
 
 ---
 
+## D16 - Tiles clickable during the post-mistake sequence replay - **fixed 2026-08-31**
+
+On a wrong guess with lives left, `GamePage.handleSubmit` re-enabled input and restarted the sequence replay together:
+
+```js
+setAttemptedSequence([]);
+setPlayerCanInput(true);
+setReplayKey((prev) => prev + 1);
+```
+
+`replayKey` restarts `ColourSequence` playback, but `playerCanInput` was already `true`, so the tiles accepted clicks throughout the replay - a player could click each tile as it lit up and copy the answer. A fresh round instead starts with input disabled and only re-enables it from `onSequenceComplete`.
+
+**Fix (applied):** set `playerCanInput` to `false` on the retry path; the replay re-enables input via `onSequenceComplete` when it finishes. `app/imports/ui/pages/GamePage.jsx`.
+
+---
+
 ## Structural issues that are not bugs but shape future work
 
 **Duplicated sequence generator.** `generateSequence` exists identically in `imports/api/sequence.js:9` and `imports/api/gameMethods.js:9`.
