@@ -278,7 +278,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
               totalGuesses,
               eliminated,
               currentLevel: round.level ?? round.lengthOfSequence,
-              eliminatedRound: eliminated ? round.lengthOfSequence - 3 : player.eliminatedRound,
+              eliminatedRound: eliminated ? (round.roundNumber ?? round.lengthOfSequence - 3) : player.eliminatedRound,
             },
           });
 
