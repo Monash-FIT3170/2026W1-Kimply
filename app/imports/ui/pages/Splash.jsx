@@ -3,8 +3,8 @@ import { BG, PRIMARY, TILE, TileLattice } from '../components/design';
 
 function BigLogo() {
   return (
-    <div className="flex flex-col items-center gap-3">
-      <div className="grid" style={{ gridTemplateColumns: '28px 28px', gridTemplateRows: '28px 28px', gap: 5 }}>
+    <div className="flex flex-col items-center gap-3 sm:gap-4">
+      <div className="grid" style={{ gridTemplateColumns: 'clamp(22px, 3.5vw, 28px) clamp(22px, 3.5vw, 28px)', gridTemplateRows: 'clamp(22px, 3.5vw, 28px) clamp(22px, 3.5vw, 28px)', gap: 5 }}>
         <div
           className="rounded-lg"
           style={{
@@ -36,7 +36,7 @@ function BigLogo() {
       </div>
       <div
         className="font-outfit font-extrabold leading-none text-fg"
-        style={{ fontSize: 96, letterSpacing: '-0.04em' }}
+        style={{ fontSize: 'clamp(3.5rem, 10vw, 6rem)', letterSpacing: '-0.04em' }}
       >
         KIMPLY
       </div>
@@ -50,7 +50,7 @@ export function Splash() {
   return (
     <div
       onClick={() => navigate('/play')}
-      className="relative flex h-full w-full cursor-pointer flex-col overflow-hidden bg-bg text-fg"
+      className="relative flex min-h-full w-full cursor-pointer flex-col overflow-hidden bg-bg text-fg"
     >
       <TileLattice opacity={0.09} />
       <div
@@ -59,27 +59,27 @@ export function Splash() {
       />
 
       {/* top bar */}
-      <div className="relative flex shrink-0 justify-between px-7 py-5">
-        <span className="font-outfit text-2xl font-extrabold tracking-tight text-fg">KIMPLY</span>
+      <div className="relative flex shrink-0 justify-between px-6 py-4 sm:px-7 sm:py-5">
+        <span className="font-outfit text-xl font-extrabold tracking-tight text-fg sm:text-2xl">KIMPLY</span>
       </div>
 
       {/* hero */}
-      <div className="relative flex flex-1 flex-col items-center justify-center px-6 text-center">
-        <div className="mb-4">
+      <div className="relative flex flex-1 flex-col items-center justify-center px-6 py-4 text-center">
+        <div className="mb-4 sm:mb-6">
           <BigLogo />
         </div>
-        <p className="mb-3 font-outfit text-lg font-semibold uppercase tracking-[0.12em] text-fg2">
+        <p className="mb-3 font-outfit text-sm font-semibold uppercase tracking-[0.12em] text-fg2 sm:text-lg">
           Multiplayer · Memory · Challenge
         </p>
-        <p className="max-w-md font-manrope text-[17px] leading-snug text-fg3">
+        <p className="max-w-md font-manrope text-sm leading-snug text-fg3 sm:text-[17px]">
           Test your memory. Compete with friends.
         </p>
       </div>
 
       {/* CTA pill */}
-      <div className="relative flex justify-center pb-14">
+      <div className="relative flex justify-center px-6 pb-8 sm:pb-14">
         <div
-          className="inline-flex items-center gap-3 rounded-full px-6 py-3.5 font-outfit text-[13px] font-bold uppercase tracking-[0.18em]"
+          className="inline-flex max-w-full items-center gap-3 rounded-full px-5 py-3 text-center font-outfit text-[11px] font-bold uppercase tracking-[0.18em] sm:px-6 sm:py-3.5 sm:text-[13px]"
           style={{
             background: `color-mix(in oklab, ${PRIMARY} 14%, transparent)`,
             border: `1px solid color-mix(in oklab, ${PRIMARY} 50%, transparent)`,

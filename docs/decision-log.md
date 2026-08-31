@@ -20,6 +20,23 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-08-31 - Lives display now shows the full starting-lives track (D17)
+
+The game page sized its hearts off `Math.max(player.lives, 3)` and computed `totalLives` only for `gameMode === 'custom'`, so preset modes (easy = 5 lives, etc.) fell back to 3 and a lost life removed a heart instead of greying it out.
+`customSettings.startingLives` is populated for every preset, so `totalLives` now reads it regardless of mode and the display renders a fixed `totalLives` track, greying circles above the current life count. `players.join` already stores the correct starting lives, so this was display-only.
+Files: `app/imports/ui/pages/GamePage.jsx`, `docs/defect-register.md` (D17).
+## 2026-08-31 - Locked tile input during the post-mistake sequence replay (D16)
+
+After a wrong guess with lives remaining, `GamePage.handleSubmit` set `playerCanInput` to `true` and bumped `replayKey` in the same breath, so the colour tiles stayed clickable while the sequence replayed and a player could copy the answer as each tile lit up.
+Set `playerCanInput` to `false` on the retry path and let `onSequenceComplete` re-enable it after the replay, matching the fresh-round flow. Non-obvious: the retry replay reuses the same `roundId`, so re-enabling has to be driven by the replay finishing, not by a round change.
+Files: `app/imports/ui/pages/GamePage.jsx`, `docs/defect-register.md` (D16).
+## 2026-08-31 - Fixed the room-code input dropping keystrokes (D15)
+
+`JoinRoom.handleInput` passed a functional updater to `setCode` that read `e.target.value`, then cleared that same value synchronously with `clearCapturedInput(e)` further down the handler.
+React only evaluates a functional updater eagerly when the fiber has no pending work; otherwise it defers the updater until render, by which point the clear has already blanked `e.target.value`, so `appendRoomCodeInput` received `''` and the keystroke was lost. That is why players had to type each code letter twice.
+The fix reads the typed value into a local before clearing and references that local inside the updater, so the update no longer depends on the mutated DOM node. The non-obvious part: reordering `clearCapturedInput` above `setCode` is not cosmetic — it removes a read-after-mutate race, not just a style preference.
+Files: `app/imports/ui/pages/JoinRoom.jsx`, `docs/defect-register.md` (D15).
+
 ## 2026-08-29 - Skills are workflows, not product rules
 
 Every skill under `.agents/skills/` was rewritten to drop game-specific rules (defect IDs, publication invariants, route tables, "do not add a login wall", lives / sequences / `'demo'` gameId).

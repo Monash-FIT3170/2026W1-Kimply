@@ -1,0 +1,23 @@
+FROM node:20
+
+RUN apt-get update && apt-get install -y \
+    curl git python3 build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl https://install.meteor.com/ | sh
+ENV PATH="/root/.meteor:$PATH"
+ENV METEOR_ALLOW_SUPERUSER=1
+
+WORKDIR /kimply/app
+
+COPY app/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Baked-in copy instead of a bind mount: two concurrent Meteor CLI processes
+# (backend's live dev server + a test run) sharing the same source/build
+# directory corrupted backend's served CSS bundle.
+COPY app/ ./
+RUN meteor npm install
+
+EXPOSE 3000
+ENTRYPOINT ["/entrypoint.sh"]
