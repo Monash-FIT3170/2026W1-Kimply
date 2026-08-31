@@ -18,8 +18,10 @@ async function checkWinner(gameId) {
 
   const active = players.filter((p) => !p.eliminated);
 
+  // Standard mode - last player standing wins.
   if (active.length === 1) {
-    await PlayersCollection.updateAsync(active[0]._id, {
+    const winner = active[0];
+    await PlayersCollection.updateAsync(winner._id, {
       $set: {
         winner: true,
       },
