@@ -129,7 +129,7 @@ function SharePanel({ link }) {
   );
 }
 
-function HostView({ room, playerName, playerId, onBack, navigate, gameMode, customSettings }) {
+function HostView({ room, playerName, playerId, playerAccount, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
   const joinLink = `${window.location.origin}/play/join?code=${room.pin}`;
   const [editing, setEditing] = useState(true);
@@ -143,7 +143,7 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
         console.error(err);
         return;
       }
-      navigate('/game', { state: { playerName, playerId, pin: room.pin, gameMode } });
+      navigate('/game', { state: { playerName, playerId, pin: room.pin, gameMode, playerAccount } });
     });
   };
 
@@ -291,7 +291,7 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
   );
 }
 
-function JoinedView({ room, playerName, playerId, onBack, navigate, gameMode, customSettings }) {
+function JoinedView({ room, playerName, playerId, playerAccount, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
   const emptySlots = Math.max(0, MAX_PLAYERS - players.length);
 
@@ -314,7 +314,9 @@ function JoinedView({ room, playerName, playerId, onBack, navigate, gameMode, cu
 
   useEffect(() => {
     if (room?.status === 'in_progress') {
-      navigate('/game', { state: { playerName, playerId, pin: room.pin, gameMode: room.gameMode || 'standard' } });
+      navigate('/game', {
+        state: { playerName, playerId, pin: room.pin, gameMode: room.gameMode || 'standard', playerAccount },
+      });
     }
   }, [room?.status]);
 
@@ -410,6 +412,7 @@ export function PlayerLobby() {
   const playerName = state?.playerName || '';
   const playerId = state?.playerId || '';
   const isHost = state?.isHost === true;
+  const playerAccount = state?.playerAccount;
   const gameMode = state?.gameMode || 'standard';
   const customSettings = state?.customSettings || null;
   const gameStarted = useRef(false);
@@ -420,15 +423,12 @@ export function PlayerLobby() {
   useEffect(() => {
     if (room?.status === 'in_progress' && !gameStarted.current) {
       gameStarted.current = true;
-      navigate('/game', { state: { playerName, playerId, pin: room.pin, gameMode: room.gameMode || 'standard' } });
+      navigate('/game', {
+        state: { playerName, playerId, pin: room.pin, gameMode: room.gameMode || 'standard', playerAccount },
+      });
     }
   }, [room?.status]);
 
-  // Must stay below every hook call. There was previously a second useEffect
-  // after this early return, which meant React saw a different number of hooks
-  // on the redirect path and threw "Rendered fewer hooks than expected".
-  // That effect was also dead code: `!isLoading` negates a function, never a
-  // boolean, so its body could never run.
   if (!isLoading() && !room && !gameStarted.current) {
     navigate('/play', { replace: true });
     return null;
@@ -452,9 +452,9 @@ export function PlayerLobby() {
           setShowExitPopup(false);
           Meteor.call('rooms.disconnect', pin, playerId);
 
-          // removing session storage of reconnect data
           localStorage.removeItem('reconnectData');
-          navigate('/play', { replace: true });
+          navigate('/play', { replace: true, state: { playerAccount } });
+
         }}
         onCancel={() => {
           setShowExitPopup(false);
@@ -472,6 +472,7 @@ export function PlayerLobby() {
           room={room}
           playerName={playerName}
           playerId={playerId}
+          playerAccount={playerAccount}
           onBack={onBack}
           navigate={navigate}
           gameMode={gameMode}
@@ -482,6 +483,7 @@ export function PlayerLobby() {
           room={room}
           playerName={playerName}
           playerId={playerId}
+          playerAccount={playerAccount}
           onBack={onBack}
           navigate={navigate}
           gameMode={gameMode}
