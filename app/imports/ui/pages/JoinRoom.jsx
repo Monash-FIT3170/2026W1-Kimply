@@ -17,6 +17,7 @@ export function JoinRoom() {
   const navigate = useNavigate();
   const { state } = useLocation();
   const [playerName, setPlayerName] = useState(state?.playerName || '');
+  const playerAccount = state?.playerAccount;
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -41,7 +42,7 @@ export function JoinRoom() {
     if (code.length !== SLOTS || loading) return;
     setLoading(true);
     setError('');
-    Meteor.call('rooms.join', code, playerName, (err, res) => {
+    Meteor.call('rooms.join', code, playerName, playerAccount?._id, (err, res) => {
       setLoading(false);
       if (err) {
         const msg =
@@ -58,9 +59,9 @@ export function JoinRoom() {
         playerId : res.playerId,
         gameId : res.roomId
       }
-      
+
       localStorage.setItem('reconnectData', JSON.stringify(reconnectData));
-      navigate(`/play/${code}`, { state: { playerName, isHost: false, playerId: res.playerId } });
+      navigate(`/play/${code}`, { state: { playerName, isHost: false, playerId: res.playerId, playerAccount } });
     });
   };
 
