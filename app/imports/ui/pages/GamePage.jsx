@@ -63,7 +63,8 @@ export const GamePage = () => {
   room?.gameMode === 'custom'
     ? (room.customSettings?.startingLives ?? 3)
     : isBattleRoyale
-      ? 1  // // In battle royale mode, players start with 1 life
+      ? 1  // Battle Royale gives each player only 1 life.
+// Other game modes keep their existing life settings.
       : 3;
         useEffect(() => {
     if (!round?._id || playerId) return;
@@ -304,9 +305,32 @@ export const GamePage = () => {
       </div>
       <div className="relative flex flex-1 flex-col items-center justify-start md:justify-center">
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+       {/* Battle Royale mode indicator */}
+{isBattleRoyale && (
+  <div
+    style={{
+      marginBottom: '1vh',
+      padding: '0.8vh 1.5vw',
+      borderRadius: '8px',
+      backgroundColor: '#222',
+      border: '1px solid #ffd369',
+      color: '#ffd369',
+      fontWeight: 'bold',
+      fontSize: '1.2vw',
+      textAlign: 'center',
+      width: 'fit-content',
+    }}
+  >
+    BATTLE ROYALE • 1 LIFE ONLY
+  </div>
+)}
         {/* Lives display */}
         <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2vh' }}>
-            <div
+          {/* Display the player's lives based on the current game mode.
+    Battle Royale displays only 1 life. */}
+      {Array.from({ length: totalLives }, (_, i) => i + 1).map((heart) => (
+      
+              <div
               key={heart}
               style={{
                 width: '4vw',
@@ -325,6 +349,27 @@ export const GamePage = () => {
             </div>
           ))}
         </div>
+                {/* Show a warning when a Battle Royale player is on their final life */}
+        {isBattleRoyale && player?.lives === 1 && (
+          <div
+            style={{
+              marginTop: '1vh',
+              marginBottom: '2vh',
+              padding: '1vh 1.5vw',
+              borderRadius: '8px',
+              backgroundColor: '#3a1f1f',
+              border: '1px solid #e03030',
+              color: '#ff6b6b',
+              fontWeight: 'bold',
+              fontSize: '1.2vw',
+              textAlign: 'center',
+              width: 'fit-content',
+            }}
+          >
+            FINAL LIFE
+          </div>
+        )}
+
         <div style={{ textAlign: 'center' }}>
           <p
             style={{
