@@ -20,6 +20,21 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-09-01 - The game screen now scales to the viewport instead of overflowing it (D19)
+
+The play column was sized in fixed pixels and `vw`, so it stayed about 740px tall on every screen while the container was pinned to `100dvh` with `overflow: hidden`. Starting the turn added two rows (the message and the `Time left` line, which only existed while input was open), pushed the button row past the fold, and the buttons were clipped with no way to scroll to them. On a full-height 1512x828 laptop there were 7px to spare before the turn started, which is why it read as a mobile bug.
+
+Hearts, the tile grid, the button row and the header padding now scale with `dvh`, the column's rhythm moved from `vh` to `dvh` so it matches the container's own `100dvh`, and the timer row is always rendered so the buttons do not move when the sequence ends.
+
+Two things that are not obvious from the diff:
+
+- **The scroll fallback had to move off the container.** Putting `overflow-y: auto` on the container looked right and was wrong: `TileLattice` is deliberately larger than the screen (1100px tall, offset above the fold), so the container became scrollable by 188px of pure decoration - D18's empty-strip symptom arriving by another route. The container keeps `overflow: hidden` and the fallback sits on the play column, which contains only real content.
+- **`dvh` is what makes this hold on mobile.** The column's margins were `vh`, which on mobile resolves to the largest viewport (toolbar hidden) while the container is `100dvh` (toolbar shown). The column was therefore budgeting against a taller box than it actually had.
+
+Files: `app/imports/ui/pages/GamePage.jsx`, `app/imports/ui/ColourSequence.jsx`, `docs/defect-register.md` (D19), `AGENTS.md`.
+
+Verified end to end in Chrome at 13 viewports from 320x568 to 1920x1080, and in a real 420x583 window: the button row is fully visible in both the watching and the input phase, at the same position in each, and nothing scrolls.
+
 ## 2026-08-31 - Game page uses 100dvh so it stops scrolling into empty space (D18)
 
 The gameplay container used `minHeight: 100vh`. On mobile `100vh` is the largest viewport (address bar hidden), so the container was taller than the visible screen and left an empty strip to scroll into. Switched it to `100dvh`, which tracks the visible area as browser chrome shows/hides. `overflowY: 'auto'` stays, so genuine overflow on short screens still scrolls.
