@@ -249,6 +249,32 @@ The cost of leaving it is that every branch inherits the dirt, so no diff can be
 
 ---
 
+## D19 - The play column is taller than the screen, so CLEAR and SUBMIT vanish when the turn starts - **fixed 2026-09-01**
+
+The game screen was sized almost entirely in fixed pixels and `vw`: hearts `clamp(60px, 8vw, 80px)`, the tile grid `min(360px, 90vw)`, the button row `clamp(40px, 3vw, 200px)`.
+None of that reacts to how much vertical room there actually is, so the column came out around 740px tall no matter the screen, inside a container fixed at `height: 100dvh` with `overflow: hidden`.
+
+It only tipped over **after the sequence finished playing**, because starting the turn added two more lines to the column - the "Your turn. Repeat the sequence." message and the `Time left: Ns` row, which was rendered only while `playerCanInput` was true.
+The button row is last, so the buttons were what got clipped, and with `overflow: hidden` there was nothing to scroll to reach them.
+
+Measured on a 1512x828 laptop viewport (Medium mode, 3 lives), before the fix:
+
+| Phase | SUBMIT bottom | Viewport |
+|---|---|---|
+| Watching the sequence | 801px | 828px |
+| Your turn | 821px | 828px |
+
+Seven pixels of headroom on a full-height laptop, so any shorter viewport - a phone, or a laptop with a bookmarks bar - lost the buttons outright.
+
+**Fix (applied):** size the column against the viewport height instead of a pixel floor, and stop the layout moving when the turn starts.
+
+- The tile grid, the largest block on the screen, is `min(360px, 90vw, 38dvh)`. It answers to height as well as width, and still caps at its original 360px once there is room.
+- Hearts (`clamp(26px, 6dvh, 76px)`), the button row (`clamp(34px, 5.5dvh, 60px)`) and the header padding (`clamp(6px, 1.5dvh, 20px)`) scale the same way. The column's vertical rhythm moved from `vh` to `dvh`, so it is measured against the same box as the container's `100dvh`.
+- The timer row is always rendered when the mode has a timer, and carries its text only once input opens, so the button row no longer moves when the sequence ends. Its font was `1vw`, about 4px on a phone; it is now `clamp(12px, 1.2vw, 20px)`.
+- `overflow: hidden` stays on the container, because `TileLattice` is deliberately larger than the screen and would otherwise make the page scrollable by its overflow alone (which is D18's symptom returning by another route). The scroll fallback moved onto the play column itself, which holds only real content.
+
+Verified across 13 viewports from 320x568 to 1920x1080: the button row is fully visible at every one, in both phases, with nothing needing to scroll. `app/imports/ui/pages/GamePage.jsx`, `app/imports/ui/ColourSequence.jsx`.
+
 ## D18 - Game page scrolls into empty space below the play area - **fixed 2026-08-31**
 
 The gameplay container in `GamePage` used `minHeight: '100vh'` with `overflowY: 'auto'`. On mobile browsers `100vh` resolves to the largest viewport height (as if the toolbar were hidden), so the container was taller than the visible area and left a strip of empty space the user could scroll into.
