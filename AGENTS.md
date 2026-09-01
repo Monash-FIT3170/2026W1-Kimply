@@ -443,7 +443,7 @@ One line each, so a review can cite an ID without opening anything.
 | D12 | `ColourSequence.jsx:80-92` | A new `AudioContext` per tile click, never closed |
 | D14 | repo-wide | `npm run format:check` fails on `main`. Needs one dedicated formatting commit before it can gate CI |
 
-Fixed and kept for history in the register: D1, D2, D9, D10.
+Fixed and kept for history in the register: D1, D2, D9, D10, D15, D16, D17, D18, D19.
 
 ### Not a defect, so nobody chases it again
 

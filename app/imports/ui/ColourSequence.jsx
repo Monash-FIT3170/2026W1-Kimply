@@ -119,16 +119,17 @@ export const ColourSequence = ({
     onColourClick(colourId);
   };
   return (
-    <div>
+    <div style={{ '--tile-grid': 'min(360px, 90vw, 38dvh)' }}>
       <p
         style={{
           color: 'white',
           textAlign: 'center',
-          marginBottom: '16px',
+          marginBottom: 'clamp(8px, 1.6dvh, 16px)',
           fontWeight: 'bold',
           letterSpacing: '2px',
-          minHeight: '24px',
-          fontSize: '0.9rem',
+          minHeight: '1.6em',
+          lineHeight: 1.6,
+          fontSize: 'clamp(0.78rem, 2.6vw, 0.9rem)',
         }}
       >
         {isPlaying && 'WATCH THE SEQUENCE'}
@@ -140,7 +141,7 @@ export const ColourSequence = ({
           display: 'grid',
           gridTemplateColumns: '1fr 1fr',
           gap: '6px',
-          width: 'min(360px, 90vw)',
+          width: 'var(--tile-grid)',
           margin: '0 auto',
         }}
       >
@@ -156,8 +157,8 @@ export const ColourSequence = ({
               disabled={!playerCanInput}
               onClick={() => handleTileClick(colourId)}
               style={{
-                width: 'calc(min(360px, 90vw) / 2 - 3px)',
-                height: 'calc(min(360px, 90vw) / 2 - 3px)',
+                width: 'calc(var(--tile-grid) / 2 - 3px)',
+                height: 'calc(var(--tile-grid) / 2 - 3px)',
                 backgroundColor: bg,
                 display: 'flex',
                 alignItems: 'center',
@@ -173,7 +174,7 @@ export const ColourSequence = ({
                 transform: isActive ? 'scale(0.95)' : 'scale(1)',
               }}
             >
-              <svg width="64" height="64" viewBox="0 0 64 64">
+              <svg width="36%" height="36%" viewBox="0 0 64 64">
                 <ShapeIcon />
               </svg>
             </button>

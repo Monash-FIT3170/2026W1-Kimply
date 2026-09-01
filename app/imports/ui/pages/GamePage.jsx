@@ -482,7 +482,10 @@ export const GamePage = () => {
           </div>
         ))}
       </div>
-      <div className="relative flex shrink-0 justify-between px-7 py-5" style={{ width: '100%' }}>
+      <div
+        className="relative flex shrink-0 justify-between"
+        style={{ width: '100%', padding: 'clamp(6px, 1.5dvh, 20px) clamp(16px, 2vw, 28px)' }}
+      >
         <span
           style={{
             fontSize: 'clamp(20px, 2vw, 40px)',
@@ -495,20 +498,20 @@ export const GamePage = () => {
           KIMPLY
         </span>
       </div>
-      <div className="relative flex flex-1 flex-col items-center justify-start md:justify-center">
-        <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2vh' }}>
+      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-start overflow-y-auto md:justify-center">
+        <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2dvh' }}>
           {Array.from({ length: totalLives }, (_, i) => i + 1).map((heart) => (
             <div
               key={heart}
               style={{
-                width: 'clamp(60px, 8vw, 80px)',
-                height: 'clamp(60px, 8vw, 80px)',
+                width: 'clamp(26px, 6dvh, 76px)',
+                height: 'clamp(26px, 6dvh, 76px)',
                 backgroundColor: heart <= (player?.lives ?? totalLives) ? '#e03030' : '#333',
                 borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: 'clamp(30px, 4vw, 32px)',
+                fontSize: 'clamp(14px, 3.2dvh, 32px)',
                 boxShadow: heart <= (player?.lives ?? totalLives) ? '0 0 10px #e0303088' : 'none',
                 transition: 'all 0.3s ease',
               }}
@@ -521,7 +524,7 @@ export const GamePage = () => {
           <p
             style={{
               color: 'white',
-              marginBottom: '1vh',
+              marginBottom: '1dvh',
               fontWeight: 'bold',
               letterSpacing: '2px',
               fontSize: 'clamp(16px, 1.2vw, 22px)',
@@ -534,7 +537,7 @@ export const GamePage = () => {
               display: 'flex',
               justifyContent: 'center',
               gap: '0.5vw',
-              marginBottom: '2vh',
+              marginBottom: '2dvh',
             }}
           >
             {(round.sequence || []).map((_, i) => (
@@ -573,8 +576,9 @@ export const GamePage = () => {
           <p
             style={{
               color: 'white',
-              marginTop: '1.5vh',
-              minHeight: '2vh',
+              marginTop: '1.5dvh',
+              minHeight: '1.25em',
+              lineHeight: 1.25,
               fontSize: 'clamp(12px, 1.2vw, 24px)',
             }}
           >
@@ -583,25 +587,27 @@ export const GamePage = () => {
           <p
             style={{
               color: '#ffd369',
-              marginTop: '0.8vh',
-              minHeight: '2vh',
+              marginTop: '0.8dvh',
+              minHeight: '1.25em',
+              lineHeight: 1.25,
               fontSize: 'clamp(12px, 1.2vw, 20px)',
             }}
           >
             {message}
           </p>
-          {!isBattleRoyale && playerCanInput && (
+          {!isBattleRoyale && (
             <p
               style={{
                 color: secondsLeft <= 5 ? '#ff7a7a' : '#9ce8ff',
-                marginTop: '0.8vh',
-                minHeight: '2vh',
-                fontSize: '1vw',
+                marginTop: '0.8dvh',
+                minHeight: '1.25em',
+                lineHeight: 1.25,
+                fontSize: 'clamp(12px, 1.2vw, 20px)',
                 fontWeight: 'bold',
                 letterSpacing: '1px',
               }}
             >
-              Time left: {secondsLeft}s
+              {playerCanInput ? `Time left: ${secondsLeft}s` : ''}
             </p>
           )}
           <div
@@ -609,7 +615,7 @@ export const GamePage = () => {
               display: 'flex',
               justifyContent: 'center',
               gap: '1vw',
-              marginTop: '2vh',
+              marginTop: '2dvh',
             }}
           >
             <button
@@ -617,7 +623,7 @@ export const GamePage = () => {
               disabled={!playerCanInput || attemptedSequence.length === 0}
               style={{
                 width: 'clamp(100px, 8vw, 300px)',
-                height: 'clamp(40px, 3vw, 200px)',
+                height: 'clamp(34px, 5.5dvh, 60px)',
                 backgroundColor: playerCanInput && attemptedSequence.length > 0 ? '#444' : '#222',
                 color: playerCanInput && attemptedSequence.length > 0 ? 'white' : '#555',
                 fontWeight: 'bold',
@@ -635,7 +641,7 @@ export const GamePage = () => {
               disabled={!playerCanInput || attemptedSequence.length !== round.sequence.length}
               style={{
                 width: 'clamp(100px, 8vw, 300px)',
-                height: 'clamp(40px, 3vw, 200px)',
+                height: 'clamp(34px, 5.5dvh, 60px)',
                 backgroundColor:
                   playerCanInput && attemptedSequence.length === round.sequence.length ? '#666' : '#2a2a3a',
                 color: playerCanInput && attemptedSequence.length === round.sequence.length ? 'white' : '#444',
