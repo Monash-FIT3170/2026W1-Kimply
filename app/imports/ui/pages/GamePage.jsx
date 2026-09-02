@@ -220,7 +220,33 @@ export const GamePage = () => {
           padding: '24px',
         }}
       >
-        <h1 style={{ fontSize: '3rem', marginBottom: '18px' }}>GAME OVER</h1>
+      <h1 
+      style={{
+  fontSize: '3rem',
+  marginBottom: '18px',
+  color: isBattleRoyale ? '#ff6b6b' : 'white',
+  fontWeight: '900',
+  letterSpacing: '4px',
+  textTransform: 'uppercase',
+}}>
+  {isBattleRoyale ? 'ELIMINATED' : 'GAME OVER'}
+   </h1>
+   {isBattleRoyale && (
+  <div
+    style={{
+      border: '1px solid #e03030',
+      borderRadius: '10px',
+      padding: '12px 24px',
+      marginBottom: '24px',
+      background: 'rgba(224, 48, 48, 0.12)',
+      color: '#ff6b6b',
+      fontWeight: 'bold',
+      letterSpacing: '1px',
+    }}
+  >
+    You lost your final life.
+  </div>
+)}
         <div
           style={{
             border: '1px solid rgba(255,255,255,0.18)',
