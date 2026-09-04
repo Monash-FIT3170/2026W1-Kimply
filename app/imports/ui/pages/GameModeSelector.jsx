@@ -6,7 +6,7 @@ function ModeCard({ title, description, color, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="relative flex min-h-[140px] flex-col gap-2.5 overflow-hidden rounded-[18px] p-5 text-left transition-opacity hover:opacity-80"
+      className="relative flex min-h-[140px] flex-col gap-2.5 overflow-hidden rounded-[18px] p-5 text-left transition-all hover:-translate-y-0.5"
       style={{
         background: color,
         color: BG,
@@ -15,7 +15,7 @@ function ModeCard({ title, description, color, onClick }) {
         boxShadow: `0 12px 40px -10px color-mix(in oklab, ${color} 70%, transparent), inset 0 0 0 1px color-mix(in oklab, ${color} 50%, transparent)`,
       }}
     >
-      <div className="flex items-start justify-between">
+      <div className="flex items-start">
         <div
           className="flex h-11 w-11 items-center justify-center rounded-[10px]"
           style={{
@@ -23,14 +23,6 @@ function ModeCard({ title, description, color, onClick }) {
           }}
         >
           <ArrowIcon size={18} stroke={BG} />
-        </div>
-        <div
-          className="flex h-8 w-8 items-center justify-center rounded-lg"
-          style={{
-            background: `color-mix(in oklab, ${BG} 18%, transparent)`,
-          }}
-        >
-          <ArrowIcon size={14} stroke={BG} />
         </div>
       </div>
 

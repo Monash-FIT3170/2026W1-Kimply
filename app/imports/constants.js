@@ -16,11 +16,12 @@ export const DISCONNECT_GRACE_MS = 15000; // remove a disconnected player after 
 
 // Game-mode presets, copied into room.customSettings on selection.
 export const GAME_MODE_PRESETS = {
-  default: { flashingSpeed: 'medium', startingLives: 3, startingSequenceLength: 4 },
-  easy: { flashingSpeed: 'slow', startingLives: 5, startingSequenceLength: 1 },
-  medium: { flashingSpeed: 'medium', startingLives: 3, startingSequenceLength: 3 },
-  hard: { flashingSpeed: 'fast', startingLives: 1, startingSequenceLength: 3 },
-  battle_royale: { flashingSpeed: 'medium', startingLives: 3, startingSequenceLength: 4 },
+  default: { flashingSpeed: 'medium', startingLives: 3, startingSequenceLength: 4, sequenceGrowth: 1 },
+  easy: { flashingSpeed: 'slow', startingLives: 5, startingSequenceLength: 1, sequenceGrowth: 1 },
+  medium: { flashingSpeed: 'medium', startingLives: 3, startingSequenceLength: 3, sequenceGrowth: 1 },
+  hard: { flashingSpeed: 'fast', startingLives: 1, startingSequenceLength: 3, sequenceGrowth: 1 },
+  custom: { flashingSpeed: 'medium', startingLives: 3, startingSequenceLength: 4, sequenceGrowth: 1 },
+  battle_royale: { flashingSpeed: 'medium', startingLives: 3, startingSequenceLength: 4, sequenceGrowth: 1 },
 };
 
 // Sequence playback speeds, in ms.

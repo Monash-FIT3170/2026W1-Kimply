@@ -26,6 +26,30 @@ if (Meteor.isServer) {
       assert.equal(nextRound.sequence.length, 5);
     });
 
+    it('uses custom sequence growth when advancing', async function () {
+      const roundId = await RoundsCollection.insertAsync({
+        gameMode: 'custom',
+        lengthOfSequence: 4,
+        lives: 4,
+        sequenceGrowth: 2,
+        roundNumber: 1,
+        sequence: ['red', 'blue', 'green', 'yellow'],
+        createdAt: new Date(),
+        advanced: false,
+        isCurrent: true,
+      });
+
+      const nextRoundId = await Meteor.callAsync('rounds.advance', roundId);
+
+      const nextRound = await RoundsCollection.findOneAsync(nextRoundId);
+      assert.equal(nextRound.lengthOfSequence, 6);
+      assert.equal(nextRound.sequence.length, 6);
+      assert.strictEqual(nextRound.gameMode, 'custom');
+      assert.strictEqual(nextRound.lives, 4);
+      assert.strictEqual(nextRound.sequenceGrowth, 2);
+      assert.strictEqual(nextRound.roundNumber, 2);
+    });
+
     it('marks the current round as advanced and not current', async function () {
       const roundId = await RoundsCollection.insertAsync({
         lengthOfSequence: 4,
