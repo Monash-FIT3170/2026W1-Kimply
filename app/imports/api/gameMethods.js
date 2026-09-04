@@ -247,7 +247,8 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       });
 
       // increase sequence size for next round
-      const sequenceGrowth = currentRound.sequenceGrowth ?? 1;
+      const gameSettings = resolveGameSettings(currentRound.gameMode, currentRound);
+      const sequenceGrowth = gameSettings.sequenceGrowth;
       const nextLength = currentRound.lengthOfSequence + sequenceGrowth;
 
       const nextSequence = generateSequence(nextLength);
@@ -255,9 +256,9 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       // create next round
       const nextRoundId = await RoundsCollection.insertAsync({
         gameId: currentRound.gameId,
-        gameMode: currentRound.gameMode ?? DEFAULT_GAME_MODE,
+        gameMode: gameSettings.gameMode,
         lengthOfSequence: nextLength,
-        lives: currentRound.lives ?? 3,
+        lives: gameSettings.lives,
         sequenceGrowth,
         roundNumber: (currentRound.roundNumber ?? Math.max(1, currentRound.lengthOfSequence - 3)) + 1,
         sequence: nextSequence,
