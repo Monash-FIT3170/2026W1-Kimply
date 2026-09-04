@@ -11,7 +11,7 @@ import { EndLeaderboard } from '../EndLeaderboard.jsx';
 import { EliminationFeed } from '../EliminationFeed.jsx';
 import { useLocation } from 'react-router-dom';
 import { TileLattice } from '../components/design';
-import { ROUND_TIMER_SECONDS as ROUND_SECONDS, LEVEL_UP_TOAST_MS } from '../../constants';
+import { ROUND_TIMER_SECONDS as ROUND_SECONDS, LEVEL_UP_TOAST_MS, DEFAULT_STARTING_LIVES } from '../../constants';
 
 const seqSeenKey = (gameId, roundId) => `seqSeen:${gameId}:${roundId}`;
 
@@ -104,8 +104,7 @@ export const GamePage = () => {
 
   // startingLives is copied into customSettings for every preset mode (easy=5, hard=1, ...),
   // not just 'custom', so size the lives track off customSettings regardless of gameMode.
-  // Battle royale is the exception: it is a one-life mode whatever its preset says.
-  const totalLives = isBattleRoyale ? 1 : (room?.customSettings?.startingLives ?? 3);
+  const totalLives = room?.customSettings?.startingLives ?? DEFAULT_STARTING_LIVES;
   const levelUpEvents = useTracker(() => {
     if (!gameId) return [];
     return GameEventsCollection.find({ gameId, type: 'level-up' }, { sort: { createdAt: -1 } }).fetch();
