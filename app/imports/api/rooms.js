@@ -141,7 +141,12 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
         { $push: { players: { id: playerId, name: playerName.trim() } } }
       );
 
-      return { roomId: room.pin, playerId: playerId };
+      return {
+        roomId: room.pin,
+        playerId: playerId,
+        gameMode: room.gameMode,
+        customSettings: room.customSettings,
+      };
     },
 
     async 'rooms.updateGameName'(pin, gameName) {

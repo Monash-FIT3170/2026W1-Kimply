@@ -56,7 +56,15 @@ export function JoinRoom() {
       }
       
       localStorage.setItem('reconnectData', JSON.stringify(reconnectData));
-      navigate(`/play/${code}`, { state: { playerName, isHost: false, playerId: res.playerId } });
+      navigate(`/play/${code}`, {
+        state: {
+          playerName,
+          isHost: false,
+          playerId: res.playerId,
+          gameMode: res.gameMode,
+          customSettings: res.customSettings,
+        },
+      });
     });
   };
 

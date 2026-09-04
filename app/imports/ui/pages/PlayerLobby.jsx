@@ -414,7 +414,7 @@ function HostView({ room, playerName, onBack, navigate }) {
   );
 }
 
-function JoinedView({ room, playerName, onBack, navigate }) {
+function JoinedView({ room, playerName, onBack, navigate, initialGameMode, initialCustomSettings }) {
   const players = room.players || [];
   const emptySlots = Math.max(0, MAX_PLAYERS - players.length);
 
@@ -463,7 +463,10 @@ function JoinedView({ room, playerName, onBack, navigate }) {
               </h1>
             </div>
             <div className="flex flex-wrap gap-2">
-              <ModeBadge gameMode={room.gameMode} customSettings={room.customSettings} />
+              <ModeBadge
+                gameMode={room.gameMode || initialGameMode}
+                customSettings={room.customSettings || initialCustomSettings}
+              />
               <div className="inline-flex items-center gap-2 rounded-[10px] border border-hairline bg-surface px-2.5 py-1.5">
                 <span className="font-mono text-[10px] uppercase tracking-widest text-fg3">Room</span>
                 <span className="font-mono text-[13px] font-bold text-fg">{room.pin}</span>
@@ -582,7 +585,14 @@ export function PlayerLobby() {
       {isHost ? (
         <HostView room={room} playerName={playerName} onBack={onBack} navigate={navigate} />
       ) : (
-        <JoinedView room={room} playerName={playerName} onBack={onBack} navigate={navigate} />
+        <JoinedView
+          room={room}
+          playerName={playerName}
+          onBack={onBack}
+          navigate={navigate}
+          initialGameMode={state?.gameMode}
+          initialCustomSettings={state?.customSettings}
+        />
       )}
     </>
   );
