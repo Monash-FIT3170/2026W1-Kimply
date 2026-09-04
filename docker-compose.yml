@@ -35,7 +35,7 @@ services:
       - test
     build:
       context: .
-      dockerfile: ./app/Dockerfile.dev
+      dockerfile: ./app/Dockerfile.test
     command: npm test
     environment:
       MONGO_URL: mongodb://mongodb:27017/kimply-test
@@ -44,10 +44,6 @@ services:
       METEOR_ALLOW_SUPERUSER: 1
     depends_on:
       - mongodb
-    volumes:
-      - .:/kimply
-      - meteor_local:/kimply/app/.meteor/local
-      - backend_node_modules:/kimply/app/node_modules
 
 volumes:
   mongodb_data:

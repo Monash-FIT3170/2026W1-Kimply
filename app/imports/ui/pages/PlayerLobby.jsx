@@ -20,8 +20,6 @@ import {
   RainbowBar,
 } from '../components/design';
 
-const MAX_PLAYERS = 8;
-
 function getGameModeColor(mode) {
   const colors = {
     easy: 'oklch(0.75 0.20 120)',
@@ -77,15 +75,6 @@ function PlayerRow({ player, isYou, onKick }) {
   );
 }
 
-function EmptySlot() {
-  return (
-    <div className="flex items-center gap-3 rounded-xl border border-dashed border-hairline px-3.5 py-2.5">
-      <div className="h-8 w-8 shrink-0 rounded-full border border-dashed border-hairline" />
-      <span className="font-outfit text-[13px] font-medium text-fg3">Empty slot</span>
-    </div>
-  );
-}
-
 function SharePanel({ link }) {
   const [copied, setCopied] = useState(false);
   const copy = () => {
@@ -129,7 +118,7 @@ function SharePanel({ link }) {
   );
 }
 
-function HostView({ room, playerName, playerId, onBack, navigate, gameMode, customSettings }) {
+function HostView({ room, playerName, playerId, playerAccount, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
   const joinLink = `${window.location.origin}/play/join?code=${room.pin}`;
   const [editing, setEditing] = useState(true);
@@ -143,7 +132,7 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
         console.error(err);
         return;
       }
-      navigate('/game', { state: { playerName, playerId, pin: room.pin, gameMode } });
+      navigate('/game', { state: { playerName, playerId, pin: room.pin, gameMode, playerAccount } });
     });
   };
 
@@ -251,7 +240,7 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
             <p className="font-outfit text-[13px] font-bold uppercase tracking-widest text-fg2">
               Players{' '}
               <span className="text-fg3">
-                ({players.length}/{MAX_PLAYERS})
+                ({players.length})
               </span>
             </p>
             <div className="inline-flex items-center gap-1.5 font-mono text-[11px]" style={{ color: TILE.amber }}>
@@ -291,9 +280,8 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
   );
 }
 
-function JoinedView({ room, playerName, playerId, onBack, navigate, gameMode, customSettings }) {
+function JoinedView({ room, playerName, playerId, playerAccount, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
-  const emptySlots = Math.max(0, MAX_PLAYERS - players.length);
 
   const stillInRoom = !playerName || players.some((p) => p.name === playerName);
   useEffect(() => {
@@ -314,11 +302,11 @@ function JoinedView({ room, playerName, playerId, onBack, navigate, gameMode, cu
 
   useEffect(() => {
     if (room?.status === 'in_progress') {
-      navigate('/game', { state: { playerName, playerId, pin: room.pin, gameMode: room.gameMode || 'standard' } });
+      navigate('/game', {
+        state: { playerName, playerId, pin: room.pin, gameMode: room.gameMode || 'standard', playerAccount },
+      });
     }
   }, [room?.status]);
-
-  const progress = (players.length / MAX_PLAYERS) * 100;
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden bg-bg text-fg">
@@ -360,7 +348,7 @@ function JoinedView({ room, playerName, playerId, onBack, navigate, gameMode, cu
             <p className="font-outfit text-sm font-bold uppercase tracking-widest text-fg2">
               Players{' '}
               <span className="text-fg3">
-                ({players.length}/{MAX_PLAYERS})
+                ({players.length})
               </span>
             </p>
             <span className="font-mono text-[11px] text-fg3">
@@ -368,24 +356,10 @@ function JoinedView({ room, playerName, playerId, onBack, navigate, gameMode, cu
             </span>
           </div>
 
-          {/* progress bar */}
-          <div className="h-1.5 overflow-hidden rounded-full bg-surface">
-            <div
-              className="h-full rounded-full"
-              style={{
-                width: `${progress}%`,
-                background: `linear-gradient(90deg, ${TILE.pink}, ${TILE.amber}, ${TILE.teal}, ${TILE.violet})`,
-              }}
-            />
-          </div>
-
           {/* players grid */}
           <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
             {players.map((p, i) => (
               <PlayerRow key={p.id || i} player={p} isYou={p.name === playerName} />
-            ))}
-            {Array.from({ length: emptySlots }).map((_, i) => (
-              <EmptySlot key={`e${i}`} />
             ))}
           </div>
           <div className="mt-auto flex justify-center pt-3">
@@ -410,6 +384,7 @@ export function PlayerLobby() {
   const playerName = state?.playerName || '';
   const playerId = state?.playerId || '';
   const isHost = state?.isHost === true;
+  const playerAccount = state?.playerAccount;
   const gameMode = state?.gameMode || 'standard';
   const customSettings = state?.customSettings || null;
   const gameStarted = useRef(false);
@@ -420,15 +395,12 @@ export function PlayerLobby() {
   useEffect(() => {
     if (room?.status === 'in_progress' && !gameStarted.current) {
       gameStarted.current = true;
-      navigate('/game', { state: { playerName, playerId, pin: room.pin, gameMode: room.gameMode || 'standard' } });
+      navigate('/game', {
+        state: { playerName, playerId, pin: room.pin, gameMode: room.gameMode || 'standard', playerAccount },
+      });
     }
   }, [room?.status]);
 
-  // Must stay below every hook call. There was previously a second useEffect
-  // after this early return, which meant React saw a different number of hooks
-  // on the redirect path and threw "Rendered fewer hooks than expected".
-  // That effect was also dead code: `!isLoading` negates a function, never a
-  // boolean, so its body could never run.
   if (!isLoading() && !room && !gameStarted.current) {
     navigate('/play', { replace: true });
     return null;
@@ -452,9 +424,9 @@ export function PlayerLobby() {
           setShowExitPopup(false);
           Meteor.call('rooms.disconnect', pin, playerId);
 
-          // removing session storage of reconnect data
           localStorage.removeItem('reconnectData');
-          navigate('/play', { replace: true });
+          navigate('/play', { replace: true, state: { playerAccount } });
+
         }}
         onCancel={() => {
           setShowExitPopup(false);
@@ -472,6 +444,7 @@ export function PlayerLobby() {
           room={room}
           playerName={playerName}
           playerId={playerId}
+          playerAccount={playerAccount}
           onBack={onBack}
           navigate={navigate}
           gameMode={gameMode}
@@ -482,6 +455,7 @@ export function PlayerLobby() {
           room={room}
           playerName={playerName}
           playerId={playerId}
+          playerAccount={playerAccount}
           onBack={onBack}
           navigate={navigate}
           gameMode={gameMode}

@@ -5,9 +5,12 @@ Defects found during the production-readiness inspection that were **deliberatel
 They are recorded here so no future session has to rediscover them, and so the decision to defer them is explicit rather than accidental.
 Each entry states what is wrong, how it actually fails, and what the fix would be.
 
-The IDs match the summary table in [CLAUDE.md](../CLAUDE.md#known-defects).
+The IDs match the summary table in [AGENTS.md](../AGENTS.md#known-defects), which carries one line per defect and points here for the detail.
+Keep the two in step: an ID means the same thing in both files, or neither file can be trusted.
 
-**Last verified:** 2026-08-04
+There is no D13. The register and the summary table had drifted by one on the last three IDs; reconciling them on 2026-08-29 onto the summary table's numbering left the gap. Do not renumber to close it - the IDs are cited from skills and pull requests.
+
+**Last verified:** 2026-08-31
 
 ---
 
@@ -17,6 +20,8 @@ The IDs match the summary table in [CLAUDE.md](../CLAUDE.md#known-defects).
 |---|---|---|
 | D1 | `server/main.js:13` wiped `RoundsCollection` on every startup | Removed. Old rounds now expire via a TTL index in `server/indexes.js` |
 | D2 | Three unfiltered whole-collection publications | Scoped by `gameId`; `players` also excludes `attemptedSequence` |
+| D9 | A conditional `return null` sat between two hooks in `PlayerLobby.jsx` | The dead `useEffect` after the early return was deleted, so no hook follows the conditional return |
+| D10 | `<HostView>` was rendered without its `navigate` prop | `navigate` is now passed down. It was throwing on **every** game start |
 | - | No health endpoint | `server/health.js` adds `/health/live` and `/health/ready` |
 | - | No indexes at all | `server/indexes.js` creates 11 indexes on startup |
 | - | `istanbul-lib-instrument` used by `scripts/include-all-coverage.js:3` but undeclared | Added to `devDependencies` |
@@ -184,6 +189,8 @@ Note that adding `accounts-password` pulls in `bcrypt`, which introduces a nativ
 
 ## D9 - Conditional `return null` between two hooks
 
+**Status: fixed.** Kept because the analysis below is still the reason the code looks the way it does.
+
 `PlayerLobby.jsx:376-379` sits **between** the `useEffect` at `:369` and the `useEffect` at `:380`.
 
 When that branch is taken, React renders 8 hooks instead of 9 and throws `Rendered fewer hooks than expected`.
@@ -198,6 +205,8 @@ Two further problems in the same block:
 
 ## D10 - `HostView` is missing its `navigate` prop
 
+**Status: fixed.** Kept for the failure mode, which was masked by a race and so looked like it worked.
+
 `PlayerLobby.jsx:419` renders `<HostView room={room} playerName={playerName} onBack={onBack} />`, but `HostView` destructures `navigate` at `:110` and calls it at `:124`.
 
 The host's "Start Game" callback throws `TypeError: navigate is not a function` after `rooms.start` succeeds.
@@ -207,7 +216,7 @@ It only appears to work because the parent effect at `:369-374` races it and nav
 
 ---
 
-## D12 - Root `package-lock.json` is desynced
+## D11 - Root `package-lock.json` is desynced
 
 Root `package-lock.json` declares a dependency on `@meteorjs/rspack@^2.0.1`, while root `package.json` has no `dependencies` block at all and `app/package.json` pins `^1.0.0` (a different major).
 It also carries a stale `"name": "2026W1-Kimply"` against the actual `"kimply-workspace"`.
@@ -220,12 +229,96 @@ This is currently harmless because everything runs with `working-directory: app`
 
 ---
 
-## D13 - A new `AudioContext` per tile click
+## D12 - A new `AudioContext` per tile click
 
 `ColourSequence.jsx:80-92` constructs a new `AudioContext` on every tile click and never closes it.
 Browsers cap the number of live contexts per document, so a long game eventually throws and click feedback silently stops.
 
 **Fix:** create one context lazily, reuse it, and resume it on first user gesture.
+
+---
+
+## D14 - `npm run format:check` fails on `main`
+
+Twelve files are Prettier-dirty on `main`, predating any deployment work.
+Prettier is the only style gate in this repository (there is no ESLint), and it cannot become a CI gate while the default branch fails it.
+
+The cost of leaving it is that every branch inherits the dirt, so no diff can be trusted to be formatting-clean.
+
+**Fix:** one dedicated commit that runs `meteor npm run format` and changes nothing else, so it can be reviewed as a no-op and skipped in `git blame`.
+
+---
+
+## D19 - The play column is taller than the screen, so CLEAR and SUBMIT vanish when the turn starts - **fixed 2026-09-01**
+
+The game screen was sized almost entirely in fixed pixels and `vw`: hearts `clamp(60px, 8vw, 80px)`, the tile grid `min(360px, 90vw)`, the button row `clamp(40px, 3vw, 200px)`.
+None of that reacts to how much vertical room there actually is, so the column came out around 740px tall no matter the screen, inside a container fixed at `height: 100dvh` with `overflow: hidden`.
+
+It only tipped over **after the sequence finished playing**, because starting the turn added two more lines to the column - the "Your turn. Repeat the sequence." message and the `Time left: Ns` row, which was rendered only while `playerCanInput` was true.
+The button row is last, so the buttons were what got clipped, and with `overflow: hidden` there was nothing to scroll to reach them.
+
+Measured on a 1512x828 laptop viewport (Medium mode, 3 lives), before the fix:
+
+| Phase | SUBMIT bottom | Viewport |
+|---|---|---|
+| Watching the sequence | 801px | 828px |
+| Your turn | 821px | 828px |
+
+Seven pixels of headroom on a full-height laptop, so any shorter viewport - a phone, or a laptop with a bookmarks bar - lost the buttons outright.
+
+**Fix (applied):** size the column against the viewport height instead of a pixel floor, and stop the layout moving when the turn starts.
+
+- The tile grid, the largest block on the screen, is `min(360px, 90vw, 38dvh)`. It answers to height as well as width, and still caps at its original 360px once there is room.
+- Hearts (`clamp(26px, 6dvh, 76px)`), the button row (`clamp(34px, 5.5dvh, 60px)`) and the header padding (`clamp(6px, 1.5dvh, 20px)`) scale the same way. The column's vertical rhythm moved from `vh` to `dvh`, so it is measured against the same box as the container's `100dvh`.
+- The timer row is always rendered when the mode has a timer, and carries its text only once input opens, so the button row no longer moves when the sequence ends. Its font was `1vw`, about 4px on a phone; it is now `clamp(12px, 1.2vw, 20px)`.
+- `overflow: hidden` stays on the container, because `TileLattice` is deliberately larger than the screen and would otherwise make the page scrollable by its overflow alone (which is D18's symptom returning by another route). The scroll fallback moved onto the play column itself, which holds only real content.
+
+Verified across 13 viewports from 320x568 to 1920x1080: the button row is fully visible at every one, in both phases, with nothing needing to scroll. `app/imports/ui/pages/GamePage.jsx`, `app/imports/ui/ColourSequence.jsx`.
+
+## D18 - Game page scrolls into empty space below the play area - **fixed 2026-08-31**
+
+The gameplay container in `GamePage` used `minHeight: '100vh'` with `overflowY: 'auto'`. On mobile browsers `100vh` resolves to the largest viewport height (as if the toolbar were hidden), so the container was taller than the visible area and left a strip of empty space the user could scroll into.
+
+**Fix (applied):** size the container with `100dvh` (dynamic viewport height), which follows the visible area as the browser chrome shows/hides, so there is no empty space to scroll into. Legitimate overflow on short screens still scrolls via `overflowY: 'auto'`. `app/imports/ui/pages/GamePage.jsx`.
+## D17 - Lives display hardcoded to 3 and shrinks instead of greying out - **fixed 2026-08-31**
+
+`GamePage` computed `totalLives` only for the `'custom'` mode:
+
+```js
+const totalLives = room?.gameMode === 'custom' ? (room.customSettings?.startingLives ?? 3) : 3;
+```
+
+but preset modes (`easy`, `medium`, `hard`, `battle_royale`) also store their lives in `customSettings.startingLives` and are not `'custom'`, so this fell back to 3. The heart track also ignored `totalLives` and sized itself off `Math.max(player.lives, 3)`, so losing a life removed a circle rather than greying it out. `players.join` already sets `lives: startingLives`, so the value was right - only the display was wrong.
+
+**Fix (applied):** read `totalLives` from `customSettings.startingLives` for every mode, render a fixed `totalLives`-circle track, and grey circles above the current life count. `app/imports/ui/pages/GamePage.jsx`.
+## D16 - Tiles clickable during the post-mistake sequence replay - **fixed 2026-08-31**
+
+On a wrong guess with lives left, `GamePage.handleSubmit` re-enabled input and restarted the sequence replay together:
+
+```js
+setAttemptedSequence([]);
+setPlayerCanInput(true);
+setReplayKey((prev) => prev + 1);
+```
+
+`replayKey` restarts `ColourSequence` playback, but `playerCanInput` was already `true`, so the tiles accepted clicks throughout the replay - a player could click each tile as it lit up and copy the answer. A fresh round instead starts with input disabled and only re-enables it from `onSequenceComplete`.
+
+**Fix (applied):** set `playerCanInput` to `false` on the retry path; the replay re-enables input via `onSequenceComplete` when it finishes. `app/imports/ui/pages/GamePage.jsx`.
+## D15 - Room code input drops keystrokes - **fixed 2026-08-31**
+
+On `/play/join`, `JoinRoom.handleInput` read the freshly typed character inside a `setCode` functional updater, then cleared the hidden capture input in the same handler:
+
+```js
+setCode((prev) => appendRoomCodeInput(prev, e.target.value, SLOTS));
+setError('');
+clearCapturedInput(e); // e.target.value = ''
+```
+
+React evaluates a `useState` functional updater eagerly only when the fiber has no pending work. When it cannot (fast typing, or a render already scheduled), the updater runs at render time - after `clearCapturedInput` has blanked `e.target.value` - so `appendRoomCodeInput` appends `''` and the keystroke is lost. Players saw the first letter (and intermittently later ones) vanish and had to type the code twice.
+
+**Fix (applied):** capture `e.target.value` into a local, clear the input, then update state from the local so the updater never depends on the mutated DOM node. `app/imports/ui/pages/JoinRoom.jsx:30`.
+
+The ID is D15 because D13 is a deliberate gap (see the note at the top of this file).
 
 ---
 

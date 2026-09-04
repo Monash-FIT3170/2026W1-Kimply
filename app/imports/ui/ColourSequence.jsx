@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { FLASH_SPEEDS } from '../constants';
 
 const SHAPE_ICONS = {
   red: () => <rect x="18" y="18" width="28" height="28" rx="4" fill="none" stroke="white" strokeWidth="3" />,
@@ -21,12 +22,6 @@ const COLOURS = {
 
 const TILE_ORDER = ['red', 'yellow', 'green', 'blue'];
 
-const FLASH_SPEEDS = {
-  slow:   { flash: 900, gap: 350 },
-  medium: { flash: 600, gap: 250 },
-  fast:   { flash: 350, gap: 150 },
-};
-
 export const ColourSequence = ({
   roundId,
   sequence = [],
@@ -35,14 +30,25 @@ export const ColourSequence = ({
   playerCanInput,
   onColourClick,
   flashingSpeed = 'medium',
+  autoPlay = true,
 }) => {
   const [activeColour, setActiveColour] = useState(null);
   const [clickedColour, setClickedColour] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isDone, setIsDone] = useState(false);
+  const hasRunRef = useRef(false);
 
   useEffect(() => {
     if (!sequence || sequence.length === 0) return;
+
+    const initialRun = !hasRunRef.current;
+    hasRunRef.current = true;
+    if (initialRun && !autoPlay) {
+      // already watched (refresh): skip replay, go straight to input
+      setIsPlaying(false);
+      setIsDone(true);
+      return;
+    }
 
     let i = 0;
     let cancelled = false;
@@ -113,16 +119,17 @@ export const ColourSequence = ({
     onColourClick(colourId);
   };
   return (
-    <div>
+    <div style={{ '--tile-grid': 'min(360px, 90vw, 38dvh)' }}>
       <p
         style={{
           color: 'white',
           textAlign: 'center',
-          marginBottom: '16px',
+          marginBottom: 'clamp(8px, 1.6dvh, 16px)',
           fontWeight: 'bold',
           letterSpacing: '2px',
-          minHeight: '24px',
-          fontSize: '0.9rem',
+          minHeight: '1.6em',
+          lineHeight: 1.6,
+          fontSize: 'clamp(0.78rem, 2.6vw, 0.9rem)',
         }}
       >
         {isPlaying && 'WATCH THE SEQUENCE'}
@@ -134,7 +141,7 @@ export const ColourSequence = ({
           display: 'grid',
           gridTemplateColumns: '1fr 1fr',
           gap: '6px',
-          width: 'min(360px, 90vw)',
+          width: 'var(--tile-grid)',
           margin: '0 auto',
         }}
       >
@@ -150,8 +157,8 @@ export const ColourSequence = ({
               disabled={!playerCanInput}
               onClick={() => handleTileClick(colourId)}
               style={{
-                width: 'calc(min(360px, 90vw) / 2 - 3px)',
-                height: 'calc(min(360px, 90vw) / 2 - 3px)',
+                width: 'calc(var(--tile-grid) / 2 - 3px)',
+                height: 'calc(var(--tile-grid) / 2 - 3px)',
                 backgroundColor: bg,
                 display: 'flex',
                 alignItems: 'center',
@@ -167,7 +174,7 @@ export const ColourSequence = ({
                 transform: isActive ? 'scale(0.95)' : 'scale(1)',
               }}
             >
-              <svg width="64" height="64" viewBox="0 0 64 64">
+              <svg width="36%" height="36%" viewBox="0 0 64 64">
                 <ShapeIcon />
               </svg>
             </button>
