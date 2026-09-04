@@ -1,14 +1,11 @@
 import { Meteor } from 'meteor/meteor';
 import assert from 'assert';
 import { RoomsCollection } from '/imports/api/rooms';
-import { RoundsCollection } from '/imports/api/rounds';
-import { DEFAULT_CUSTOM_SETTINGS, DEFAULT_GAME_MODE, GAME_MODES } from '/imports/api/gameModes';
 
 if (Meteor.isServer) {
   describe('rooms API', function () {
     beforeEach(async function () {
       await RoomsCollection.removeAsync({});
-      await RoundsCollection.removeAsync({});
     });
 
     // ─── rooms.create ────────────────────────────────────────────────────────
@@ -43,8 +40,6 @@ if (Meteor.isServer) {
         assert.ok(room);
         assert.strictEqual(room.hostName, 'Alice');
         assert.strictEqual(room.status, 'lobby');
-        assert.strictEqual(room.gameMode, DEFAULT_GAME_MODE);
-        assert.deepStrictEqual(room.customSettings, DEFAULT_CUSTOM_SETTINGS);
         assert.strictEqual(room.players.length, 1);
         assert.strictEqual(room.players[0].name, 'Alice');
         assert.ok(room.players[0].id);
@@ -54,132 +49,6 @@ if (Meteor.isServer) {
         const result = await Meteor.callAsync('rooms.create', '  Bob  ');
         const room = await RoomsCollection.findOneAsync({ pin: result.pin });
         assert.strictEqual(room.hostName, 'Bob');
-      });
-    });
-
-    // ─── rooms.updateGameMode ────────────────────────────────────────────────
-
-    describe('rooms.updateGameMode', function () {
-      let testPin;
-
-      beforeEach(async function () {
-        ({ pin: testPin } = await Meteor.callAsync('rooms.create', 'Host'));
-      });
-
-      it('throws on empty PIN', async function () {
-        await assert.rejects(
-          Meteor.callAsync('rooms.updateGameMode', '', GAME_MODES.EASY),
-          (err) => err.error === 'invalid'
-        );
-      });
-
-      it('throws on invalid game mode', async function () {
-        await assert.rejects(
-          Meteor.callAsync('rooms.updateGameMode', testPin, 'impossible-mode'),
-          (err) => err.error === 'invalid-mode'
-        );
-      });
-
-      it('throws not-found for unknown PIN', async function () {
-        await assert.rejects(
-          Meteor.callAsync('rooms.updateGameMode', 'ZZZZZ', GAME_MODES.HARD),
-          (err) => err.error === 'not-found'
-        );
-      });
-
-      it('throws not-lobby when game is in progress', async function () {
-        await RoomsCollection.updateAsync({ pin: testPin }, { $set: { status: 'in-progress' } });
-        await assert.rejects(
-          Meteor.callAsync('rooms.updateGameMode', testPin, GAME_MODES.CUSTOM),
-          (err) => err.error === 'not-lobby'
-        );
-      });
-
-      it('updates the selected game mode', async function () {
-        await Meteor.callAsync('rooms.updateGameMode', testPin, GAME_MODES.BATTLE_ROYALE);
-        const room = await RoomsCollection.findOneAsync({ pin: testPin });
-        assert.strictEqual(room.gameMode, GAME_MODES.BATTLE_ROYALE);
-      });
-    });
-
-    // ─── rooms.updateCustomSettings ──────────────────────────────────────────
-
-    describe('rooms.updateCustomSettings', function () {
-      let testPin;
-
-      beforeEach(async function () {
-        ({ pin: testPin } = await Meteor.callAsync('rooms.create', 'Host'));
-      });
-
-      it('throws on invalid custom settings', async function () {
-        await assert.rejects(
-          Meteor.callAsync('rooms.updateCustomSettings', testPin, null),
-          (err) => err.error === 'invalid-settings'
-        );
-      });
-
-      it('saves normalized settings and switches to custom mode', async function () {
-        await Meteor.callAsync('rooms.updateCustomSettings', testPin, {
-          startingLength: 7,
-          lives: 5,
-          sequenceGrowth: 2,
-        });
-
-        const room = await RoomsCollection.findOneAsync({ pin: testPin });
-        assert.strictEqual(room.gameMode, GAME_MODES.CUSTOM);
-        assert.deepStrictEqual(room.customSettings, {
-          startingLength: 7,
-          lives: 5,
-          sequenceGrowth: 2,
-        });
-      });
-
-      it('clamps custom settings to supported ranges', async function () {
-        await Meteor.callAsync('rooms.updateCustomSettings', testPin, {
-          startingLength: 99,
-          lives: 0,
-          sequenceGrowth: 4,
-        });
-
-        const room = await RoomsCollection.findOneAsync({ pin: testPin });
-        assert.deepStrictEqual(room.customSettings, {
-          startingLength: 10,
-          lives: 1,
-          sequenceGrowth: 3,
-        });
-      });
-    });
-
-    // ─── rooms.start ─────────────────────────────────────────────────────────
-
-    describe('rooms.start', function () {
-      it('starts hard mode as sudden death', async function () {
-        const { pin } = await Meteor.callAsync('rooms.create', 'Host');
-        await Meteor.callAsync('rooms.updateGameMode', pin, GAME_MODES.HARD);
-
-        await Meteor.callAsync('rooms.start', pin);
-
-        const round = await RoundsCollection.findOneAsync({ gameId: pin, isCurrent: true });
-        assert.strictEqual(round.gameMode, GAME_MODES.HARD);
-        assert.strictEqual(round.lengthOfSequence, 5);
-        assert.strictEqual(round.lives, 1);
-      });
-
-      it('starts custom mode with host settings', async function () {
-        const { pin } = await Meteor.callAsync('rooms.create', 'Host');
-        await Meteor.callAsync('rooms.updateCustomSettings', pin, {
-          startingLength: 6,
-          lives: 4,
-          sequenceGrowth: 2,
-        });
-
-        await Meteor.callAsync('rooms.start', pin);
-
-        const round = await RoundsCollection.findOneAsync({ gameId: pin, isCurrent: true });
-        assert.strictEqual(round.gameMode, GAME_MODES.CUSTOM);
-        assert.strictEqual(round.lengthOfSequence, 6);
-        assert.strictEqual(round.lives, 4);
-        assert.strictEqual(round.sequenceGrowth, 2);
       });
     });
 
@@ -224,6 +93,20 @@ if (Meteor.isServer) {
         const joined = room.players.find((p) => p.name === 'Player2');
         assert.ok(joined);
         assert.ok(joined.id);
+      });
+
+      it('returns selected game mode details to joining players', async function () {
+        await Meteor.callAsync('rooms.setGameMode', testPin, 'easy');
+
+        const result = await Meteor.callAsync('rooms.join', testPin, 'Player2');
+
+        assert.strictEqual(result.gameMode, 'easy');
+        assert.deepStrictEqual(result.customSettings, {
+          flashingSpeed: 'slow',
+          startingLives: 5,
+          startingSequenceLength: 1,
+          sequenceGrowth: 1,
+        });
       });
 
       it('trims whitespace from playerName', async function () {

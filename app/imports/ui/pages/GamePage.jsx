@@ -1,39 +1,85 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Meteor } from 'meteor/meteor';
 import { useTracker } from 'meteor/react-meteor-data';
 import { RoundsCollection } from '../../api/rounds';
 import { PlayersCollection } from '../../api/players';
+import { RoomsCollection } from '../../api/rooms';
+import { GameEventsCollection } from '../../api/gameEvents';
 import { ColourSequence } from '../ColourSequence.jsx';
 import { Leaderboard } from '../Leaderboard.jsx';
 import { EndLeaderboard } from '../EndLeaderboard.jsx';
+import { EliminationFeed } from '../EliminationFeed.jsx';
 import { useLocation } from 'react-router-dom';
-import { gameModeLabel } from '../../api/gameModes';
+import { TileLattice } from '../components/design';
+import { ROUND_TIMER_SECONDS as ROUND_SECONDS, LEVEL_UP_TOAST_MS } from '../../constants';
+
+const seqSeenKey = (gameId, roundId) => `seqSeen:${gameId}:${roundId}`;
 
 export const GamePage = () => {
   const [playerId, setPlayerId] = useState(null);
   const [playerCanInput, setPlayerCanInput] = useState(false);
   const [attemptedSequence, setAttemptedSequence] = useState([]);
   const [message, setMessage] = useState('');
+  const [levelUpNotices, setLevelUpNotices] = useState([]);
+  const [secondsLeft, setSecondsLeft] = useState(ROUND_SECONDS);
   const [shake, setShake] = useState(false);
   const [correctGlow, setCorrectGlow] = useState(false);
-  const [completedRoundId, setCompletedRoundId] = useState(null);
   const [replayKey, setReplayKey] = useState(0);
+  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
+  const [showPowerupPopup, setShowPowerupPopup] = useState(false);
+  const [completedRoundId, setCompletedRoundId] = useState(null);
+
   const location = useLocation();
   const playerNameFromLobby = location.state?.playerName || 'Demo Player';
+  const routeGameMode = location.state?.gameMode;
   const roomPin = location.state?.pin;
-  const gameId = roomPin || 'demo';
+  const lobbyPlayerId = location.state?.playerId;
+  const accountId = location.state?.playerAccount?._id || null;
+  // No 'demo' fallback: the publications are scoped by gameId, so a placeholder
+  // would subscribe to a game that does not exist and hang on LOADING forever.
+  const gameId = roomPin || null;
+
+  const playTurnStartSound = () => {
+    const AudioCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtor) return;
+
+    const audioContext = new AudioCtor();
+    const gainNode = audioContext.createGain();
+    const oscillator = audioContext.createOscillator();
+
+    oscillator.type = 'sine';
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    gainNode.gain.setValueAtTime(0.0001, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.08, audioContext.currentTime + 0.02);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.24);
+
+    oscillator.frequency.setValueAtTime(523.25, audioContext.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(659.25, audioContext.currentTime + 0.18);
+
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.24);
+  };
 
   useEffect(() => {
-    const roundsSub = Meteor.subscribe('rounds');
-    const playersSub = Meteor.subscribe('players');
+    if (!gameId || lobbyPlayerId) return;
+    const savedPlayerId = localStorage.getItem(`gamePlayerId:${gameId}`);
+    if (savedPlayerId) setPlayerId(savedPlayerId);
+  }, [gameId, lobbyPlayerId]);
+
+  useEffect(() => {
+    if (!gameId) return undefined;
+    const roundsSub = Meteor.subscribe('rounds', gameId);
+    const playersSub = Meteor.subscribe('players', gameId);
+    const roomSub = Meteor.subscribe('rooms.lobby', gameId);
+    const eventsSub = Meteor.subscribe('gameEvents', gameId);
     return () => {
       roundsSub.stop();
       playersSub.stop();
+      roomSub.stop();
+      eventsSub.stop();
     };
-  }, []);
-
-  const round = useTracker(() => {
-    return RoundsCollection.findOne({ gameId, isCurrent: true });
   }, [gameId]);
 
   const player = useTracker(() => {
@@ -41,24 +87,89 @@ export const GamePage = () => {
     return PlayersCollection.findOne(playerId);
   }, [playerId]);
 
-  useEffect(() => {
-    if (!round?._id || playerId) return;
-    Meteor.call('players.join', round._id, playerNameFromLobby, gameId, (error, result) => {
-      if (error) {
-        console.error(error);
-        setMessage('Could not join the game.');
-        return;
-      }
-      setPlayerId(result);
-    });
-  }, [round?._id, playerId]);
+  const room = useTracker(() => {
+    if (!gameId) return null;
+    return RoomsCollection.findOne({ pin: gameId });
+  }, [gameId]);
+  const gameMode = room?.gameMode || routeGameMode || 'default';
+  const isBattleRoyale = gameMode === 'battle_royale';
+
+  const round = useTracker(() => {
+    if (!gameId) return null;
+    // in battle royale follow the player's specific round
+    if (player?.roundId) {
+      return RoundsCollection.findOne(player.roundId);
+    }
+    return RoundsCollection.findOne({ gameId, isCurrent: true });
+  }, [gameId, player?.roundId]);
+
+  // startingLives is copied into customSettings for every preset mode (easy=5, hard=1, ...),
+  // not just 'custom', so size the lives track off customSettings regardless of gameMode.
+  const totalLives = room?.customSettings?.startingLives ?? 3;
+  const levelUpEvents = useTracker(() => {
+    if (!gameId) return [];
+    return GameEventsCollection.find({ gameId, type: 'level-up' }, { sort: { createdAt: -1 } }).fetch();
+  }, [gameId]);
 
   useEffect(() => {
-    setPlayerCanInput(false);
+    if (!round?._id || playerId) return;
+    Meteor.call(
+      'players.join',
+      round._id,
+      playerNameFromLobby,
+      gameId,
+      lobbyPlayerId,
+      isBattleRoyale,
+      accountId,
+      (error, result) => {
+        if (error) {
+          console.error(error);
+          setMessage('Could not join the game.');
+          return;
+        }
+        setPlayerId(result);
+        localStorage.setItem(`gamePlayerId:${gameId}`, result);
+      }
+    );
+  }, [round?._id, playerId, gameId, playerNameFromLobby, lobbyPlayerId, isBattleRoyale, accountId]);
+
+  useEffect(() => {
+    if (!player?.roundId) return;
     setAttemptedSequence([]);
     setMessage('');
+    setSecondsLeft(30);
     setCompletedRoundId(null);
-  }, [round?._id]);
+    if (gameId && localStorage.getItem(seqSeenKey(gameId, player.roundId))) {
+      // already watched this round (e.g. refresh): skip the replay
+      setPlayerCanInput(true);
+    } else {
+      setPlayerCanInput(false);
+      setReplayKey((prev) => prev + 1);
+    }
+  }, [player?.roundId, gameId]);
+
+  // Show the slow-motion powerup popup whenever the player picks it up
+  useEffect(() => {
+    setShowPowerupPopup(!!player?.slowMotionActive);
+  }, [player?.slowMotionActive]);
+
+  const seenLevelUpIds = useRef(new Set());
+  useEffect(() => {
+    levelUpEvents.forEach((event) => {
+      if (seenLevelUpIds.current.has(event._id)) return;
+      seenLevelUpIds.current.add(event._id);
+      const notice = {
+        key: event._id,
+        text:
+          event.playerId === playerId
+            ? `You have leveled up to level ${event.level}`
+            : `${event.playerName} has reached level ${event.level}`,
+      };
+      setLevelUpNotices((prev) => [...prev, notice]);
+      // auto-dismiss like the elimination feed
+      setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), LEVEL_UP_TOAST_MS);
+    });
+  }, [levelUpEvents]);
 
   const handleColourClick = (colour) => {
     if (!playerCanInput) return;
@@ -66,6 +177,34 @@ export const GamePage = () => {
     if (attemptedSequence.length >= round.sequence.length) return;
     setAttemptedSequence([...attemptedSequence, colour]);
   };
+
+  useEffect(() => {
+    if (isBattleRoyale) return undefined; // battle royale is a free-for-all: no timer
+    if (!round?._id || !playerId) return undefined;
+    if (player?.eliminated || player?.gameFinished) return undefined;
+    if (completedRoundId === round._id) return undefined; // already finished this round
+
+    // One timer for the whole round; wrong guesses and lost lives do not reset it.
+    // If it runs out the player is eliminated so the game can continue.
+    setSecondsLeft(ROUND_SECONDS);
+
+    const timeoutId = window.setTimeout(() => {
+      setMessage('Time is up! You have been eliminated.');
+      setPlayerCanInput(false);
+      Meteor.call('players.timeoutRound', playerId, (error) => {
+        if (error) console.error(error);
+      });
+    }, ROUND_SECONDS * 1000);
+
+    const intervalId = window.setInterval(() => {
+      setSecondsLeft((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.clearInterval(intervalId);
+    };
+  }, [round?._id, playerId, isBattleRoyale, player?.eliminated, player?.gameFinished, completedRoundId]);
 
   const handleSubmit = () => {
     if (!playerId) {
@@ -83,7 +222,11 @@ export const GamePage = () => {
         return;
       }
       if (result.success) {
-        setMessage('Correct sequence! Please wait for other players to finish.');
+        if (isBattleRoyale) {
+          setMessage('Correct! Moving to next round...');
+        } else {
+          setMessage('Correct sequence! Please wait for other players to finish.');
+        }
         setCompletedRoundId(round._id);
         setCorrectGlow(true);
         setTimeout(() => setCorrectGlow(false), 800);
@@ -98,7 +241,11 @@ export const GamePage = () => {
           setShake(true);
           setTimeout(() => setShake(false), 400);
           setAttemptedSequence([]);
-          setPlayerCanInput(true);
+          // Keep input locked while the sequence replays, otherwise the tiles stay
+          // clickable and the player can copy the answer as it lights up. The replay
+          // (triggered by the replayKey bump) re-enables input via onSequenceComplete
+          // once it finishes, exactly like a fresh round does.
+          setPlayerCanInput(false);
           setReplayKey((prev) => prev + 1);
         }
       }
@@ -109,6 +256,32 @@ export const GamePage = () => {
     setAttemptedSequence([]);
     setMessage('Try again. Repeat the flashed sequence.');
   };
+
+  // Reached by loading /game directly, or after a refresh drops location.state.
+  // Without a room PIN there is no game to subscribe to, so say so instead of
+  // sitting on LOADING indefinitely.
+  if (!gameId) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          background: 'linear-gradient(135deg, #1a0533 0%, #0d1b4b 100%)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '18px',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <p style={{ color: 'white', letterSpacing: '4px', fontSize: '0.8rem', fontWeight: 'bold', opacity: 0.5 }}>
+          NO GAME SELECTED
+        </p>
+        <a href="/play" style={{ color: '#7CFFB2', fontSize: '0.9rem' }}>
+          Join or create a room
+        </a>
+      </div>
+    );
+  }
 
   if (!round) {
     return (
@@ -138,12 +311,13 @@ export const GamePage = () => {
 
   if (!player) return null;
 
-  const maxLives = Math.max(1, player.startingLives ?? round.lives ?? 3);
-  const roundNumber = round.roundNumber ?? Math.max(1, round.lengthOfSequence - 3);
-  const modeName = gameModeLabel(player.gameMode || round.gameMode);
-
-  if (player?.gameFinished) {
-    return <EndLeaderboard gameId={player.gameId} currentPlayerId={player._id} />;
+  if (player.gameFinished) {
+    return (
+      <>
+        <EliminationFeed gameId={gameId} />
+        <EndLeaderboard gameId={player.gameId} currentPlayerId={player._id} />
+      </>
+    );
   }
 
   if (player?.eliminated) {
@@ -151,7 +325,6 @@ export const GamePage = () => {
     const totalGuesses = player.totalGuesses ?? 0;
     const correctGuesses = player.correctGuesses ?? 0;
     const accuracy = totalGuesses > 0 ? Math.round((correctGuesses / totalGuesses) * 100) : 0;
-
     return (
       <div
         style={{
@@ -216,176 +389,294 @@ export const GamePage = () => {
             {correctGuesses}/{totalGuesses} correct guesses
           </p>
         </div>
+        <a
+          href="/play"
+          style={{
+            marginTop: '24px',
+            padding: '12px 28px',
+            borderRadius: '999px',
+            border: '1px solid rgba(124,255,178,0.5)',
+            background: 'rgba(124,255,178,0.12)',
+            color: '#7CFFB2',
+            fontWeight: 'bold',
+            letterSpacing: '2px',
+            textTransform: 'uppercase',
+            fontSize: '0.85rem',
+            textDecoration: 'none',
+          }}
+        >
+          New Game
+        </a>
+        <EliminationFeed gameId={gameId} />
       </div>
     );
   }
 
   return (
     <div
+      className='relative'
       style={{
-        minHeight: '100vh',
+        height: '100dvh',
+        position: 'relative',
+        overflow: 'hidden',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
         background: 'linear-gradient(135deg, #1a0533 0%, #0d1b4b 100%)',
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '20px',
         transform: shake ? 'translateX(-6px)' : 'translateX(0)',
         transition: 'transform 0.1s ease',
         boxShadow: correctGlow ? 'inset 0 0 80px #00aaff' : 'none',
       }}
     >
-      {/* Lives display */}
-      <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '8px', marginBottom: '16px' }}>
-        {Array.from({ length: maxLives }, (_, index) => index + 1).map((heart) => (
+      <TileLattice opacity={0.06} />
+      {showPowerupPopup && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '20px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: '#0a84ff',
+            color: 'white',
+            padding: '14px 28px',
+            borderRadius: '12px',
+            fontWeight: 'bold',
+            zIndex: 1000,
+          }}
+        >
+          Powerup Gained: Slow Motion for one round!
+        </div>
+      )}
+      <div
+        style={{
+          position: 'fixed',
+          top: '18px',
+          left: '18px',
+          zIndex: 40,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px',
+          pointerEvents: 'none',
+          maxWidth: 'min(320px, calc(100vw - 36px))',
+        }}
+      >
+        {levelUpNotices.map((notice) => (
           <div
-            key={heart}
+            key={notice.key}
             style={{
-              width: '44px',
-              height: '44px',
-              backgroundColor: heart <= (player?.lives ?? 3) ? '#e03030' : '#333',
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '20px',
-              boxShadow: heart <= (player?.lives ?? 3) ? '0 0 10px #e0303088' : 'none',
-              transition: 'all 0.3s ease',
+              padding: '12px 14px',
+              borderRadius: '14px',
+              background: 'rgba(255,255,255,0.12)',
+              border: '1px solid rgba(255,255,255,0.18)',
+              color: 'white',
+              boxShadow: '0 14px 36px rgba(0,0,0,0.28)',
+              backdropFilter: 'blur(10px)',
+              fontFamily: 'Outfit, sans-serif',
+              fontWeight: 700,
+              fontSize: '0.9rem',
+              lineHeight: 1.25,
+              animation: 'levelUpToastIn 180ms ease-out',
             }}
           >
-            {'\u2764'}
+            {notice.text}
           </div>
         ))}
       </div>
-
-      <div style={{ textAlign: 'center' }}>
-        <p
+      <div
+        className="relative flex shrink-0 justify-between"
+        style={{ width: '100%', padding: 'clamp(6px, 1.5dvh, 20px) clamp(16px, 2vw, 28px)' }}
+      >
+        <span
           style={{
-            color: '#9ce8ff',
-            marginBottom: '8px',
-            fontWeight: 'bold',
-            letterSpacing: '2px',
-            textTransform: 'uppercase',
-          }}
-        >
-          {modeName}
-        </p>
-        <p
-          style={{
+            fontSize: 'clamp(20px, 2vw, 40px)',
+            fontWeight: 800,
             color: 'white',
-            marginBottom: '12px',
-            fontWeight: 'bold',
-            letterSpacing: '2px',
+            letterSpacing: '-0.02em',
+            fontFamily: 'Outfit, sans-serif',
           }}
         >
-          LEVEL {roundNumber}
-        </p>
-        <p
-          style={{
-            color: '#ccc',
-            marginBottom: '12px',
-            fontSize: '0.9rem',
-          }}
-        ></p>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'center',
-            gap: '6px',
-            marginBottom: '20px',
-          }}
-        >
-          {(round.sequence || []).map((_, i) => (
+          KIMPLY
+        </span>
+      </div>
+      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-start overflow-y-auto md:justify-center">
+        <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2dvh' }}>
+          {Array.from({ length: totalLives }, (_, i) => i + 1).map((heart) => (
             <div
-              key={i}
+              key={heart}
               style={{
-                width: '12px',
-                height: '12px',
+                width: 'clamp(26px, 6dvh, 76px)',
+                height: 'clamp(26px, 6dvh, 76px)',
+                backgroundColor: heart <= (player?.lives ?? totalLives) ? '#e03030' : '#333',
                 borderRadius: '50%',
-                backgroundColor: i < attemptedSequence.length ? '#fff' : '#556',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 'clamp(14px, 3.2dvh, 32px)',
+                boxShadow: heart <= (player?.lives ?? totalLives) ? '0 0 10px #e0303088' : 'none',
+                transition: 'all 0.3s ease',
               }}
-            />
+            >
+              {'❤'}
+            </div>
           ))}
         </div>
-        <ColourSequence
-          roundId={round._id}
-          sequence={round.sequence}
-          replayKey={replayKey}
-          playerCanInput={playerCanInput}
-          onSequenceComplete={() => {
-            setPlayerCanInput(true);
-            setMessage('Your turn. Repeat the sequence.');
-          }}
-          onColourClick={handleColourClick}
-        />
-        <p
-          style={{
-            color: 'white',
-            marginTop: '18px',
-            minHeight: '24px',
-            fontSize: '0.9rem',
-          }}
-        >
-          Selected: {attemptedSequence.length}/{round.sequence.length}
-        </p>
-        <p
-          style={{
-            color: '#ffd369',
-            marginTop: '8px',
-            minHeight: '24px',
-            fontSize: '0.9rem',
-          }}
-        >
-          {message}
-        </p>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'center',
-            gap: '12px',
-            marginTop: '24px',
-          }}
-        >
-          <button
-            onClick={handleClear}
-            disabled={!playerCanInput || attemptedSequence.length === 0}
+        <div style={{ textAlign: 'center' }}>
+          <p
             style={{
-              width: '120px',
-              padding: '14px',
-              backgroundColor: playerCanInput && attemptedSequence.length > 0 ? '#444' : '#222',
-              color: playerCanInput && attemptedSequence.length > 0 ? 'white' : '#555',
+              color: 'white',
+              marginBottom: '1dvh',
               fontWeight: 'bold',
-              fontSize: '0.9rem',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: playerCanInput && attemptedSequence.length > 0 ? 'pointer' : 'not-allowed',
-              letterSpacing: '1px',
+              letterSpacing: '2px',
+              fontSize: 'clamp(16px, 1.2vw, 22px)',
             }}
           >
-            CLEAR
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={!playerCanInput || attemptedSequence.length !== round.sequence.length}
+            LEVEL {round.roundNumber ?? round.lengthOfSequence - 3}
+          </p>
+          <div
             style={{
-              width: '140px',
-              padding: '14px',
-              backgroundColor:
-                playerCanInput && attemptedSequence.length === round.sequence.length ? '#666' : '#2a2a3a',
-              color: playerCanInput && attemptedSequence.length === round.sequence.length ? 'white' : '#444',
-              fontWeight: 'bold',
-              fontSize: '0.9rem',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: playerCanInput && attemptedSequence.length === round.sequence.length ? 'pointer' : 'not-allowed',
-              letterSpacing: '1px',
+              display: 'flex',
+              justifyContent: 'center',
+              gap: '0.5vw',
+              marginBottom: '2dvh',
             }}
           >
-            SUBMIT
-          </button>
+            {(round.sequence || []).map((_, i) => (
+              <div
+                key={i}
+                style={{
+                  width: 'clamp(10px, 1vw, 50px)',
+                  height: 'clamp(10px, 1vw, 50px)',
+                  borderRadius: '50%',
+                  backgroundColor: i < attemptedSequence.length ? '#fff' : '#556',
+                }}
+              />
+            ))}
+          </div>
+          <ColourSequence
+            roundId={round._id}
+            sequence={round.sequence}
+            replayKey={replayKey}
+            autoPlay={!(gameId && player?.roundId && localStorage.getItem(seqSeenKey(gameId, player.roundId)))}
+            playerCanInput={playerCanInput}
+            onSequenceComplete={() => {
+              playTurnStartSound();
+              setPlayerCanInput(true);
+              setMessage('Your turn. Repeat the sequence.');
+              if (gameId && player?.roundId) localStorage.setItem(seqSeenKey(gameId, player.roundId), '1');
+            }}
+            onColourClick={handleColourClick}
+            flashingSpeed={
+              player?.slowMotionActive
+                ? 'slow'
+                : room?.gameMode === 'custom'
+                ? room.customSettings?.flashingSpeed
+                : 'medium'
+            }
+          />
+          <p
+            style={{
+              color: 'white',
+              marginTop: '1.5dvh',
+              minHeight: '1.25em',
+              lineHeight: 1.25,
+              fontSize: 'clamp(12px, 1.2vw, 24px)',
+            }}
+          >
+            Selected: {attemptedSequence.length}/{round.sequence.length}
+          </p>
+          <p
+            style={{
+              color: '#ffd369',
+              marginTop: '0.8dvh',
+              minHeight: '1.25em',
+              lineHeight: 1.25,
+              fontSize: 'clamp(12px, 1.2vw, 20px)',
+            }}
+          >
+            {message}
+          </p>
+          {!isBattleRoyale && (
+            <p
+              style={{
+                color: secondsLeft <= 5 ? '#ff7a7a' : '#9ce8ff',
+                marginTop: '0.8dvh',
+                minHeight: '1.25em',
+                lineHeight: 1.25,
+                fontSize: 'clamp(12px, 1.2vw, 20px)',
+                fontWeight: 'bold',
+                letterSpacing: '1px',
+              }}
+            >
+              {playerCanInput ? `Time left: ${secondsLeft}s` : ''}
+            </p>
+          )}
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              gap: '1vw',
+              marginTop: '2dvh',
+            }}
+          >
+            <button
+              onClick={handleClear}
+              disabled={!playerCanInput || attemptedSequence.length === 0}
+              style={{
+                width: 'clamp(100px, 8vw, 300px)',
+                height: 'clamp(34px, 5.5dvh, 60px)',
+                backgroundColor: playerCanInput && attemptedSequence.length > 0 ? '#444' : '#222',
+                color: playerCanInput && attemptedSequence.length > 0 ? 'white' : '#555',
+                fontWeight: 'bold',
+                fontSize: 'clamp(10px, 1vw, 20px)',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: playerCanInput && attemptedSequence.length > 0 ? 'pointer' : 'not-allowed',
+                letterSpacing: '1px',
+              }}
+            >
+              CLEAR
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={!playerCanInput || attemptedSequence.length !== round.sequence.length}
+              style={{
+                width: 'clamp(100px, 8vw, 300px)',
+                height: 'clamp(34px, 5.5dvh, 60px)',
+                backgroundColor:
+                  playerCanInput && attemptedSequence.length === round.sequence.length ? '#666' : '#2a2a3a',
+                color: playerCanInput && attemptedSequence.length === round.sequence.length ? 'white' : '#444',
+                fontWeight: 'bold',
+                fontSize: 'clamp(10px, 1vw, 20px)',
+                border: 'none',
+                borderRadius: '8px',
+                cursor:
+                  playerCanInput && attemptedSequence.length === round.sequence.length ? 'pointer' : 'not-allowed',
+                letterSpacing: '1px',
+              }}
+            >
+              SUBMIT
+            </button>
+          </div>
         </div>
-        {completedRoundId && <Leaderboard roundId={completedRoundId} />}
+        <EliminationFeed gameId={gameId} />
       </div>
+      <button
+        type="button"
+        onClick={() => setIsLeaderboardOpen((open) => !open)}
+        aria-expanded={isLeaderboardOpen}
+        className="fixed right-4 top-4 z-50 rounded-full border border-hairline bg-surface px-4 py-3 font-outfit text-xs font-bold text-fg shadow-lg sm:right-6 sm:top-6 sm:text-sm"
+      >
+        {isLeaderboardOpen ? 'Collapse leaderboard' : 'Leaderboard'}
+      </button>
+
+      <aside
+        className={`fixed right-4 top-20 z-30 w-[calc(100vw-2rem)] max-w-[28rem] transition-transform duration-300 ease-in-out ${
+          isLeaderboardOpen ? 'translate-x-0' : 'translate-x-[120%]'
+        }`}
+      >
+        <Leaderboard gameId={gameId} currentPlayerId={playerId} />
+      </aside>
     </div>
   );
 };

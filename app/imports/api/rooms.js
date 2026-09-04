@@ -1,14 +1,9 @@
 import { Mongo } from 'meteor/mongo';
 import { Meteor } from 'meteor/meteor';
 import { Random } from 'meteor/random';
-import {
-  DEFAULT_CUSTOM_SETTINGS,
-  DEFAULT_GAME_MODE,
-  GAME_MODES,
-  isValidGameMode,
-  normalizeCustomSettings,
-  resolveGameSettings,
-} from './gameModes';
+import { PlayersCollection } from './players.js';
+import { RoundsCollection } from './rounds.js';
+import { PIN_ALPHABET, PIN_LENGTH, GAME_MODE_PRESETS } from '../constants';
 
 // Guard against --full-app test mode evaluating this module twice
 // (app bundle + test bundle both load it; global is shared across both).
@@ -17,10 +12,10 @@ if (!global._RoomsCollection) {
 }
 export const RoomsCollection = global._RoomsCollection;
 
-const PIN_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-
 function generatePin() {
-  return Array.from({ length: 5 }, () => PIN_CHARS[Math.floor(Math.random() * PIN_CHARS.length)]).join('');
+  return Array.from({ length: PIN_LENGTH }, () => PIN_ALPHABET[Math.floor(Math.random() * PIN_ALPHABET.length)]).join(
+    ''
+  );
 }
 
 if (Meteor.isServer && !global._roomsServerInitialized) {
@@ -35,23 +30,25 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
           pin: 1,
           status: 1,
           gameName: 1,
-          gameMode: 1,
-          customSettings: 1,
           hostName: 1,
+          customSettings: 1,
+          gameMode: 1,
           'players.name': 1,
           'players.id': 1,
+          'players.connected': 1,
         },
       }
     );
   });
 
   Meteor.methods({
-    async 'rooms.create'(hostName) {
+    async 'rooms.create'(hostName, accountId) {
       if (typeof hostName !== 'string' || !hostName.trim()) {
         throw new Meteor.Error('invalid', 'Invalid name');
       }
       const name = hostName.trim();
       const hostId = Random.id();
+      const hostAccountId = typeof accountId === 'string' && accountId.trim() ? accountId.trim() : null;
 
       let pin;
       for (let i = 0; i < 10; i++) {
@@ -67,26 +64,87 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
         pin,
         hostName: name,
         gameName: `Game${pin}`,
-        gameMode: DEFAULT_GAME_MODE,
-        customSettings: DEFAULT_CUSTOM_SETTINGS,
         status: 'lobby',
-        players: [{ id: hostId, name }],
+        players: [{ id: hostId, name, accountId: hostAccountId, connected: true, connectionId: this.connection?.id ?? null }],
         createdAt: new Date(),
+        gameMode: 'default',
+        customSettings: { ...GAME_MODE_PRESETS.default },
       });
 
       return { pin: pin, hostId: hostId };
     },
 
-    async 'rooms.start'(pin) {
+    async 'rooms.setGameMode'(pin, gameMode) {
+      if (typeof pin !== 'string' || !pin.trim()) throw new Meteor.Error('invalid', 'Invalid PIN');
+      if (!['default', 'easy', 'medium', 'hard', 'custom', 'battle_royale'].includes(gameMode)) {
+        throw new Meteor.Error('invalid', 'Invalid game mode');
+      }
+      const room = await RoomsCollection.findOneAsync({ pin: pin.trim() });
+      if (!room) throw new Meteor.Error('not-found', 'Room not found');
+      if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
+
+      const update = { gameMode };
+      if (GAME_MODE_PRESETS[gameMode]) {
+        update.customSettings = { ...GAME_MODE_PRESETS[gameMode] };
+      }
+
+      await RoomsCollection.updateAsync(
+        {
+          _id: room._id,
+        },
+        { $set: update }
+      );
+    },
+
+    async 'rooms.updateSettings'(pin, settings) {
+      const room = await RoomsCollection.findOneAsync({ pin });
+      if (room?.gameMode !== 'custom') {
+        throw new Meteor.Error('not-custom-mode', 'Settings only apply in custom game mode');
+      }
+      if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+        throw new Meteor.Error('invalid-settings', 'Invalid settings');
+      }
+
+      const validSpeeds = ['slow', 'medium', 'fast'];
+      if (settings.flashingSpeed && !validSpeeds.includes(settings.flashingSpeed)) {
+        throw new Meteor.Error('invalid-speed', 'flashingSpeed must be slow, medium, or fast');
+      }
+
+      if (settings.startingLives != null && (!Number.isInteger(settings.startingLives) || settings.startingLives < 1)) {
+        throw new Meteor.Error('invalid-lives', 'startingLives must be a positive integer');
+      }
+      if (
+        settings.startingSequenceLength != null &&
+        (!Number.isInteger(settings.startingSequenceLength) || settings.startingSequenceLength < 1)
+      ) {
+        throw new Meteor.Error('invalid-length', 'startingSequenceLength must be a positive integer');
+      }
+      if (settings.sequenceGrowth != null && (!Number.isInteger(settings.sequenceGrowth) || settings.sequenceGrowth < 1)) {
+        throw new Meteor.Error('invalid-growth', 'sequenceGrowth must be a positive integer');
+      }
+
+      const customSettings = { ...GAME_MODE_PRESETS.custom, ...room.customSettings, ...settings };
+      await RoomsCollection.updateAsync({ pin }, { $set: { customSettings } });
+    },
+
+    async 'rooms.start'(pin, gameMode = null) {
       if (typeof pin !== 'string' || !pin.trim()) {
         throw new Meteor.Error('invalid', 'Invalid PIN');
       }
       const room = await RoomsCollection.findOneAsync({ pin: pin.trim() });
       if (!room) throw new Meteor.Error('not-found', 'Room not found');
       if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
-      const gameSettings = resolveGameSettings(room.gameMode, room.customSettings);
-      await RoomsCollection.updateAsync({ _id: room._id }, { $set: { status: 'in_progress', gameSettings } });
-      await Meteor.callAsync('rounds.generate', gameSettings.startingLength, room.pin, gameSettings);
+      const selectedGameMode = gameMode || room.gameMode || 'default';
+
+      // Drop anyone who disconnected in the lobby and did not reconnect.
+      await RoomsCollection.updateAsync({ _id: room._id }, { $pull: { players: { connected: false } } });
+
+      // Clear old game data so new game starts fresh
+      await PlayersCollection.removeAsync({ gameId: pin });
+      await RoundsCollection.removeAsync({ gameId: pin });
+
+      await RoomsCollection.updateAsync({ _id: room._id }, { $set: { status: 'in_progress', gameMode: selectedGameMode } });
+      await Meteor.callAsync('rounds.generate', room.pin);
     },
 
     async 'rooms.kick'(pin, playerId) {
@@ -120,7 +178,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       await RoomsCollection.updateAsync({ _id: room._id }, { $pull: { players: { id: playerId } } });
     },
 
-    async 'rooms.join'(pin, playerName) {
+    async 'rooms.join'(pin, playerName, accountId) {
       if (typeof pin !== 'string' || !pin.trim()) {
         throw new Meteor.Error('invalid', 'Invalid PIN');
       }
@@ -135,10 +193,21 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       if (nameTaken) throw new Meteor.Error('name-taken', 'Name already taken');
 
       const playerId = Random.id();
+      const joinAccountId = typeof accountId === 'string' && accountId.trim() ? accountId.trim() : null;
 
       await RoomsCollection.updateAsync(
         { _id: room._id },
-        { $push: { players: { id: playerId, name: playerName.trim() } } }
+        {
+          $push: {
+            players: {
+              id: playerId,
+              name: playerName.trim(),
+              accountId: joinAccountId,
+              connected: true,
+              connectionId: this.connection?.id ?? null,
+            },
+          },
+        }
       );
 
       return {
@@ -171,49 +240,6 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       );
     },
 
-    async 'rooms.updateGameMode'(pin, gameMode) {
-      if (typeof pin !== 'string' || !pin.trim()) {
-        throw new Meteor.Error('invalid', 'Invalid PIN');
-      }
-      if (typeof gameMode !== 'string' || !isValidGameMode(gameMode)) {
-        throw new Meteor.Error('invalid-mode', 'Invalid game mode');
-      }
-
-      const room = await RoomsCollection.findOneAsync({ pin: pin.trim() });
-      if (!room) throw new Meteor.Error('not-found', 'Room not found');
-      if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
-
-      const update = { gameMode };
-      if (gameMode === GAME_MODES.CUSTOM) {
-        update.customSettings = normalizeCustomSettings(room.customSettings);
-      }
-
-      await RoomsCollection.updateAsync({ _id: room._id }, { $set: update });
-    },
-
-    async 'rooms.updateCustomSettings'(pin, customSettings) {
-      if (typeof pin !== 'string' || !pin.trim()) {
-        throw new Meteor.Error('invalid', 'Invalid PIN');
-      }
-      if (!customSettings || typeof customSettings !== 'object' || Array.isArray(customSettings)) {
-        throw new Meteor.Error('invalid-settings', 'Invalid custom settings');
-      }
-
-      const room = await RoomsCollection.findOneAsync({ pin: pin.trim() });
-      if (!room) throw new Meteor.Error('not-found', 'Room not found');
-      if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
-
-      await RoomsCollection.updateAsync(
-        { _id: room._id },
-        {
-          $set: {
-            gameMode: GAME_MODES.CUSTOM,
-            customSettings: normalizeCustomSettings(customSettings),
-          },
-        }
-      );
-    },
-
     async 'rooms.reconnect'(pin, playerId) {
       if (typeof pin !== 'string' || !pin.trim()) {
         throw new Meteor.Error('invalid', 'Invalid PIN');
@@ -231,6 +257,11 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       if (!player) {
         throw new Meteor.Error('player-not-found');
       }
+
+      await RoomsCollection.updateAsync(
+        { pin: pin.trim(), 'players.id': playerId },
+        { $set: { 'players.$.connected': true, 'players.$.connectionId': this.connection?.id ?? null } }
+      );
 
       return {
         playerName: player.name,

@@ -1,22 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { FLASH_SPEEDS } from '../constants';
 
 const SHAPE_ICONS = {
-  red: () => <rect x="18" y="18" width="28" height="28" rx="4" fill="none" stroke="black" strokeWidth="3" />,
-  yellow: () => <polygon points="32,14 50,50 14,50" fill="none" stroke="black" strokeWidth="3" />,
-  green: () => <circle cx="32" cy="32" r="16" fill="none" stroke="black" strokeWidth="3" />,
+  red: () => <rect x="18" y="18" width="28" height="28" rx="4" fill="none" stroke="white" strokeWidth="3" />,
+  yellow: () => <polygon points="32,14 50,50 14,50" fill="none" stroke="white" strokeWidth="3" />,
+  green: () => <circle cx="32" cy="32" r="16" fill="none" stroke="white" strokeWidth="3" />,
   blue: () => (
     <g>
-      <line x1="18" y1="18" x2="46" y2="46" stroke="black" strokeWidth="3" />
-      <line x1="46" y1="18" x2="18" y2="46" stroke="black" strokeWidth="3" />
+      <line x1="18" y1="18" x2="46" y2="46" stroke="white" strokeWidth="3" />
+      <line x1="46" y1="18" x2="18" y2="46" stroke="white" strokeWidth="3" />
     </g>
   ),
 };
 
 const COLOURS = {
-  red: { active: '#CC0000', dim: '#FF9999' },
-  yellow: { active: '#CCCC00', dim: '#FFF599' },
-  green: { active: '#00AA00', dim: '#99DD99' },
-  blue: { active: '#2222CC', dim: '#99AAEE' },
+  red:    { active: '#ff2d55', dim: '#c0203e' },
+  yellow: { active: '#ffd60a', dim: '#b89800' },
+  green:  { active: '#30d158', dim: '#1e8a3a' },
+  blue:   { active: '#0a84ff', dim: '#0a5ab5' },
 };
 
 const TILE_ORDER = ['red', 'yellow', 'green', 'blue'];
@@ -28,14 +29,26 @@ export const ColourSequence = ({
   onSequenceComplete,
   playerCanInput,
   onColourClick,
+  flashingSpeed = 'medium',
+  autoPlay = true,
 }) => {
   const [activeColour, setActiveColour] = useState(null);
   const [clickedColour, setClickedColour] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isDone, setIsDone] = useState(false);
+  const hasRunRef = useRef(false);
 
   useEffect(() => {
     if (!sequence || sequence.length === 0) return;
+
+    const initialRun = !hasRunRef.current;
+    hasRunRef.current = true;
+    if (initialRun && !autoPlay) {
+      // already watched (refresh): skip replay, go straight to input
+      setIsPlaying(false);
+      setIsDone(true);
+      return;
+    }
 
     let i = 0;
     let cancelled = false;
@@ -43,6 +56,8 @@ export const ColourSequence = ({
     setIsPlaying(true);
     setIsDone(false);
     setActiveColour(null);
+
+    const { flash, gap } = FLASH_SPEEDS[flashingSpeed] ?? FLASH_SPEEDS.medium;
 
     const showNext = () => {
       if (cancelled) return;
@@ -65,8 +80,8 @@ export const ColourSequence = ({
       setTimeout(() => {
         setActiveColour(null);
         i++;
-        setTimeout(showNext, 250);
-      }, 600);
+        setTimeout(showNext, gap);
+      }, flash);
     };
 
     const startDelay = setTimeout(showNext, 800);
@@ -104,16 +119,17 @@ export const ColourSequence = ({
     onColourClick(colourId);
   };
   return (
-    <div>
+    <div style={{ '--tile-grid': 'min(360px, 90vw, 38dvh)' }}>
       <p
         style={{
           color: 'white',
           textAlign: 'center',
-          marginBottom: '16px',
+          marginBottom: 'clamp(8px, 1.6dvh, 16px)',
           fontWeight: 'bold',
           letterSpacing: '2px',
-          minHeight: '24px',
-          fontSize: '0.9rem',
+          minHeight: '1.6em',
+          lineHeight: 1.6,
+          fontSize: 'clamp(0.78rem, 2.6vw, 0.9rem)',
         }}
       >
         {isPlaying && 'WATCH THE SEQUENCE'}
@@ -125,7 +141,7 @@ export const ColourSequence = ({
           display: 'grid',
           gridTemplateColumns: '1fr 1fr',
           gap: '6px',
-          width: '280px',
+          width: 'var(--tile-grid)',
           margin: '0 auto',
         }}
       >
@@ -141,21 +157,24 @@ export const ColourSequence = ({
               disabled={!playerCanInput}
               onClick={() => handleTileClick(colourId)}
               style={{
-                width: '136px',
-                height: '136px',
+                width: 'calc(var(--tile-grid) / 2 - 3px)',
+                height: 'calc(var(--tile-grid) / 2 - 3px)',
                 backgroundColor: bg,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                borderRadius: '6px',
+                borderRadius: '16px',
                 transition: 'all 0.15s ease',
-                boxShadow: isActive ? `0 0 45px ${COLOURS[colourId].active}` : 'none',
-                border: '2px solid rgba(255,255,255,0.15)',
+                boxShadow: isActive
+                  ? `0 0 60px ${COLOURS[colourId].active}, 0 0 20px ${COLOURS[colourId].active}`
+                  : 'none',
+                border: `3px solid ${isActive ? COLOURS[colourId].active : 'rgba(255,255,255,0.08)'}`,
                 cursor: playerCanInput ? 'pointer' : 'not-allowed',
-                opacity: playerCanInput || isPlaying ? 1 : 0.6,
+                opacity: playerCanInput || isPlaying ? 1 : 0.7,
+                transform: isActive ? 'scale(0.95)' : 'scale(1)',
               }}
             >
-              <svg width="64" height="64" viewBox="0 0 64 64">
+              <svg width="36%" height="36%" viewBox="0 0 64 64">
                 <ShapeIcon />
               </svg>
             </button>

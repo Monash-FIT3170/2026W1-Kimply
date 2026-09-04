@@ -3,15 +3,6 @@ import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { Meteor } from 'meteor/meteor';
 import { useSubscribe, useTracker } from 'meteor/react-meteor-data';
 import { RoomsCollection } from '/imports/api/rooms';
-import {
-  CUSTOM_SETTING_LIMITS,
-  DEFAULT_GAME_MODE,
-  GAME_MODE_OPTIONS,
-  GAME_MODES,
-  gameModeLabel,
-  normalizeCustomSettings,
-  resolveGameSettings,
-} from '/imports/api/gameModes';
 import { ConfirmationPopup } from '../components/ConfirmationPopup';
 import {
   PRIMARY,
@@ -29,7 +20,22 @@ import {
   RainbowBar,
 } from '../components/design';
 
-const MAX_PLAYERS = 8;
+function getGameModeColor(mode) {
+  const colors = {
+    default: 'oklch(0.70 0.22 70)',
+    easy: 'oklch(0.75 0.20 120)',
+    medium: 'oklch(0.70 0.22 70)',
+    hard: 'oklch(0.65 0.22 25)',
+    custom: 'oklch(0.60 0.20 270)',
+    battle_royale: 'oklch(0.50 0.25 340)',
+  };
+  return colors[mode] || 'oklch(0.60 0.20 270)';
+}
+
+function getGameModeLabel(mode) {
+  if (mode === 'battle_royale') return 'Battle Royale Mode';
+  return `${(mode || 'default').charAt(0).toUpperCase()}${(mode || 'default').slice(1)} Mode`;
+}
 
 function BackButton({ onClick }) {
   return (
@@ -71,15 +77,6 @@ function PlayerRow({ player, isYou, onKick }) {
       ) : (
         <ReadyChip ready />
       )}
-    </div>
-  );
-}
-
-function EmptySlot() {
-  return (
-    <div className="flex items-center gap-3 rounded-xl border border-dashed border-hairline px-3.5 py-2.5">
-      <div className="h-8 w-8 shrink-0 rounded-full border border-dashed border-hairline" />
-      <span className="font-outfit text-[13px] font-medium text-fg3">Empty slot</span>
     </div>
   );
 }
@@ -127,132 +124,21 @@ function SharePanel({ link }) {
   );
 }
 
-function ModeBadge({ gameMode, customSettings }) {
-  const settings = resolveGameSettings(gameMode || DEFAULT_GAME_MODE, customSettings);
-
-  return (
-    <div className="inline-flex items-center gap-2 rounded-[10px] border border-hairline bg-surface px-2.5 py-1.5">
-      <span className="font-mono text-[10px] uppercase tracking-widest text-fg3">Mode</span>
-      <span className="font-mono text-[13px] font-bold text-fg">{gameModeLabel(settings.gameMode)}</span>
-      <span className="font-mono text-[10px] uppercase tracking-widest text-fg3">
-        {settings.lives} {settings.lives === 1 ? 'life' : 'lives'} · start {settings.startingLength}
-      </span>
-    </div>
-  );
-}
-
-function ModeSelector({ selectedMode, onSelect }) {
-  const selected = selectedMode || DEFAULT_GAME_MODE;
-  const colors = [TILE.teal, PRIMARY, TILE.pink, TILE.violet, TILE.amber];
-
-  return (
-    <div className="grid w-full gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(125px, 1fr))' }}>
-      {GAME_MODE_OPTIONS.map((option, index) => {
-        const active = option.value === selected;
-        const color = colors[index % colors.length];
-
-        return (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => onSelect(option.value)}
-            className="flex min-h-[62px] cursor-pointer flex-col justify-center rounded-lg border px-3 py-2 text-left transition-all"
-            style={{
-              background: active ? `color-mix(in oklab, ${color} 18%, transparent)` : 'oklch(0.20 0.02 270)',
-              borderColor: active ? `color-mix(in oklab, ${color} 70%, transparent)` : HAIRLINE,
-              boxShadow: active ? `0 8px 26px -16px color-mix(in oklab, ${color} 80%, transparent)` : 'none',
-            }}
-          >
-            <span className="font-outfit text-[13px] font-extrabold uppercase tracking-[0.12em] text-fg">
-              {option.label}
-            </span>
-            <span
-              className="mt-1 font-mono text-[9px] uppercase tracking-widest"
-              style={{ color: active ? color : FG2 }}
-            >
-              {option.detail}
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function CustomSettingControl({ label, value, min, max, onChange }) {
-  return (
-    <label className="bg-bg/40 flex flex-col gap-2 rounded-lg border border-hairline px-3 py-2.5">
-      <span className="flex items-center justify-between gap-3">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-fg3">{label}</span>
-        <span className="font-outfit text-sm font-extrabold text-fg">{value}</span>
-      </span>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
-        className="w-full"
-        style={{ accentColor: PRIMARY }}
-      />
-    </label>
-  );
-}
-
-function CustomSettingsPanel({ settings, onChange }) {
-  const customSettings = normalizeCustomSettings(settings);
-
-  const updateSetting = (key, value) => {
-    onChange({
-      ...customSettings,
-      [key]: value,
-    });
-  };
-
-  return (
-    <div className="mt-3 grid w-full gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
-      <CustomSettingControl
-        label="Start Length"
-        value={customSettings.startingLength}
-        min={CUSTOM_SETTING_LIMITS.startingLength.min}
-        max={CUSTOM_SETTING_LIMITS.startingLength.max}
-        onChange={(value) => updateSetting('startingLength', value)}
-      />
-      <CustomSettingControl
-        label="Lives"
-        value={customSettings.lives}
-        min={CUSTOM_SETTING_LIMITS.lives.min}
-        max={CUSTOM_SETTING_LIMITS.lives.max}
-        onChange={(value) => updateSetting('lives', value)}
-      />
-      <CustomSettingControl
-        label="Growth"
-        value={customSettings.sequenceGrowth}
-        min={CUSTOM_SETTING_LIMITS.sequenceGrowth.min}
-        max={CUSTOM_SETTING_LIMITS.sequenceGrowth.max}
-        onChange={(value) => updateSetting('sequenceGrowth', value)}
-      />
-    </div>
-  );
-}
-
-function HostView({ room, playerName, onBack, navigate }) {
+function HostView({ room, playerName, playerId, playerAccount, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
   const joinLink = `${window.location.origin}/play/join?code=${room.pin}`;
   const [editing, setEditing] = useState(true);
   const [gameName, setGameName] = useState('');
   const trimmedGameName = gameName.trim();
   const hasGameName = trimmedGameName.length > 0;
-  const selectedMode = room.gameMode || DEFAULT_GAME_MODE;
-  const customSettings = normalizeCustomSettings(room.customSettings);
 
   const handleStart = () => {
-    Meteor.call('rooms.start', room.pin, (err) => {
+    Meteor.call('rooms.start', room.pin, gameMode, (err) => {
       if (err) {
         console.error(err);
         return;
       }
-      navigate('/game', { state: { playerName, pin: room.pin } });
+      navigate('/game', { state: { playerName, playerId, pin: room.pin, gameMode, playerAccount } });
     });
   };
 
@@ -263,19 +149,6 @@ function HostView({ room, playerName, onBack, navigate }) {
   const saveGameName = async () => {
     await Meteor.callAsync('rooms.updateGameName', room.pin, hasGameName ? trimmedGameName : `Game${room.pin}`);
     setEditing(false);
-  };
-
-  const updateGameMode = (gameMode) => {
-    if (gameMode === selectedMode) return;
-    Meteor.call('rooms.updateGameMode', room.pin, gameMode, (err) => {
-      if (err) console.error(err);
-    });
-  };
-
-  const updateCustomSettings = (settings) => {
-    Meteor.call('rooms.updateCustomSettings', room.pin, settings, (err) => {
-      if (err) console.error(err);
-    });
   };
 
   return (
@@ -326,17 +199,16 @@ function HostView({ room, playerName, onBack, navigate }) {
             )}
           </div>
 
-          <div className="w-full">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <p className="font-mono text-[10px] uppercase tracking-widest text-fg3">Game Mode</p>
-              <span className="font-mono text-[10px] uppercase tracking-widest text-fg3">
-                {gameModeLabel(selectedMode)}
-              </span>
-            </div>
-            <ModeSelector selectedMode={selectedMode} onSelect={updateGameMode} />
-            {selectedMode === GAME_MODES.CUSTOM && (
-              <CustomSettingsPanel settings={customSettings} onChange={updateCustomSettings} />
-            )}
+          {/* Game Mode Badge */}
+          <div
+            className="flex items-center gap-2 rounded-full px-4 py-2"
+            style={{ background: getGameModeColor(gameMode) }}
+          >
+            <span className="font-outfit text-sm font-semibold text-bg">
+              {gameMode === 'battle_royale'
+                ? 'Battle Royale Mode'
+                : gameMode.charAt(0).toUpperCase() + gameMode.slice(1) + ' Mode'}
+            </span>
           </div>
 
           <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-fg3">Your Room Code</p>
@@ -374,7 +246,7 @@ function HostView({ room, playerName, onBack, navigate }) {
             <p className="font-outfit text-[13px] font-bold uppercase tracking-widest text-fg2">
               Players{' '}
               <span className="text-fg3">
-                ({players.length}/{MAX_PLAYERS})
+                ({players.length})
               </span>
             </p>
             <div className="inline-flex items-center gap-1.5 font-mono text-[11px]" style={{ color: TILE.amber }}>
@@ -414,9 +286,9 @@ function HostView({ room, playerName, onBack, navigate }) {
   );
 }
 
-function JoinedView({ room, playerName, onBack, navigate, initialGameMode, initialCustomSettings }) {
+function JoinedView({ room, playerName, playerId, playerAccount, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
-  const emptySlots = Math.max(0, MAX_PLAYERS - players.length);
+  const selectedGameMode = room.gameMode || gameMode || 'default';
 
   const stillInRoom = !playerName || players.some((p) => p.name === playerName);
   useEffect(() => {
@@ -425,7 +297,7 @@ function JoinedView({ room, playerName, onBack, navigate, initialGameMode, initi
 
   useEffect(() => {
     if (!playerName) {
-      // State lost on refresh — let the reconnect popup handle it
+      // State lost on refresh let the reconnect popup handle it
       navigate('/play', { replace: true });
       return;
     }
@@ -437,11 +309,11 @@ function JoinedView({ room, playerName, onBack, navigate, initialGameMode, initi
 
   useEffect(() => {
     if (room?.status === 'in_progress') {
-      navigate('/game', { state: { playerName, pin: room.pin } });
+      navigate('/game', {
+        state: { playerName, playerId, pin: room.pin, gameMode: selectedGameMode, playerAccount },
+      });
     }
   }, [room?.status]);
-
-  const progress = (players.length / MAX_PLAYERS) * 100;
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden bg-bg text-fg">
@@ -462,22 +334,24 @@ function JoinedView({ room, playerName, onBack, navigate, initialGameMode, initi
                 {room.gameName}
               </h1>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <ModeBadge
-                gameMode={room.gameMode || initialGameMode}
-                customSettings={room.customSettings || initialCustomSettings}
-              />
-              <div className="inline-flex items-center gap-2 rounded-[10px] border border-hairline bg-surface px-2.5 py-1.5">
-                <span className="font-mono text-[10px] uppercase tracking-widest text-fg3">Room</span>
-                <span className="font-mono text-[13px] font-bold text-fg">{room.pin}</span>
-              </div>
+            <div className="inline-flex items-center gap-2 rounded-[10px] border border-hairline bg-surface px-2.5 py-1.5">
+              <span className="font-mono text-[10px] uppercase tracking-widest text-fg3">Room</span>
+              <span className="font-mono text-[13px] font-bold text-fg">{room.pin}</span>
             </div>
+          </div>
+
+          {/* Game Mode Badge */}
+          <div
+            className="flex w-fit items-center gap-2 rounded-full px-4 py-2"
+            style={{ background: getGameModeColor(selectedGameMode) }}
+          >
+            <span className="font-outfit text-sm font-semibold text-bg">{getGameModeLabel(selectedGameMode)}</span>
           </div>
           <div className="flex items-center justify-between">
             <p className="font-outfit text-sm font-bold uppercase tracking-widest text-fg2">
               Players{' '}
               <span className="text-fg3">
-                ({players.length}/{MAX_PLAYERS})
+                ({players.length})
               </span>
             </p>
             <span className="font-mono text-[11px] text-fg3">
@@ -485,24 +359,10 @@ function JoinedView({ room, playerName, onBack, navigate, initialGameMode, initi
             </span>
           </div>
 
-          {/* progress bar */}
-          <div className="h-1.5 overflow-hidden rounded-full bg-surface">
-            <div
-              className="h-full rounded-full"
-              style={{
-                width: `${progress}%`,
-                background: `linear-gradient(90deg, ${TILE.pink}, ${TILE.amber}, ${TILE.teal}, ${TILE.violet})`,
-              }}
-            />
-          </div>
-
           {/* players grid */}
           <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
             {players.map((p, i) => (
               <PlayerRow key={p.id || i} player={p} isYou={p.name === playerName} />
-            ))}
-            {Array.from({ length: emptySlots }).map((_, i) => (
-              <EmptySlot key={`e${i}`} />
             ))}
           </div>
           <div className="mt-auto flex justify-center pt-3">
@@ -511,7 +371,7 @@ function JoinedView({ room, playerName, onBack, navigate, initialGameMode, initi
               style={{ color: TILE.amber }}
             >
               <span className="h-2 w-2 animate-kimply-pulse rounded-full" style={{ background: TILE.amber }} />
-              Waiting for host to start the game…
+              Waiting for host to start the game...
             </div>
           </div>
         </div>
@@ -527,15 +387,20 @@ export function PlayerLobby() {
   const playerName = state?.playerName || '';
   const playerId = state?.playerId || '';
   const isHost = state?.isHost === true;
+  const playerAccount = state?.playerAccount;
   const gameStarted = useRef(false);
   const [showExitPopup, setShowExitPopup] = useState(false);
   const isLoading = useSubscribe('rooms.lobby', pin);
   const room = useTracker(() => RoomsCollection.findOne({ pin }));
+  const gameMode = room?.gameMode || state?.gameMode || 'default';
+  const customSettings = room?.customSettings || state?.customSettings || null;
 
   useEffect(() => {
     if (room?.status === 'in_progress' && !gameStarted.current) {
       gameStarted.current = true;
-      navigate('/game', { state: { playerName, pin: room.pin } });
+      navigate('/game', {
+        state: { playerName, playerId, pin: room.pin, gameMode, playerAccount },
+      });
     }
   }, [room?.status]);
 
@@ -543,11 +408,6 @@ export function PlayerLobby() {
     navigate('/play', { replace: true });
     return null;
   }
-  useEffect(() => {
-    if (room === undefined && !isLoading) {
-      navigate('/play', { replace: true });
-    }
-  }, [room]);
 
   if (!room) {
     return (
@@ -567,9 +427,9 @@ export function PlayerLobby() {
           setShowExitPopup(false);
           Meteor.call('rooms.disconnect', pin, playerId);
 
-          // removing session storage of reconnect data
           localStorage.removeItem('reconnectData');
-          navigate('/play', { replace: true });
+          navigate('/play', { replace: true, state: { playerAccount } });
+
         }}
         onCancel={() => {
           setShowExitPopup(false);
@@ -583,15 +443,26 @@ export function PlayerLobby() {
       />
 
       {isHost ? (
-        <HostView room={room} playerName={playerName} onBack={onBack} navigate={navigate} />
+        <HostView
+          room={room}
+          playerName={playerName}
+          playerId={playerId}
+          playerAccount={playerAccount}
+          onBack={onBack}
+          navigate={navigate}
+          gameMode={gameMode}
+          customSettings={customSettings}
+        />
       ) : (
         <JoinedView
           room={room}
           playerName={playerName}
+          playerId={playerId}
+          playerAccount={playerAccount}
           onBack={onBack}
           navigate={navigate}
-          initialGameMode={state?.gameMode}
-          initialCustomSettings={state?.customSettings}
+          gameMode={gameMode}
+          customSettings={customSettings}
         />
       )}
     </>
