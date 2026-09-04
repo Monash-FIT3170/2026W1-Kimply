@@ -9,6 +9,7 @@ import { EndLeaderboard } from '../EndLeaderboard.jsx';
 import { useLocation } from 'react-router-dom';
 import { TileLattice, BG } from '../components/design';
 import { RoomsCollection } from '../../api/rooms';
+
 export const GamePage = () => {
   const [playerId, setPlayerId] = useState(null);
   const [playerCanInput, setPlayerCanInput] = useState(false);
@@ -18,6 +19,9 @@ export const GamePage = () => {
   const [correctGlow, setCorrectGlow] = useState(false);
   const [replayKey, setReplayKey] = useState(0);
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(true);
+  const [showPowerupPopup, setShowPowerupPopup] = useState(false);
+  const [completedRoundId, setCompletedRoundId] = useState(null);
+
   const location = useLocation();
   const playerNameFromLobby = location.state?.playerName || 'Demo Player';
   const gameMode = location.state?.gameMode || 'standard';
@@ -27,11 +31,13 @@ export const GamePage = () => {
   // No 'demo' fallback: the publications are scoped by gameId, so a placeholder
   // would subscribe to a game that does not exist and hang on LOADING forever.
   const gameId = roomPin || null;
+
   useEffect(() => {
     if (!gameId || lobbyPlayerId) return;
     const savedPlayerId = localStorage.getItem(`gamePlayerId:${gameId}`);
     if (savedPlayerId) setPlayerId(savedPlayerId);
   }, [gameId, lobbyPlayerId]);
+
   useEffect(() => {
     if (!gameId) return undefined;
     const roundsSub = Meteor.subscribe('rounds', gameId);
@@ -43,14 +49,17 @@ export const GamePage = () => {
       roomSub.stop();
     };
   }, [gameId]);
+
   const player = useTracker(() => {
     if (!playerId) return null;
     return PlayersCollection.findOne(playerId);
   }, [playerId]);
+
   const room = useTracker(() => {
     if (!gameId) return null;
     return RoomsCollection.findOne({ pin: gameId });
   }, [gameId]);
+
   const round = useTracker(() => {
     if (!gameId) return null;
     //in battle royale follow the player's specific round
@@ -59,14 +68,14 @@ export const GamePage = () => {
     }
     return RoundsCollection.findOne({ gameId, isCurrent: true });
   }, [gameId, player?.roundId]);
- const totalLives =
-  room?.gameMode === 'custom'
-    ? (room.customSettings?.startingLives ?? 3)
-    : isBattleRoyale
-      ? 1  // Battle Royale gives each player only 1 life.
-// Other game modes keep their existing life settings.
-      : 3;
-        useEffect(() => {
+     const totalLives =
+    room?.gameMode === 'custom'
+      ? (room.customSettings?.startingLives ?? 3)
+      : isBattleRoyale
+        ? 1
+        : 3;
+
+  useEffect(() => {
     if (!round?._id || playerId) return;
     // get game mode
     const gameMode = location.state?.gameMode || 'standard';
@@ -89,6 +98,7 @@ export const GamePage = () => {
       }
     );
   }, [round?._id, playerId, gameId, playerNameFromLobby, lobbyPlayerId]);
+
   useEffect(() => {
     setPlayerCanInput(false);
     setAttemptedSequence([]);
@@ -96,12 +106,19 @@ export const GamePage = () => {
     setCompletedRoundId(null);
     setReplayKey((prev) => prev + 1); //play sequence flash for new round
   }, [player?.roundId]); //watch sequence of player's specific roundId
+
+  // Show the slow-motion powerup popup whenever the player picks it up
+  useEffect(() => {
+    setShowPowerupPopup(!!player?.slowMotionActive);
+  }, [player?.slowMotionActive]);
+
   const handleColourClick = (colour) => {
     if (!playerCanInput) return;
     if (!round?.sequence) return;
     if (attemptedSequence.length >= round.sequence.length) return;
     setAttemptedSequence([...attemptedSequence, colour]);
   };
+
   const handleSubmit = () => {
     if (!playerId) {
       setMessage('Player is not ready yet.');
@@ -143,10 +160,12 @@ export const GamePage = () => {
       }
     });
   };
+
   const handleClear = () => {
     setAttemptedSequence([]);
     setMessage('Try again. Repeat the flashed sequence.');
   };
+
   // Reached by loading /game directly, or after a refresh drops location.state.
   // Without a room PIN there is no game to subscribe to, so say so instead of
   // sitting on LOADING indefinitely.
@@ -172,6 +191,7 @@ export const GamePage = () => {
       </div>
     );
   }
+
   if (!round) {
     return (
       <div
@@ -197,10 +217,13 @@ export const GamePage = () => {
       </div>
     );
   }
+
   if (!player) return null;
+
   if (player?.gameFinished) {
     return <EndLeaderboard gameId={player.gameId} currentPlayerId={player._id} />;
   }
+
   if (player?.eliminated) {
     const longestStreak = player.longestStreak ?? 0;
     const totalGuesses = player.totalGuesses ?? 0;
@@ -299,6 +322,7 @@ export const GamePage = () => {
       </div>
     );
   }
+
   return (
     <div
       style={{
@@ -316,6 +340,24 @@ export const GamePage = () => {
       }}
     >
       <TileLattice opacity={0.06} />
+      {showPowerupPopup && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '20px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: '#0a84ff',
+            color: 'white',
+            padding: '14px 28px',
+            borderRadius: '12px',
+            fontWeight: 'bold',
+            zIndex: 1000,
+          }}
+        >
+          Powerup Gained: Slow Motion for one round!
+        </div>
+      )}
       <div className="relative flex shrink-0 justify-between px-7 py-5" style={{ width: '100%' }}>
         <span
           style={{
@@ -445,7 +487,13 @@ export const GamePage = () => {
               setMessage('Your turn. Repeat the sequence.');
             }}
             onColourClick={handleColourClick}
-            flashingSpeed={room?.customSettings?.flashingSpeed || 'medium'}
+            flashingSpeed={
+              player?.slowMotionActive
+                ? 'slow'
+                : room?.gameMode === 'custom'
+                ? room.customSettings?.flashingSpeed
+                : 'medium'
+            }
           />
           <p
             style={{
@@ -525,7 +573,6 @@ export const GamePage = () => {
       >
         {isLeaderboardOpen ? 'Collapse leaderboard' : 'Leaderboard'}
       </button>
-
       <aside
         className={`relative z-30 mx-auto mt-6 w-full max-w-[calc(100vw-2rem)] px-4 pb-8 transition-all duration-300 ease-in-out md:fixed md:right-6 md:top-20 md:mx-0 md:mt-0 md:w-[28rem] md:max-w-[calc(100vw-3rem)] md:px-0 md:pb-0 md:transition-transform ${
           isLeaderboardOpen ? 'block md:translate-x-0' : 'hidden md:block md:translate-x-full'
