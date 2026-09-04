@@ -41,7 +41,7 @@ Everything below has a home of its own. Read the home file rather than expecting
 |---|---|
 | [`docs/design_system.md`](docs/design_system.md) | Colour, type, spacing, radii, motion, components, patterns, voice. The design source of truth |
 | [`docs/defect-register.md`](docs/defect-register.md) | Every known defect: how it actually fails and what the fix is |
-| [`docs/quality-assurance-plan.md`](docs/quality-assurance-plan.md) | How quality is defined and enforced: testing plan, git gates, NFRs with measurements, accessibility posture |
+| [`docs/quality-assurance-plan-submission.md`](docs/quality-assurance-plan-submission.md) | How quality is defined and enforced: testing plan, git gates, NFRs with measurements, accessibility posture |
 | [`docs/decision-log.md`](docs/decision-log.md) | Dated record of what changed and why, newest first |
 | [`docs/deployment-manual.md`](docs/deployment-manual.md) | Production runbook, from empty AWS account to serving traffic |
 | [`docs/dev-environment.md`](docs/dev-environment.md) | How the development stack differs from production |
