@@ -20,6 +20,25 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-09-04 - The Quality Assurance Plan moved into the repo as docs/quality-assurance-plan.md
+
+The QA plan existed only as a submission document, written before most of the machinery it described was built.
+It claimed an agile-subteam branch model the repo no longer uses, quoted performance targets that had never been measured, and described security in terms that the defect register contradicts.
+
+It now lives in `docs/quality-assurance-plan.md` alongside the documents it points at, and every claim in it is either sourced from the codebase or marked as an unmet target.
+
+Three things that are not obvious from the diff:
+
+- **Unmet requirements are now stated as unmet, with the measurement.**
+  The "under 0.5s response" performance NFR is marked not met and carries the real numbers from `loadtest/logs/ddp-gameplayLoad-results.log`: `players.submitSequence` at p50 1092ms locally and p50 4366ms on dev at 100 players.
+  The plan is more useful as an accurate account of where we are than as a list of things we would like to be true.
+- **The security section is written against the defect register rather than around it.**
+  D3 and D8 appear in the plan by ID, together with the explicit statement that the D3 fix is connection binding and not a login wall, so a future reader cannot use the QA plan as justification for auth-gating the game.
+- **The plan ends with its own gap list.**
+  Section 7 names what the plan does not yet cover, including the coverage smoke gate, the D14 formatting gate, and the absent end-to-end test, so the next milestone closes them deliberately instead of rediscovering them.
+
+Files: `docs/quality-assurance-plan.md` (new), `AGENTS.md`.
+
 ## 2026-09-01 - The game screen now scales to the viewport instead of overflowing it (D19)
 
 The play column was sized in fixed pixels and `vw`, so it stayed about 740px tall on every screen while the container was pinned to `100dvh` with `overflow: hidden`. Starting the turn added two rows (the message and the `Time left` line, which only existed while input was open), pushed the button row past the fold, and the buttons were clipped with no way to scroll to them. On a full-height 1512x828 laptop there were 7px to spare before the turn started, which is why it read as a mobile bug.
