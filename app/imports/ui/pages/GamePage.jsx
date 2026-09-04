@@ -31,8 +31,7 @@ export const GamePage = () => {
 
   const location = useLocation();
   const playerNameFromLobby = location.state?.playerName || 'Demo Player';
-  const gameMode = location.state?.gameMode || 'standard';
-  const isBattleRoyale = gameMode === 'battle_royale';
+  const routeGameMode = location.state?.gameMode;
   const roomPin = location.state?.pin;
   const lobbyPlayerId = location.state?.playerId;
   const accountId = location.state?.playerAccount?._id || null;
@@ -92,6 +91,8 @@ export const GamePage = () => {
     if (!gameId) return null;
     return RoomsCollection.findOne({ pin: gameId });
   }, [gameId]);
+  const gameMode = room?.gameMode || routeGameMode || 'default';
+  const isBattleRoyale = gameMode === 'battle_royale';
 
   const round = useTracker(() => {
     if (!gameId) return null;

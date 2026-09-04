@@ -95,6 +95,20 @@ if (Meteor.isServer) {
         assert.ok(joined.id);
       });
 
+      it('returns selected game mode details to joining players', async function () {
+        await Meteor.callAsync('rooms.setGameMode', testPin, 'easy');
+
+        const result = await Meteor.callAsync('rooms.join', testPin, 'Player2');
+
+        assert.strictEqual(result.gameMode, 'easy');
+        assert.deepStrictEqual(result.customSettings, {
+          flashingSpeed: 'slow',
+          startingLives: 5,
+          startingSequenceLength: 1,
+          sequenceGrowth: 1,
+        });
+      });
+
       it('trims whitespace from playerName', async function () {
         await Meteor.callAsync('rooms.join', testPin, '  Player2  ');
         const room = await RoomsCollection.findOneAsync({ pin: testPin });

@@ -12,7 +12,7 @@ function RouteCard({ kind, title, blurb, color, primary, onClick, disabled }) {
     <button
       onClick={onClick}
       disabled={disabled}
-      className="relative flex min-h-[150px] flex-col gap-2.5 overflow-hidden rounded-[18px] p-5 text-left transition-opacity"
+      className="relative flex min-h-[150px] flex-col gap-2.5 overflow-hidden rounded-[18px] p-5 text-left transition-all hover:-translate-y-0.5"
       style={{
         background: primary ? color : 'oklch(0.20 0.02 270)',
         color: primary ? BG : 'oklch(0.97 0.006 80)',
@@ -24,7 +24,7 @@ function RouteCard({ kind, title, blurb, color, primary, onClick, disabled }) {
           : '0 6px 18px -10px rgba(0,0,0,0.5)',
       }}
     >
-      <div className="flex items-start justify-between">
+      <div className="flex items-start">
         {kind === 'create' ? (
           <div className="relative h-11 w-11">
             <div
@@ -51,16 +51,6 @@ function RouteCard({ kind, title, blurb, color, primary, onClick, disabled }) {
             <ArrowIcon size={18} stroke={primary ? BG : color} />
           </div>
         )}
-        <div
-          className="flex h-8 w-8 items-center justify-center rounded-lg"
-          style={{
-            background: primary
-              ? `color-mix(in oklab, ${BG} 12%, transparent)`
-              : `color-mix(in oklab, ${color} 18%, transparent)`,
-          }}
-        >
-          <ArrowIcon size={14} stroke={primary ? BG : color} />
-        </div>
       </div>
 
       <div className="mt-auto">

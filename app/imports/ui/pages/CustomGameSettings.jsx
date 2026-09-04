@@ -16,6 +16,7 @@ export function CustomGameSettings() {
   ];
   const [numLives, setNumLives] = useState(3);
   const [startingSequenceLength, setStartingSequenceLength] = useState(4);
+  const [sequenceGrowth, setSequenceGrowth] = useState(1);
   const [error, setError] = useState('');
 
   const handleConfirm = async () => {
@@ -24,6 +25,7 @@ export function CustomGameSettings() {
       flashingSpeed: selectedFlashSpeed.backendValue,
       startingLives: numLives,
       startingSequenceLength,
+      sequenceGrowth,
     };
 
     setError('');
@@ -130,6 +132,26 @@ export function CustomGameSettings() {
               max="10"
               value={startingSequenceLength}
               onChange={(e) => setStartingSequenceLength(Number(e.target.value))}
+              className="mt-3 w-full cursor-pointer"
+              style={{
+                accentColor: PRIMARY,
+              }}
+            />
+          </div>
+
+          {/* Sequence Growth */}
+          <div className="mb-7">
+            <div className="flex items-center justify-between">
+              <label className="font-mono text-[11px] uppercase tracking-[0.16em] text-white font-bold">Growth</label>
+              <span className="font-outfit text-lg font-bold text-fg">+{sequenceGrowth}</span>
+            </div>
+            <p className="mt-1 font-manrope text-[12px] text-fg3">Extra colours added each round (1-3)</p>
+            <input
+              type="range"
+              min="1"
+              max="3"
+              value={sequenceGrowth}
+              onChange={(e) => setSequenceGrowth(Number(e.target.value))}
               className="mt-3 w-full cursor-pointer"
               style={{
                 accentColor: PRIMARY,
