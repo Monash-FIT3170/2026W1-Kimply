@@ -11,7 +11,7 @@ import { EndLeaderboard } from '../EndLeaderboard.jsx';
 import { EliminationFeed } from '../EliminationFeed.jsx';
 import { useLocation } from 'react-router-dom';
 import { TileLattice } from '../components/design';
-import { ROUND_TIMER_SECONDS as ROUND_SECONDS, LEVEL_UP_TOAST_MS } from '../../constants';
+import { ROUND_TIMER_SECONDS as ROUND_SECONDS, LEVEL_UP_TOAST_MS, DEFAULT_STARTING_LIVES } from '../../constants';
 
 const seqSeenKey = (gameId, roundId) => `seqSeen:${gameId}:${roundId}`;
 
@@ -105,7 +105,7 @@ export const GamePage = () => {
 
   // startingLives is copied into customSettings for every preset mode (easy=5, hard=1, ...),
   // not just 'custom', so size the lives track off customSettings regardless of gameMode.
-  const totalLives = room?.customSettings?.startingLives ?? 3;
+  const totalLives = room?.customSettings?.startingLives ?? DEFAULT_STARTING_LIVES;
   const levelUpEvents = useTracker(() => {
     if (!gameId) return [];
     return GameEventsCollection.find({ gameId, type: 'level-up' }, { sort: { createdAt: -1 } }).fetch();
@@ -339,7 +339,34 @@ export const GamePage = () => {
           padding: '24px',
         }}
       >
-        <h1 style={{ fontSize: '3rem', marginBottom: '18px' }}>GAME OVER</h1>
+        <h1
+          style={{
+            fontSize: '3rem',
+            marginBottom: '18px',
+            color: isBattleRoyale ? '#ff6b6b' : 'white',
+            fontWeight: '900',
+            letterSpacing: '4px',
+            textTransform: 'uppercase',
+          }}
+        >
+          {isBattleRoyale ? 'ELIMINATED' : 'GAME OVER'}
+        </h1>
+        {isBattleRoyale && (
+          <div
+            style={{
+              border: '1px solid #e03030',
+              borderRadius: '10px',
+              padding: '12px 24px',
+              marginBottom: '24px',
+              background: 'rgba(224, 48, 48, 0.12)',
+              color: '#ff6b6b',
+              fontWeight: 'bold',
+              letterSpacing: '1px',
+            }}
+          >
+            You lost your final life.
+          </div>
+        )}
         <div
           style={{
             border: '1px solid rgba(255,255,255,0.18)',
@@ -500,6 +527,24 @@ export const GamePage = () => {
         </span>
       </div>
       <div className="relative flex min-h-0 flex-1 flex-col items-center justify-start overflow-y-auto md:justify-center">
+        {isBattleRoyale && (
+          <div
+            style={{
+              marginBottom: '1dvh',
+              padding: 'clamp(3px, 0.7dvh, 8px) clamp(10px, 1.5vw, 18px)',
+              borderRadius: '8px',
+              backgroundColor: '#222',
+              border: '1px solid #ffd369',
+              color: '#ffd369',
+              fontWeight: 'bold',
+              fontSize: 'clamp(11px, 1.2vw, 18px)',
+              letterSpacing: '1px',
+              textAlign: 'center',
+            }}
+          >
+            BATTLE ROYALE • 1 LIFE ONLY
+          </div>
+        )}
         <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2dvh' }}>
           {Array.from({ length: totalLives }, (_, i) => i + 1).map((heart) => (
             <div
@@ -521,6 +566,25 @@ export const GamePage = () => {
             </div>
           ))}
         </div>
+        {/* Show a warning when a Battle Royale player is on their final life */}
+        {isBattleRoyale && player?.lives === 1 && (
+          <div
+            style={{
+              marginBottom: '1dvh',
+              padding: 'clamp(3px, 0.7dvh, 8px) clamp(10px, 1.5vw, 18px)',
+              borderRadius: '8px',
+              backgroundColor: '#3a1f1f',
+              border: '1px solid #e03030',
+              color: '#ff6b6b',
+              fontWeight: 'bold',
+              fontSize: 'clamp(11px, 1.2vw, 18px)',
+              letterSpacing: '1px',
+              textAlign: 'center',
+            }}
+          >
+            FINAL LIFE
+          </div>
+        )}
         <div style={{ textAlign: 'center' }}>
           <p
             style={{
@@ -669,7 +733,6 @@ export const GamePage = () => {
       >
         {isLeaderboardOpen ? 'Collapse leaderboard' : 'Leaderboard'}
       </button>
-
       <aside
         className={`fixed right-4 top-20 z-30 w-[calc(100vw-2rem)] max-w-[28rem] transition-transform duration-300 ease-in-out ${
           isLeaderboardOpen ? 'translate-x-0' : 'translate-x-[120%]'

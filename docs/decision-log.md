@@ -104,6 +104,12 @@ Skills live once under `.agents/skills/` (`git`, `test`, `ui`, `review`). `.clau
 Removed the Claude-only memory-file protocol (those files were never in the repo). `.gitignore` no longer ignores all of `.claude/`, only `settings.local.json` and `worktrees/`.
 Tables refreshed against `dev`: live leaderboard subscribes to `players` + `rounds` (not the `leaderboard` pub), `publications.test.js` and `leaderboardModel.test.js` exist, `GamePage` has no `'demo'` gameId.
 
+## 2026-08-24 - Custom flash speed choices
+
+The custom game settings page offers Fast, Med and Slow flash-speed choices, mapped to 200 ms, 500 ms and 1000 ms. The existing numeric `flashSpeed` setting passed through navigation is unchanged.
+
+Carried over from the Feature Log in `CLAUDE.md` on `battle-royale-status-ui-trisha`, which became a symlink to `AGENTS.md` when that branch merged `dev`. The entry would otherwise have been lost with the file.
+
 ## 2026-08-21 - A development environment that mirrors production, deployed from `dev`
 `dev.kimply.online` is now a second, fully independent copy of the production stack on its own `t4g.small`, with its own Elastic IP, ECR repository, IAM roles and Atlas cluster.
 Files: new `.github/workflows/deploy.yml` (replaces `docker-ecr.yml`), new `docs/dev-environment.md`; `deploy/deploy.sh`, `deploy/build-push.sh`, `deploy/init-letsencrypt.sh`, `docs/deployment-manual.md`, `docs/operations.md`, `CLAUDE.md`.

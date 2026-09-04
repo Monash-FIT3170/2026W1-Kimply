@@ -58,6 +58,7 @@ export function CustomGameSettings() {
       {/* top bar */}
       <div className="relative flex shrink-0 items-center justify-between px-7 py-5">
         <Wordmark />
+        <span className="font-mono text-[11px] uppercase tracking-widest text-fg3">v1.0.0</span>
       </div>
 
       <div className="relative flex flex-1 flex-col items-center justify-center gap-7 overflow-y-auto px-7 pb-14">
