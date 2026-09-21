@@ -96,6 +96,12 @@ export const GamePage = () => {
 
   const round = useTracker(() => {
     if (!gameId) return null;
+    // Eliminated players stay on their original round in the database. Follow
+    // the active round instead so their spectator view remains live after the
+    // remaining players advance.
+    if (player?.eliminated) {
+      return RoundsCollection.findOne({ gameId, isCurrent: true }) || RoundsCollection.findOne(player.roundId);
+    }
     // in battle royale follow the player's specific round
     if (player?.roundId) {
       return RoundsCollection.findOne(player.roundId);
@@ -320,120 +326,23 @@ export const GamePage = () => {
     );
   }
 
-  if (player?.eliminated) {
-    const longestStreak = player.longestStreak ?? 0;
-    const totalGuesses = player.totalGuesses ?? 0;
-    const correctGuesses = player.correctGuesses ?? 0;
-    const accuracy = totalGuesses > 0 ? Math.round((correctGuesses / totalGuesses) * 100) : 0;
+  if (player.eliminated || player.completeRound) {
+    const isEliminated = player.eliminated;
     return (
-      <div
-        style={{
-          minHeight: '100vh',
-          background: '#000',
-          color: 'white',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          textAlign: 'center',
-          padding: '24px',
-        }}
-      >
-        <h1
-          style={{
-            fontSize: '3rem',
-            marginBottom: '18px',
-            color: isBattleRoyale ? '#ff6b6b' : 'white',
-            fontWeight: '900',
-            letterSpacing: '4px',
-            textTransform: 'uppercase',
-          }}
-        >
-          {isBattleRoyale ? 'ELIMINATED' : 'GAME OVER'}
-        </h1>
-        {isBattleRoyale && (
-          <div
-            style={{
-              border: '1px solid #e03030',
-              borderRadius: '10px',
-              padding: '12px 24px',
-              marginBottom: '24px',
-              background: 'rgba(224, 48, 48, 0.12)',
-              color: '#ff6b6b',
-              fontWeight: 'bold',
-              letterSpacing: '1px',
-            }}
-          >
-            You lost your final life.
-          </div>
-        )}
-        <div
-          style={{
-            border: '1px solid rgba(255,255,255,0.18)',
-            borderRadius: '14px',
-            padding: '18px 24px',
-            background: 'rgba(255,255,255,0.08)',
-            minWidth: '220px',
-          }}
-        >
-          <p
-            style={{
-              color: '#aaa',
-              fontSize: '0.75rem',
-              fontWeight: 'bold',
-              letterSpacing: '3px',
-              marginBottom: '8px',
-              textTransform: 'uppercase',
-            }}
-          >
-            Longest Streak
+      <div className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-[#1a0533] to-[#0d1b4b] px-4 py-10 text-center">
+        <TileLattice opacity={0.06} />
+        <main className="relative z-10 flex w-full max-w-lg flex-col items-center gap-5">
+          <p className="font-mono text-xs font-bold uppercase tracking-[0.3em] text-fg3">Live round activity</p>
+          <h1 className="font-outfit text-3xl font-extrabold text-fg sm:text-4xl">
+            {isEliminated ? 'You are spectating' : 'Round complete'}
+          </h1>
+          <p className="max-w-md font-manrope text-sm leading-6 text-fg2">
+            {isEliminated
+              ? 'You are out of this game, but you can still follow the remaining players.'
+              : 'Nice work. Follow the remaining players until the next round begins.'}
           </p>
-          <p style={{ color: '#ffd369', fontSize: '3rem', fontWeight: 'bold', lineHeight: 1 }}>{longestStreak}</p>
-          <p style={{ color: '#ccc', fontSize: '0.9rem', marginTop: '8px' }}>
-            {longestStreak === 1 ? 'round correct in a row' : 'rounds correct in a row'}
-          </p>
-          <div
-            style={{
-              height: '1px',
-              background: 'rgba(255,255,255,0.12)',
-              margin: '16px 0 14px',
-            }}
-          />
-          <p
-            style={{
-              color: '#aaa',
-              fontSize: '0.75rem',
-              fontWeight: 'bold',
-              letterSpacing: '3px',
-              marginBottom: '8px',
-              textTransform: 'uppercase',
-            }}
-          >
-            Accuracy
-          </p>
-          <p style={{ color: '#9ce8ff', fontSize: '2rem', fontWeight: 'bold', lineHeight: 1 }}>{accuracy}%</p>
-          <p style={{ color: '#ccc', fontSize: '0.9rem', marginTop: '8px' }}>
-            {correctGuesses}/{totalGuesses} correct guesses
-          </p>
-        </div>
-        <a
-          href="/play"
-          style={{
-            marginTop: '24px',
-            padding: '12px 28px',
-            borderRadius: '999px',
-            border: '1px solid rgba(124,255,178,0.5)',
-            background: 'rgba(124,255,178,0.12)',
-            color: '#7CFFB2',
-            fontWeight: 'bold',
-            letterSpacing: '2px',
-            textTransform: 'uppercase',
-            fontSize: '0.85rem',
-            textDecoration: 'none',
-          }}
-        >
-          New Game
-        </a>
+          <Leaderboard gameId={gameId} currentPlayerId={playerId} />
+        </main>
         <EliminationFeed gameId={gameId} />
       </div>
     );

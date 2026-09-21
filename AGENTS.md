@@ -10,7 +10,7 @@ Shared guidance for any coding agent working in this repository (Cursor, Claude 
 > If you change any of those things, update the matching table before you finish, and add an entry to [docs/decision-log.md](docs/decision-log.md) in the same change.
 > See [Maintaining this file](#maintaining-this-file) at the bottom.
 
-**Last verified against the codebase:** 2026-08-29
+**Last verified against the codebase:** 2026-09-21
 
 ---
 
@@ -319,15 +319,15 @@ The module carries a `global._publicationsInitialized` guard because under `--fu
 
 | File:line | Publication | Args |
 |---|---|---|
-| `ui/pages/GamePage.jsx:28` | `rounds` | `gameId` |
-| `ui/pages/GamePage.jsx:29` | `players` | `gameId` |
+| `ui/pages/GamePage.jsx` | `rounds`, `players`, `rooms.lobby`, `gameEvents` | `gameId` |
 | `ui/Leaderboard.jsx:12-13` | `players`, `rounds` | `gameId` |
 | `ui/EndLeaderboard.jsx:30` | `players` | `gameId` |
+| `ui/EliminationFeed.jsx` | `eliminations` | `gameId` |
 | `ui/pages/PlayerLobby.jsx:366` | `rooms.lobby` | `pin` |
 
 The `leaderboard` publication still exists and is tested, but the live UI no longer subscribes to it. `Leaderboard.jsx` builds rows from `players` + the current round via `leaderboardModels.js`. The `leaderboard` collection is still written by `players.submitSequence`.
 
-`GamePage` derives `gameId` from `location.state.pin` and renders a "no game selected" screen when it is absent.
+`GamePage` derives `gameId` from `location.state.pin` and renders a "no game selected" screen when it is absent. A player who has completed the current round or been eliminated enters a spectator view that renders only the live leaderboard; it does not render the active round's sequence or colour controls.
 There is deliberately no `'demo'` placeholder: with scoped publications it would subscribe to a game that does not exist and hang on LOADING forever.
 
 ---

@@ -20,6 +20,20 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-09-21 - Finished players now remain in the live round as spectators
+
+`GamePage.jsx` no longer sends a player who has completed a round or been
+eliminated to a static result screen while the game is still active. Instead it
+shows the live leaderboard and continues to follow the current shared round as
+the remaining players progress.
+
+The spectator branch intentionally does not render `ColourSequence`, its tiles,
+or selected-colour progress. This keeps the spectator interface focused on
+public player status rather than visually revealing the round sequence or any
+other player's answer.
+
+Files: `app/imports/ui/pages/GamePage.jsx`, `AGENTS.md`.
+
 ## 2026-09-21 - Players now expose a safe live round status
 
 `gameMethods.js` now maintains a public `roundStatus` on each player as they
