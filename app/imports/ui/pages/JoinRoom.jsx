@@ -56,9 +56,9 @@ export function JoinRoom() {
       }
 
       const reconnectData = {
-        playerId : res.playerId,
-        gameId : res.roomId
-      }
+        playerId: res.playerId,
+        gameId: res.roomId,
+      };
 
       localStorage.setItem('reconnectData', JSON.stringify(reconnectData));
       navigate(`/play/${code}`, {
@@ -83,11 +83,11 @@ export function JoinRoom() {
       <TileLattice opacity={0.05} />
 
       {/* top bar */}
-      <div className="relative flex shrink-0 items-center justify-between px-7 py-5">
+      <div className="relative flex shrink-0 items-center justify-between gap-3 px-6 py-4 xs:gap-4 xs:px-7 xs:py-5">
         <Wordmark />
         <button
           onClick={() => navigate(-1)}
-          className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-[10px] border border-hairline bg-surface"
+          className="inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-[10px] border border-hairline bg-surface xs:h-9 xs:w-9"
         >
           <BackChevron size={14} stroke={FG2} />
         </button>
@@ -104,11 +104,14 @@ export function JoinRoom() {
         spellCheck={false}
       />
 
-      <div className="relative flex flex-1 flex-col items-center justify-center gap-9 px-6">
+      <div className="relative flex flex-1 flex-col items-center justify-center gap-8 overflow-y-auto px-6 py-8 xs:gap-9 xs:px-7 xs:py-0">
         <p className="font-mono text-[12px] uppercase tracking-[0.18em] text-fg3">Enter Room Code</p>
 
         {/* Code slots */}
-        <div className="flex cursor-text gap-3" onClick={() => inputRef.current?.focus()}>
+        <div
+          className="flex w-full cursor-text justify-center gap-2 xs:gap-3"
+          onClick={() => inputRef.current?.focus()}
+        >
           {Array.from({ length: SLOTS }).map((_, i) => {
             const ch = code[i];
             const filled = ch !== undefined;
@@ -118,9 +121,9 @@ export function JoinRoom() {
                 key={i}
                 className="relative flex items-center justify-center rounded-2xl font-mono font-bold"
                 style={{
-                  width: 76,
-                  height: 96,
-                  fontSize: 52,
+                  width: 'clamp(56px, 15vw, 76px)',
+                  height: 'clamp(72px, 20vw, 96px)',
+                  fontSize: 'clamp(36px, 10vw, 56px)',
                   background: filled ? 'oklch(0.24 0.02 270)' : 'oklch(0.20 0.02 270)',
                   border: `2px solid ${active ? PRIMARY : filled ? HAIRLINE : 'transparent'}`,
                   color: filled ? 'oklch(0.97 0.006 80)' : 'oklch(0.55 0.015 270)',
@@ -170,7 +173,7 @@ export function JoinRoom() {
         <button
           onClick={handleJoin}
           disabled={!canJoin}
-          className="inline-flex items-center gap-2.5 rounded-xl px-7 py-3.5 font-outfit text-sm font-extrabold uppercase tracking-[0.14em] transition-all"
+          className="inline-flex min-h-11 w-full max-w-sm items-center justify-center gap-2.5 rounded-xl px-7 py-3.5 font-outfit text-sm font-extrabold uppercase tracking-[0.14em] transition-all xs:w-auto"
           style={{
             background: canJoin ? PRIMARY : `color-mix(in oklab, ${PRIMARY} 30%, oklch(0.14 0.02 270))`,
             color: 'oklch(0.14 0.02 270)',

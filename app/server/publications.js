@@ -38,9 +38,6 @@ if (Meteor.isServer && !global._publicationsInitialized) {
   });
 
   Meteor.publish('globalLeaderboard', function () {
-    return GlobalLeaderboardCollection.find(
-      {},
-      { sort: { bestRound: -1, wins: -1, achievedAt: 1 }, limit: 50 }
-    );
+    return GlobalLeaderboardCollection.find({}, { sort: { bestRound: -1, wins: -1, achievedAt: 1 }, limit: 50 });
   });
 }

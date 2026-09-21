@@ -1,7 +1,6 @@
 import assert from 'assert';
 import { generateSequence, COLOURS } from '../imports/api/sequence';
 
-
 describe('generateSequence', () => {
   it('generates a sequence of 4 colours by default', () => {
     const seq = generateSequence();

@@ -1,18 +1,28 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Meteor } from 'meteor/meteor';
-import { BG, PRIMARY, TILE, HAIRLINE, FG2, TileLattice, Wordmark, Avatar, avatarColor, ArrowIcon, PencilIcon} from '../components/design';
+import {
+  BG,
+  PRIMARY,
+  TILE,
+  HAIRLINE,
+  FG2,
+  TileLattice,
+  Wordmark,
+  Avatar,
+  avatarColor,
+  ArrowIcon,
+  PencilIcon,
+} from '../components/design';
 import { ReconnectPopup } from '../components/ReconnectPopup';
 import { submitOnEnter } from '../keyboard';
-
-
 
 function RouteCard({ kind, title, blurb, color, primary, onClick, disabled }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className="relative flex min-h-[150px] flex-col gap-2.5 overflow-hidden rounded-[18px] p-5 text-left transition-all hover:-translate-y-0.5"
+      className="relative flex min-h-[136px] w-full flex-col gap-3 overflow-hidden rounded-[18px] p-5 text-left transition-all hover:-translate-y-0.5 xs:min-h-[150px]"
       style={{
         background: primary ? color : 'oklch(0.20 0.02 270)',
         color: primary ? BG : 'oklch(0.97 0.006 80)',
@@ -90,37 +100,39 @@ export function PlayRoute() {
     }
   }, []);
 
-  const handleReconnect = () =>{
+  const handleReconnect = () => {
     const reconnectData = localStorage.getItem('reconnectData');
     if (!reconnectData) return;
-    
-    const {gameId, playerId} = JSON.parse(reconnectData);
 
-    Meteor.call('rooms.reconnect', gameId, playerId, (err, result)=>{
-      if (err){
+    const { gameId, playerId } = JSON.parse(reconnectData);
+
+    Meteor.call('rooms.reconnect', gameId, playerId, (err, result) => {
+      if (err) {
         localStorage.removeItem('reconnectData');
         return;
       }
 
-      navigate(`/play/${gameId}`, { state: { 
-        playerName: result.playerName, 
-        isHost: result.isHost, 
-        playerId: result.playerId 
-      }});
-    })
-  }
+      navigate(`/play/${gameId}`, {
+        state: {
+          playerName: result.playerName,
+          isHost: result.isHost,
+          playerId: result.playerId,
+        },
+      });
+    });
+  };
 
-  const handleDismiss = () =>{
-    //  Get recconnect data for game 
-    const reconnectData = JSON.parse(localStorage.getItem('reconnectData'))
+  const handleDismiss = () => {
+    //  Get recconnect data for game
+    const reconnectData = JSON.parse(localStorage.getItem('reconnectData'));
 
     const gamePin = reconnectData?.gameId;
     const playerId = reconnectData?.playerId;
 
-    Meteor.call('rooms.disconnect', gamePin, playerId) 
+    Meteor.call('rooms.disconnect', gamePin, playerId);
     localStorage.removeItem('reconnectData');
     setReconnectData(null);
-  }
+  };
 
   const handleCreate = () => {
     if (!hasName || loading) return;
@@ -129,7 +141,10 @@ export function PlayRoute() {
 
     Meteor.call('rooms.create', trimmedName, signedInAccount?._id, (err, result) => {
       setLoading(false);
-      if (err) { setError('Could not create room. Try again.'); return; }
+      if (err) {
+        setError('Could not create room. Try again.');
+        return;
+      }
 
       //! For host reconnection
       // const reconnectData = {
@@ -149,27 +164,26 @@ export function PlayRoute() {
     navigate('/play/join', { state: { playerName: trimmedName, playerAccount: signedInAccount } });
   };
 
-
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden bg-bg text-fg">
       <TileLattice opacity={0.05} />
 
       {/* top bar */}
-      <div className="relative flex shrink-0 items-center justify-between px-7 py-5">
+      <div className="relative flex shrink-0 items-center justify-between gap-3 px-6 py-4 xs:gap-4 xs:px-7 xs:py-5">
         <Wordmark />
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-2 xs:gap-3">
           <Link
             to="/leaderboard"
             state={{ playerAccount: signedInAccount }}
-            className="rounded-full border border-hairline px-3.5 py-1.5 font-outfit text-[11px] font-bold uppercase tracking-wider text-fg2 transition-colors hover:text-fg"
+            className="inline-flex min-h-11 items-center rounded-full border border-hairline px-3.5 py-2 font-outfit text-[11px] font-bold uppercase tracking-wider text-fg2 transition-colors hover:text-fg"
           >
             Leaderboard
           </Link>
-          <span className="font-mono text-[11px] uppercase tracking-widest text-fg3">v1.0.0</span>
+          <span className="hidden font-mono text-[11px] uppercase tracking-widest text-fg3 xs:inline">v1.0.0</span>
         </div>
       </div>
 
-      <div className="relative flex flex-1 flex-col items-center justify-center gap-7 overflow-y-auto px-7 pb-14">
+      <div className="relative flex flex-1 flex-col items-center justify-center gap-6 overflow-y-auto px-6 pb-10 pt-6 xs:gap-7 xs:px-7 xs:pb-14 xs:pt-0">
         {/* username */}
         <div className="w-full max-w-md">
           <p className="mb-2.5 font-mono text-[11px] uppercase tracking-[0.16em] text-fg3">Username</p>
@@ -192,7 +206,7 @@ export function PlayRoute() {
               <span className="flex-1 font-outfit text-lg font-semibold text-fg">{trimmedName}</span>
               <button
                 onClick={() => setEditing(true)}
-                className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent text-fg2"
+                className="inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent text-fg2 xs:h-8 xs:w-8"
               >
                 <PencilIcon size={14} />
               </button>
@@ -226,8 +240,8 @@ export function PlayRoute() {
 
         {/* route cards */}
         <div
-          className="grid w-full max-w-2xl gap-3.5"
-          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}
+          className="grid w-full max-w-2xl gap-4"
+          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))' }}
         >
           <RouteCard
             kind="create"
@@ -254,7 +268,7 @@ export function PlayRoute() {
 
         <button
           onClick={() => navigate('/')}
-          className="rounded-full border border-hairline px-5 py-3 font-outfit text-[13px] font-bold uppercase tracking-[0.16em] text-fg2 transition-colors hover:text-fg"
+          className="min-h-11 rounded-full border border-hairline px-5 py-3 font-outfit text-[13px] font-bold uppercase tracking-[0.16em] text-fg2 transition-colors hover:text-fg"
           style={{ background: 'color-mix(in oklab, oklch(0.20 0.02 270) 72%, transparent)' }}
         >
           Back to Home

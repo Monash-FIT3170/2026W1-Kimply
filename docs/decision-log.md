@@ -20,6 +20,27 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-09-21 - Phones get a 24px screen-edge gutter and 44px touch targets
+
+Phone screens were cramped in two different ways and the fix is different for each.
+The game screen had no horizontal gutter at all and sized its gaps in `vw`, so the hearts, the progress dots and the Clear / Submit buttons all collapsed towards each other as the viewport narrowed.
+The room-code slots were the opposite problem: fixed at 76px and 56px, five of them plus gaps overflowed every phone width and flexbox squeezed them back down to something narrower than the design system allows.
+
+`docs/design_system.md` only ever named a *desktop* screen-edge value, so the phone gutter was whatever each screen happened to use. It is now `--s-5` (24px), recorded in the spacing table and the breakpoint table, and applied on every route. That is the value `Splash.jsx` already used, so this standardises on existing precedent rather than inventing a number.
+
+Three things that are not obvious from the diff:
+
+- **The 480px boundary is a real Tailwind screen now, not an arbitrary variant.**
+  `tailwind.config.js` declares the full `screens` object with `xs: '481px'` ahead of Tailwind's untouched defaults. The explicit object is there for ordering: `theme.extend.screens` would have appended `xs` after `2xl`, and the resulting CSS would let `xs:` beat `sm:` on the same property. Phone styles are the unprefixed base and `xs:` is everything above, so `sm:` (640px) must not be used to mean "not a phone" - that would leave 481-639px on the phone treatment.
+- **`ColourSequence`'s `--tile-grid` still hard-codes the page gutter, and has to.**
+  It is `min(360px, calc(100vw - 48px), 38dvh)`, where 48px is GamePage's 24px gutter doubled, so the two have to be changed together. The obvious cleanup - swapping the viewport term for `100%` so the grid just tracks its container - does not work and was reverted after it shipped flat tiles to the phone layout. The same variable is consumed on both axes (`width` and `height` on every tile), and in the height context a percentage resolves against the grid's own indefinite height, so the whole `min()` collapses to `auto` and each tile falls back to its content height. Any replacement has to stay percentage-free; `100cqw` with `container-type: inline-size` would work, but was not taken because it is untested here.
+- **Room-code entry and room-code display are held to different floors on purpose.**
+  Entry (`JoinRoom`) stays inside the documented 56-76 x 72-96 slot range at every common phone width. The lobby's display tiles are allowed down to 48px, because the Room code display pattern specifies no dimensions and the panel that holds them has its own padding; at 360px the documented 56px floor would not fit inside both.
+
+Files: `app/tailwind.config.js`, `docs/design_system.md`, `app/imports/ui/components/design.jsx`, `app/imports/ui/components/ConfirmationPopup.jsx`, `app/imports/ui/ColourSequence.jsx`, `app/imports/ui/EndLeaderboard.jsx`, and `Splash.jsx`, `PlayRoute.jsx`, `JoinRoom.jsx`, `PlayerLobby.jsx`, `GameModeSelector.jsx`, `CustomGameSettings.jsx`, `GamePage.jsx`, `GlobalLeaderboard.jsx`, `Account.jsx` under `app/imports/ui/pages/`.
+
+---
+
 ## 2026-09-04 - The Quality Assurance Plan is now a document in the repo
 
 The QA plan existed only as a submission document, written before most of the machinery it described was built.

@@ -128,12 +128,12 @@ async function checkWinner(gameId, isBattleRoyale = false) {
 
     const winnerRound = await RoundsCollection.findOneAsync(winner.roundId);
     const winnerLevel = winnerRound
-      ? winnerRound.roundNumber ?? winnerRound.lengthOfSequence - 3
-      : winner.eliminatedRound ?? 0;
+      ? (winnerRound.roundNumber ?? winnerRound.lengthOfSequence - 3)
+      : (winner.eliminatedRound ?? 0);
 
     for (const p of players) {
       const isWinner = p._id === winner._id;
-      await recordGlobalResult(p.accountId, p.name, isWinner ? winnerLevel : p.eliminatedRound ?? 0, isWinner);
+      await recordGlobalResult(p.accountId, p.name, isWinner ? winnerLevel : (p.eliminatedRound ?? 0), isWinner);
     }
     return;
   }
@@ -260,7 +260,14 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
     },
 
     // Add a player to a round
-    async 'players.join'(roundId, playerName, gameId = null, lobbyPlayerId = null, isBattleRoyale = false, accountId = null) {
+    async 'players.join'(
+      roundId,
+      playerName,
+      gameId = null,
+      lobbyPlayerId = null,
+      isBattleRoyale = false,
+      accountId = null
+    ) {
       const connectionId = this.connection?.id ?? null;
       if (lobbyPlayerId) {
         const existing = await PlayersCollection.findOneAsync({ gameId, lobbyPlayerId });
@@ -271,7 +278,9 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       }
 
       const room = await RoomsCollection.findOneAsync({ pin: gameId });
-      const startingLives = room?.customSettings?.startingLives ? room.customSettings.startingLives : DEFAULT_STARTING_LIVES;
+      const startingLives = room?.customSettings?.startingLives
+        ? room.customSettings.startingLives
+        : DEFAULT_STARTING_LIVES;
 
       return PlayersCollection.insertAsync({
         gameId,
