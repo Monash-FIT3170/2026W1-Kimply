@@ -6,7 +6,7 @@ function ModeCard({ title, description, color, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="relative flex min-h-[140px] flex-col gap-2.5 overflow-hidden rounded-[18px] p-5 text-left transition-all hover:-translate-y-0.5"
+      className="relative flex min-h-[140px] w-full flex-col gap-3 overflow-hidden rounded-[18px] p-5 text-left transition-all hover:-translate-y-0.5"
       style={{
         background: color,
         color: BG,
@@ -102,12 +102,12 @@ export function GameModeSelector() {
       <TileLattice opacity={0.05} />
 
       {/* top bar */}
-      <div className="relative flex shrink-0 items-center justify-between px-7 py-5">
+      <div className="relative flex shrink-0 items-center justify-between gap-3 px-6 py-4 xs:gap-4 xs:px-7 xs:py-5">
         <Wordmark />
-        <span className="font-mono text-[11px] uppercase tracking-widest text-fg3">v1.0.0</span>
+        <span className="hidden font-mono text-[11px] uppercase tracking-widest text-fg3 xs:inline">v1.0.0</span>
       </div>
 
-      <div className="relative flex flex-1 flex-col items-center justify-center gap-7 overflow-y-auto px-7 pb-14">
+      <div className="relative flex flex-1 flex-col items-center justify-center gap-6 overflow-y-auto px-6 pb-10 pt-6 xs:gap-7 xs:px-7 xs:pb-14 xs:pt-0">
         {/* title */}
         <div className="w-full max-w-4xl text-center">
           <h1 className="font-outfit text-4xl font-extrabold leading-tight tracking-tight">Select Game Mode</h1>
@@ -117,7 +117,7 @@ export function GameModeSelector() {
         {/* mode cards grid */}
         <div
           className="grid w-full max-w-4xl gap-4"
-          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}
+          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))' }}
         >
           {gameModes.map((mode) => (
             <ModeCard

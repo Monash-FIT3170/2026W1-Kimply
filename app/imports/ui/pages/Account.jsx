@@ -71,14 +71,14 @@ export function Account() {
         right={
           <button
             onClick={() => navigate('/play')}
-            className="cursor-pointer rounded-lg border border-hairline bg-surface px-3 py-2 font-outfit text-[12px] font-semibold uppercase tracking-wider text-fg2"
+            className="inline-flex min-h-11 cursor-pointer items-center rounded-lg border border-hairline bg-surface px-3 py-2 font-outfit text-[12px] font-semibold uppercase tracking-wider text-fg2"
           >
             Back
           </button>
         }
       />
 
-      <div className="relative flex flex-1 items-center justify-center px-7 pb-10">
+      <div className="relative flex flex-1 items-center justify-center overflow-y-auto px-6 py-8 xs:px-7 xs:pb-10 xs:pt-0">
         <div className="w-full max-w-md rounded-[22px] border border-hairline bg-surface p-5">
           <div
             className="mb-5 h-1 rounded-full"
@@ -98,7 +98,7 @@ export function Account() {
           <div className="mb-5 grid grid-cols-2 gap-2">
             <button
               onClick={() => switchMode('register')}
-              className="cursor-pointer rounded-xl border px-4 py-2.5 font-outfit font-bold"
+              className="min-h-11 cursor-pointer rounded-xl border px-4 py-2.5 font-outfit font-bold"
               style={{
                 background: mode === 'register' ? PRIMARY : 'transparent',
                 color: mode === 'register' ? BG : 'oklch(0.72 0.01 270)',
@@ -110,7 +110,7 @@ export function Account() {
 
             <button
               onClick={() => switchMode('signin')}
-              className="cursor-pointer rounded-xl border px-4 py-2.5 font-outfit font-bold"
+              className="min-h-11 cursor-pointer rounded-xl border px-4 py-2.5 font-outfit font-bold"
               style={{
                 background: mode === 'signin' ? PRIMARY : 'transparent',
                 color: mode === 'signin' ? BG : 'oklch(0.72 0.01 270)',
@@ -188,7 +188,7 @@ export function Account() {
           <button
             onClick={submit}
             disabled={saving}
-            className="w-full cursor-pointer rounded-xl border-none px-4 py-3 font-outfit font-extrabold disabled:opacity-60"
+            className="min-h-11 w-full cursor-pointer rounded-xl border-none px-4 py-3 font-outfit font-extrabold disabled:opacity-60"
             style={{ background: PRIMARY, color: BG }}
           >
             {saving ? 'Please wait...' : mode === 'register' ? 'Create Account' : 'Sign In'}
