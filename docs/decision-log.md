@@ -20,6 +20,21 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-09-21 - Players now expose a safe live round status
+
+`gameMethods.js` now maintains a public `roundStatus` on each player as they
+play, complete a sequence, are eliminated, or enter the next round. The
+leaderboard model and its tests use that status instead of treating a correct
+answer as a generic completion.
+
+The status is deliberately a short label only. `attemptedSequence` remains
+excluded from every player publication, so the multiplayer activity UI can
+describe progress without exposing anyone's answer.
+
+Files: `app/imports/api/gameMethods.js`, `app/imports/ui/leaderboardModels.js`,
+`app/tests/lifeDeduction.test.js`, `app/tests/roundAdvance.test.js`,
+`app/tests/leaderboardModel.test.js`, `AGENTS.md`.
+
 ## 2026-09-04 - The Quality Assurance Plan is now a document in the repo
 
 The QA plan existed only as a submission document, written before most of the machinery it described was built.

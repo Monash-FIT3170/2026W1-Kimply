@@ -225,6 +225,7 @@ React Router v7 ranks by specificity rather than declaration order, so `/account
 | `PlayersCollection` | `players` | `imports/api/players.js:6` |
 | `LeaderboardCollection` | `leaderboard` | `imports/api/leaderboard.js:6` |
 | `PlayerAccountsCollection` | `playerAccounts` | `imports/api/playerAccounts.js:8` |
+| `GameEventsCollection` | `gameEvents` | `imports/api/gameEvents.js:6` |
 
 Each definition is wrapped in a `global._<Name>Collection` guard so it survives double evaluation under `meteor test --full-app`.
 
@@ -247,8 +248,11 @@ Each definition is wrapped in a `global._<Name>Collection` guard so it survives 
 ```js
 { gameId, roundId, name, lives: 3, attemptedSequence: [], currentStreak: 0,
   longestStreak: 0, totalGuesses: 0, correctGuesses: 0, eliminatedRound: null,
-  eliminated: false, winner: false, completeRound: false, gameFinished: false }
+  eliminated: false, winner: false, completeRound: false,
+  roundStatus: 'Playing' | 'Correct' | 'Eliminated', gameFinished: false }
 ```
+`roundStatus` is public, summary-only state for the live round UI. It must never
+contain a sequence, attempted colour, or answer detail.
 
 **`leaderboard`** (written by `gameMethods.js:152-159`, append-only)
 ```js
@@ -292,9 +296,11 @@ All publications are **scoped to a single game**. `gameId` is the 5-character ro
 
 | Name | Defined at | Args | Selector | Projection |
 |---|---|---|---|---|
-| `rounds` | `server/publications.js:28` | `gameId` | `{ gameId, isCurrent: true }` | none |
-| `players` | `server/publications.js:35` | `gameId` | `{ gameId }` | excludes `attemptedSequence` |
-| `leaderboard` | `server/publications.js:40` | `gameId` | `{ gameId }` | none |
+| `rounds` | `server/publications.js:12` | `gameId` | `{ gameId, advanced: false }` | none |
+| `players` | `server/publications.js:17` | `gameId` | `{ gameId }` | excludes `attemptedSequence` |
+| `leaderboard` | `server/publications.js:22` | `gameId` | `{ gameId }` | none |
+| `eliminations` | `server/publications.js:27` | `gameId` | eliminated players in game | excludes `attemptedSequence`, newest 20 |
+| `gameEvents` | `server/publications.js:35` | `gameId` | `{ gameId }` | newest 20 |
 | `rooms.lobby` | `imports/api/rooms.js:20` | `pin` | `{ pin }` | `_id, pin, status, gameName, hostName, players.name, players.id` |
 
 Three properties are load-bearing and must not be undone:
@@ -353,6 +359,8 @@ PIN alphabet is `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (`rooms.js:12`), generated wi
 | `rounds.generate` | 88 | `length = 4, gameId = null` | Inserts a new `isCurrent` round |
 | `players.join` | 102 | `roundId, playerName, gameId = null` | Inserts a player with 3 lives |
 | `players.submitSequence` | 122 | `playerId, attemptedSequence` | Grades the attempt. 6-9 DB round-trips, plus 4 more if it triggers a round advance |
+| `players.timeoutTurn` | 415 | `playerId` | Deducts a life and updates the public round status |
+| `players.timeoutRound` | 461 | `playerId` | Eliminates a player whose standard-round timer expires |
 | `rounds.advance` | 218 | `currentRoundId` | Marks the round advanced, inserts the next one, moves active players onto it |
 
 Private helpers: `checkWinner(gameId)` at `:13`, `advanceRoundIfReady(round)` at `:67`.
