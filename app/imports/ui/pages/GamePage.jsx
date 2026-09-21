@@ -743,11 +743,11 @@ export const GamePage = () => {
         {isLeaderboardOpen ? 'Collapse leaderboard' : 'Leaderboard'}
       </button>
       <aside
-        className={`fixed right-6 top-20 z-30 w-[calc(100vw-3rem)] max-w-[28rem] transition-transform duration-300 ease-in-out ${
-          isLeaderboardOpen ? 'translate-x-0' : 'translate-x-[120%]'
+        className={`fixed bottom-6 left-6 right-6 z-30 transition-transform duration-300 ease-in-out xs:bottom-auto xs:left-auto xs:top-20 xs:w-[calc(100vw-3rem)] xs:max-w-[28rem] ${
+          isLeaderboardOpen ? 'translate-y-0' : 'translate-y-[120%] xs:translate-x-[120%] xs:translate-y-0'
         }`}
       >
-        <Leaderboard gameId={gameId} currentPlayerId={playerId} />
+        <Leaderboard gameId={gameId} currentPlayerId={playerId} className="max-h-[52vh] xs:max-h-[80vh]" />
       </aside>
     </div>
   );

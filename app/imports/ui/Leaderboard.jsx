@@ -5,7 +5,7 @@ import { PlayersCollection } from '../api/players';
 import { RoundsCollection } from '../api/rounds';
 import { createLiveLeaderboardRows } from './leaderboardModels';
 
-export const Leaderboard = ({ gameId, currentPlayerId }) => {
+export const Leaderboard = ({ gameId, currentPlayerId, className = 'max-h-[80vh]' }) => {
   const { rows, ready } = useTracker(() => {
     const playersSub = Meteor.subscribe('players', gameId);
     const roundsSub = Meteor.subscribe('rounds', gameId);
@@ -24,12 +24,14 @@ export const Leaderboard = ({ gameId, currentPlayerId }) => {
   }, [gameId]);
 
   return (
-    <section className="flex max-h-[80vh] w-full flex-col rounded-2xl border border-hairline bg-[color:oklch(0.20_0.02_270_/_0.68)] p-5 text-fg shadow-xl backdrop-blur-md">
+    <section
+      className={`flex w-full flex-col rounded-2xl border border-hairline bg-[color:oklch(0.20_0.02_270_/_0.68)] p-4 text-fg shadow-xl backdrop-blur-md xs:p-5 ${className}`}
+    >
       <h2 className="mb-1 text-center font-outfit text-xl font-extrabold">Live Leaderboard</h2>
       <p className="mb-4 text-center font-mono text-[10px] uppercase tracking-widest text-fg3">
         Updates live during the game
       </p>
-      <div className="mb-2 grid grid-cols-[1fr_52px_52px_88px] gap-2 font-mono text-[10px] uppercase tracking-wider text-fg3">
+      <div className="mb-2 grid grid-cols-[1fr_40px_40px_72px] gap-2 font-mono text-[10px] uppercase tracking-wider text-fg3 xs:grid-cols-[1fr_52px_52px_88px]">
         <span>Player</span>
         <span className="text-right">Level</span>
         <span className="text-right">Lives</span>
@@ -42,7 +44,7 @@ export const Leaderboard = ({ gameId, currentPlayerId }) => {
           {rows.map((player) => (
             <div
               key={player.id}
-              className="grid grid-cols-[1fr_52px_52px_88px] items-center gap-2 rounded-xl border border-hairline px-3 py-3"
+              className="grid grid-cols-[1fr_40px_40px_72px] items-center gap-2 rounded-xl border border-hairline px-3 py-3 xs:grid-cols-[1fr_52px_52px_88px]"
             >
               <span className="truncate font-outfit font-semibold">
                 {player.name}
