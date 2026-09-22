@@ -48,6 +48,9 @@ Things that are not obvious from the diff:
   The most serious is that an in-game DDP reconnect may never re-bind `connectionId`, so a player who reconnects could be removed after the 15s grace window.
   It needs an end-to-end reproduction before it goes in the defect register.
 
+- **GitHub roles trust exact OIDC subject prefixes, not repository names.**
+  The first pipeline run from the fork failed to assume `GitHubActionsECRPush` because the fork uses GitHub's immutable subject format, `repo:owner@<id>/name@<id>`, while the upstream repository still sends `repo:owner/name`.
+  `StringEquals` needs the exact string, so each repository is listed by the prefix GitHub reports for it.
 - **During the parallel run, `main` deploys to both production stacks.**
   The deploy workflow is split into build, ECS and EC2 jobs so `kimply.online` and `ecs.kimply.online` always run the same image.
   `deploy/ecs-deploy.sh` waits on the outcome of its own deployment ID rather than `aws ecs wait services-stable`, because after a circuit-breaker rollback the service is stable again on the old revision and that waiter would report success.

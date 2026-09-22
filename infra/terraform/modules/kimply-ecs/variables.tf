@@ -166,9 +166,20 @@ variable "canary_rate_minutes" {
 
 # --- GitHub -------------------------------------------------------------------
 
-variable "github_repositories" {
-  description = "owner/name of every repository whose deploy branch may deploy this environment."
+variable "github_subject_prefixes" {
+  description = <<-EOT
+    The OIDC subject prefix of every repository whose deploy branch may deploy this
+    environment, exactly as GitHub sends it. Older repositories use
+    "repo:owner/name"; repositories with immutable subjects use
+    "repo:owner@<owner-id>/name@<repo-id>". Read a repository's prefix with
+      gh api repos/<owner>/<name>/actions/oidc/customization/sub --jq .sub_claim_prefix
+  EOT
   type        = list(string)
+
+  validation {
+    condition     = alltrue([for p in var.github_subject_prefixes : startswith(p, "repo:")])
+    error_message = "Each entry must be a full subject prefix starting with \"repo:\"."
+  }
 }
 
 variable "github_branch" {

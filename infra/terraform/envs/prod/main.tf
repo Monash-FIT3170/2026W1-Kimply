@@ -70,10 +70,12 @@ module "kimply" {
   canary_enabled      = var.canary_enabled
   check_apex_redirect = var.check_apex_redirect
 
+  # Exact OIDC subject prefixes. The upstream repository uses the plain form; the
+  # migration fork uses GitHub's immutable form, with owner and repository IDs.
   # The fork is listed only until it is merged upstream and deleted.
-  github_repositories = [
-    "Monash-FIT3170/2026W1-Kimply",
-    "R4chC0dE/2026W1-Kimply-ECS-Rollover",
+  github_subject_prefixes = [
+    "repo:Monash-FIT3170/2026W1-Kimply",
+    "repo:R4chC0dE@140041789/2026W1-Kimply-ECS-Rollover@1380939227",
   ]
   github_ecr_push_role_name = "GitHubActionsECRPush"
 }

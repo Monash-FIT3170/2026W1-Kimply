@@ -98,10 +98,12 @@ data "aws_iam_policy_document" "github_assume" {
     }
 
     # One ref per repository. A push to any other branch cannot obtain this role.
+    # StringEquals needs the subject exactly as GitHub sends it, which differs
+    # between plain and immutable-subject repositories (see the variable).
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = [for repo in var.github_repositories : "repo:${repo}:ref:refs/heads/${var.github_branch}"]
+      values   = [for prefix in var.github_subject_prefixes : "${prefix}:ref:refs/heads/${var.github_branch}"]
     }
   }
 }
