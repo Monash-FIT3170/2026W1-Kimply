@@ -1,5 +1,6 @@
 import { Meteor } from 'meteor/meteor';
 import { Mongo } from 'meteor/mongo';
+import { Random } from 'meteor/random';
 import { createHash, randomBytes } from 'crypto';
 import { MIN_PASSWORD_LENGTH } from '../constants';
 
@@ -24,6 +25,44 @@ function hashPassword(password, salt) {
 
 function validateEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+export const SESSION_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
+
+export function hashSessionToken(token) {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+function publicAccount(account) {
+  return { _id: account._id, displayName: account.displayName, email: account.email };
+}
+
+// Mints a session token for the account and returns it with the public account fields.
+// Only the token's hash is stored, so a copy of the database does not hand out working
+// sessions. Expired sessions are dropped first, so the array cannot grow without bound.
+async function issueSession(account) {
+  const sessionToken = Random.secret();
+  const now = new Date();
+  await PlayerAccountsCollection.updateAsync(account._id, {
+    $pull: { sessions: { expiresAt: { $lte: now } } },
+  });
+  await PlayerAccountsCollection.updateAsync(account._id, {
+    $push: {
+      sessions: {
+        hash: hashSessionToken(sessionToken),
+        createdAt: now,
+        expiresAt: new Date(now.getTime() + SESSION_LIFETIME_MS),
+      },
+    },
+  });
+  return { ...publicAccount(account), sessionToken };
+}
+
+async function findAccountBySession(token) {
+  if (typeof token !== 'string' || !token) return null;
+  return PlayerAccountsCollection.findOneAsync({
+    sessions: { $elemMatch: { hash: hashSessionToken(token), expiresAt: { $gt: new Date() } } },
+  });
 }
 
 if (Meteor.isServer && !global._playerAccountsServerInitialized) {
@@ -61,11 +100,12 @@ if (Meteor.isServer && !global._playerAccountsServerInitialized) {
         gamesPlayed: 0,
         wins: 0,
         bestRound: 0,
+        sessions: [],
         createdAt: new Date(),
         updatedAt: new Date(),
       });
 
-      return { _id: accountId, displayName, email };
+      return issueSession({ _id: accountId, displayName, email });
     },
 
     async 'playerAccounts.signIn'(credentials) {
@@ -90,11 +130,23 @@ if (Meteor.isServer && !global._playerAccountsServerInitialized) {
         throw new Meteor.Error('wrong-password', 'Incorrect password.');
       }
 
-      return {
-        _id: account._id,
-        displayName: account.displayName,
-        email: account.email,
-      };
+      return issueSession(account);
+    },
+
+    async 'playerAccounts.resume'(token) {
+      const account = await findAccountBySession(token);
+      if (!account) {
+        throw new Meteor.Error('invalid-session', 'Your session has expired. Please sign in again.');
+      }
+      return publicAccount(account);
+    },
+
+    async 'playerAccounts.signOut'(token) {
+      if (typeof token !== 'string' || !token) return;
+      await PlayerAccountsCollection.updateAsync(
+        { 'sessions.hash': hashSessionToken(token) },
+        { $pull: { sessions: { hash: hashSessionToken(token) } } }
+      );
     },
   });
 }

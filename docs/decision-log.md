@@ -20,6 +20,37 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-09-22 - Account sessions persist instead of riding on router state
+
+Testers were signed out when a game ended and when they rejoined one (#108).
+The signed-in account lived only in `location.state.playerAccount`, handed from page to page by hand.
+Any navigation that did not forward it dropped it: the reconnect popup's Rejoin, the lobby's kicked and room-gone redirects, typing `/play` into the address bar, or opening an invite link in a new tab.
+Once dropped, the rest of that game ran without an `accountId`, so its result was not recorded against the account either.
+
+`register` and `signIn` now return a random session token.
+The client keeps it in `localStorage`, resumes it at startup through `playerAccounts.resume`, and every page reads the account from `useSignedInAccount()` in `imports/ui/accountSession.js`.
+`playerAccount` is gone from every `navigate(..., { state })` call.
+`/play` has a Sign out link.
+
+Things that are not obvious from the diff:
+
+- **Only the SHA-256 of a token is stored.**
+  A copy of the `playerAccounts` collection does not contain a usable session.
+  Plain SHA-256 is enough here, unlike for passwords, because the token is 43 random characters and there is nothing to brute-force.
+- **Each sign-in is its own session.**
+  Signing in on a phone does not sign out the laptop, and Sign out ends only the session it was pressed in.
+  Expired sessions are pruned whenever a new one is issued, so the array cannot grow without bound.
+- **A failed resume clears the token only on `invalid-session`.**
+  A dropped connection at startup keeps the token for the next load, rather than signing the player out because the network blinked.
+- **`GamePage` waits for a pending resume before calling `players.join`.**
+  Without that, a reload that lands on `/game` could join without the account, and the late resume would re-run the effect and join a second time.
+- **This is a session, not an authorization boundary.**
+  `rooms.create`, `rooms.join`, and `players.join` still take a client-supplied `accountId`, so a hostile client can still record results against someone else's account.
+  Moving those methods to accept the token and resolve the account server-side is the follow-up.
+- `JoinRoom` now prefills a signed-in player's display name when opened from an invite link.
+
+Files: `app/imports/api/playerAccounts.js`, `app/server/indexes.js`, `app/imports/ui/accountSession.js` (new), `app/client/main.jsx`, `app/imports/ui/pages/{Account,PlayRoute,JoinRoom,PlayerLobby,GamePage,GlobalLeaderboard}.jsx`, `app/imports/ui/EndLeaderboard.jsx`, `app/tests/playerAccounts.test.js`, `AGENTS.md`.
+
 ## 2026-09-04 - The Quality Assurance Plan is now a document in the repo
 
 The QA plan existed only as a submission document, written before most of the machinery it described was built.
