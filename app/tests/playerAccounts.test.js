@@ -322,12 +322,13 @@ if (Meteor.isServer) {
         assert.strictEqual(await PlayerAccountsCollection.find({}).countAsync(), 1);
       });
 
-      it('links Google to an existing email-and-password account with the same verified email', async function () {
+      it('links Google to an existing password account with the same verified email, keeping its history', async function () {
         const registered = await Meteor.callAsync('playerAccounts.register', {
           displayName: 'Alice',
           email: 'alice@example.com',
           password: 'password123',
         });
+        await PlayerAccountsCollection.updateAsync(registered._id, { $set: { gamesPlayed: 7, wins: 2 } });
         googleReturns(alice);
 
         const result = await Meteor.callAsync('playerAccounts.googleSignIn', 'valid-id-token');
@@ -335,9 +336,33 @@ if (Meteor.isServer) {
 
         assert.strictEqual(result._id, registered._id);
         assert.strictEqual(account.googleSub, 'google-sub-alice');
-        assert.ok(account.passwordHash, 'the password still works');
-        assert.ok(
-          await Meteor.callAsync('playerAccounts.signIn', { email: 'alice@example.com', password: 'password123' })
+        assert.strictEqual(account.gamesPlayed, 7);
+        assert.strictEqual(account.wins, 2);
+        assert.strictEqual((await Meteor.callAsync('playerAccounts.resume', result.sessionToken))._id, registered._id);
+      });
+
+      it('removes the password and ends old sessions when linking, so whoever set the password loses access', async function () {
+        // Registration never proves email ownership, so this password may belong to someone else.
+        const squatter = await Meteor.callAsync('playerAccounts.register', {
+          displayName: 'Alice',
+          email: 'alice@example.com',
+          password: 'squatter-password',
+        });
+        googleReturns(alice);
+
+        await Meteor.callAsync('playerAccounts.googleSignIn', 'valid-id-token');
+        const account = await PlayerAccountsCollection.findOneAsync(squatter._id);
+
+        assert.strictEqual(account.passwordHash, undefined);
+        assert.strictEqual(account.passwordSalt, undefined);
+        assert.strictEqual(account.sessions.length, 1, 'only the new Google session remains');
+        await assert.rejects(
+          Meteor.callAsync('playerAccounts.resume', squatter.sessionToken),
+          (err) => err.error === 'invalid-session'
+        );
+        await assert.rejects(
+          Meteor.callAsync('playerAccounts.signIn', { email: 'alice@example.com', password: 'squatter-password' }),
+          (err) => err.error === 'use-google'
         );
       });
 

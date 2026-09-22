@@ -258,13 +258,13 @@ Each definition is wrapped in a `global._<Name>Collection` guard so it survives 
 { gameId, playerId, name, lives, roundId, completedAt }
 ```
 
-**`playerAccounts`** (written by `playerAccounts.register`, `:238-250`, and by `playerAccounts.googleSignIn` through `findOrCreateGoogleAccount`)
+**`playerAccounts`** (written by `playerAccounts.register`, `:252-264`, and by `playerAccounts.googleSignIn` through `findOrCreateGoogleAccount`)
 ```js
 { displayName, displayNameKey, email, passwordSalt?, passwordHash?, googleSub?,
   gamesPlayed: 0, wins: 0, bestRound: 0,
   sessions: [{ hash, createdAt, expiresAt }], createdAt, updatedAt }
 ```
-An account has a password, a `googleSub`, or both. One created by Google sign-in has no password fields; a password account gains `googleSub` when its owner first signs in with Google using the same verified email.
+An account has either a password or a `googleSub`, never both. One created by Google sign-in has no password fields. A password account that its owner signs in to with Google, using the same verified email, gains `googleSub` and **loses its password and sessions**, because registration never proved who owned that email.
 `displayName` is unique ignoring case and repeated whitespace. `displayNameKey` is its lower-cased, whitespace-collapsed form, and the unique index is built on it.
 Registration and `updateDisplayName` reject a taken name with `name-taken`. A first Google sign-in whose name is taken gets the next free variant ("Alice G 2").
 `ensureUniqueDisplayNames()` runs at startup before `ensureIndexes()`, fills in missing keys, and suffixes duplicates (the oldest account keeps the name) so the index can build.
@@ -385,13 +385,13 @@ There is no timer or deadline, so one player leaving mid-round stalls that game 
 
 | Method | Line | Args | Description |
 |---|---|---|---|
-| `playerAccounts.register` | 208 | `{ displayName, email, password }` | Salted SHA-256, min 8-char password. Rejects a taken display name (`name-taken`). Returns `{ _id, displayName, email, sessionToken }` |
-| `playerAccounts.signIn` | 263 | `{ email, password }` | Returns `{ _id, displayName, email, sessionToken }`. Each sign-in is its own session. Throws `use-google` for a Google-only account |
-| `playerAccounts.googleClientId` | 293 | none | The public OAuth client ID, or `null` when Google sign-in is off |
-| `playerAccounts.googleSignIn` | 297 | `idToken` | Verifies a Google ID token (audience, signature, `email_verified`), then finds by `googleSub`, links by email, or creates. Returns the same shape as `signIn` |
-| `playerAccounts.resume` | 325 | `token` | Returns `{ _id, displayName, email }` for a live session, else throws `invalid-session` |
-| `playerAccounts.updateDisplayName` | 335 | `token, name` | Renames the account behind the session token (never a client-supplied id) and its leaderboard row. `name-taken` if another account holds it |
-| `playerAccounts.signOut` | 364 | `token` | Deletes that one session. Unknown tokens are a no-op |
+| `playerAccounts.register` | 222 | `{ displayName, email, password }` | Salted SHA-256, min 8-char password. Rejects a taken display name (`name-taken`). Returns `{ _id, displayName, email, sessionToken }` |
+| `playerAccounts.signIn` | 277 | `{ email, password }` | Returns `{ _id, displayName, email, sessionToken }`. Each sign-in is its own session. Throws `use-google` for a Google-only account |
+| `playerAccounts.googleClientId` | 307 | none | The public OAuth client ID, or `null` when Google sign-in is off |
+| `playerAccounts.googleSignIn` | 311 | `idToken` | Verifies a Google ID token (audience, signature, `email_verified`), then finds by `googleSub`, links by email (removing that account's password and sessions), or creates. Returns the same shape as `signIn` |
+| `playerAccounts.resume` | 339 | `token` | Returns `{ _id, displayName, email }` for a live session, else throws `invalid-session` |
+| `playerAccounts.updateDisplayName` | 349 | `token, name` | Renames the account behind the session token (never a client-supplied id) and its leaderboard row. `name-taken` if another account holds it |
+| `playerAccounts.signOut` | 378 | `token` | Deletes that one session. Unknown tokens are a no-op |
 
 `PlayerAccountsCollection` is never published, so hashes and salts stay server-side.
 Meteor's `accounts-base` / `accounts-password` / `accounts-google` packages are **not** installed; this is a hand-rolled implementation.
@@ -412,7 +412,7 @@ There are three unrelated identity mechanisms, none of them Meteor's.
    Not persisted, so it is lost on refresh (see D7).
 3. **Account identity** - a session token from `register` / `signIn`, kept in `localStorage['kimply.session']` and resumed at startup by `imports/ui/accountSession.js`.
    Pages read the account with `useSignedInAccount()`; it is never passed through router state.
-   The token is not bound to the DDP connection, and methods such as `rooms.join` and `players.join` still accept a client-supplied `accountId`.
+   The token is not bound to the DDP connection, and methods such as `rooms.join` and `players.join` still accept a client-supplied `accountId`, which the `globalLeaderboard` publication exposes. Resolving it from the token instead is #127.
 
 `location.state` is stored in `window.history.state.usr`, so it survives F5 on the same history entry but **not** a new tab or a shared link.
 On `/game` a missing `location.state.pin` renders a "no game selected" screen (`gameId` is `null`). The display name still falls back to `'Demo Player'` (`GamePage.jsx:21`). There is deliberately no `'demo'` gameId: a placeholder would subscribe to a game that does not exist and hang on LOADING.

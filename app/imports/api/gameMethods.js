@@ -22,7 +22,8 @@ function generateSequence(length) {
 }
 
 // The leaderboard shows the account's display name, not the in-game name typed on /play,
-// so a row always matches its account and nobody can post a result under another name.
+// so a row always matches its account. Which account gets credited still comes from a
+// client-supplied accountId; resolving it from the session token is #127.
 async function recordGlobalResult(accountId, levelReached, won) {
   if (!accountId) return;
 

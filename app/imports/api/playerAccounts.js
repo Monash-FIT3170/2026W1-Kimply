@@ -106,9 +106,14 @@ function googleDisplayName(payload, email) {
   return normaliseDisplayName(payload.name || email.split('@')[0]) || FALLBACK_DISPLAY_NAME;
 }
 
-// Keeps the leaderboard row in step with the account it belongs to.
+// Keeps the leaderboard row in step with the account it belongs to. Matching only a row
+// whose name differs makes this a no-op when nothing changed, so the startup pass does
+// not rewrite every row on every boot.
 async function syncLeaderboardName(accountId, displayName) {
-  await GlobalLeaderboardCollection.updateAsync({ accountId }, { $set: { displayName } });
+  await GlobalLeaderboardCollection.updateAsync(
+    { accountId, displayName: { $ne: displayName } },
+    { $set: { displayName } }
+  );
 }
 
 // One-off repair, run at startup before the unique index is built: gives every account
@@ -146,6 +151,11 @@ export async function ensureUniqueDisplayNames() {
 // Finds the account for a verified Google identity: by Google subject first, then by
 // email (linking the Google identity to an existing email-and-password account),
 // otherwise creates one with no password.
+//
+// Linking removes the account's password and ends its sessions. Registration never
+// proves who owns an email, so a password account for someone else's address may have
+// been created by anyone; Google has now proven the real owner. Keeping the password
+// would let whoever set it share the owner's account.
 async function findOrCreateGoogleAccount(payload) {
   const googleSub = payload.sub;
   const email = normaliseEmail(payload.email);
@@ -158,8 +168,12 @@ async function findOrCreateGoogleAccount(payload) {
     if (byEmail.googleSub) {
       throw new Meteor.Error('account-linked', 'This email is already linked to a different Google account.');
     }
-    await PlayerAccountsCollection.updateAsync(byEmail._id, { $set: { googleSub, updatedAt: new Date() } });
-    return { ...byEmail, googleSub };
+    await PlayerAccountsCollection.updateAsync(byEmail._id, {
+      $set: { googleSub, sessions: [], updatedAt: new Date() },
+      $unset: { passwordSalt: '', passwordHash: '' },
+    });
+    const { passwordSalt, passwordHash, ...linked } = byEmail;
+    return { ...linked, googleSub, sessions: [] };
   }
 
   // A clash with an existing display name takes the next free variant ("Alice G 2");

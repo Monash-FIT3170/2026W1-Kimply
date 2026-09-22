@@ -24,7 +24,7 @@ This file is the source of truth for **why** any of that is the way it is.
 
 Two accounts could share a display name, and their global leaderboard rows were indistinguishable: same name, same avatar letter, and the same avatar colour, because the colour is derived from the name (#125).
 No account could be renamed, including one named from a Google profile on first sign-in.
-And the leaderboard recorded the in-game name from the player's last game, so a row drifted away from its account and anyone could post results under anyone's name.
+And the leaderboard recorded the in-game name from the player's last game, so a row drifted away from its account and could show any name its player typed.
 
 Now `recordGlobalResult` writes the account's display name, display names are unique ignoring case and whitespace, and signed-in players can rename themselves on `/account`.
 
@@ -43,6 +43,10 @@ Things that are not obvious from the diff:
 - **`updateDisplayName` is the first method that trusts the session token for identity.**
   It takes the token, not an account id, so a player can only rename themselves.
   The methods from #108 that still take a client-supplied `accountId` are unchanged.
+- **This does not stop someone playing as another account.**
+  Which account a result is credited to still comes from the `accountId` the client passes to `rooms.create`, `rooms.join`, and `players.join`, and the `globalLeaderboard` publication sends every row's `accountId` to every browser.
+  So a player can still copy an id off the leaderboard and have their results land on someone else's row, now under that account's real name.
+  This predates these changes; moving those methods to the session token and unpublishing `accountId` is #127.
 - **The in-game name is still free-form.**
   It is what other players see in the room and on the end-of-game screen, and rooms already make it unique within a room. Only the global leaderboard uses the account name.
 - `AGENTS.md` had never listed the `globalLeaderboard` collection, publication, or test file. They are documented now.
@@ -63,6 +67,10 @@ Things that are not obvious from the diff:
   A Google identity whose email matches an existing password account is linked to it, so the same player keeps one account and one history.
   That is safe only because Google has proven the address; `email_verified: false` is refused outright.
   An email already linked to a different Google subject is refused rather than silently re-linked.
+- **Linking removes the account's password and ends its sessions.**
+  Registration never proves who owns an email, so anyone can register a password account for someone else's address before they sign up.
+  If linking kept that password, whoever set it would share the real owner's account once the owner signed in with Google.
+  The cost is that a genuine owner who registered with a password signs in with Google from then on; `signIn` tells them so with `use-google`.
 - **The client ID comes from an environment variable, not `METEOR_SETTINGS`.**
   Production configuration lives in `/opt/kimply/.env` and neither compose file passes `METEOR_SETTINGS`, so `GOOGLE_CLIENT_ID` follows the same path as `MONGO_URL`.
   The browser reads it through `playerAccounts.googleClientId`, so the value is set once per box and needs no rebuild.
