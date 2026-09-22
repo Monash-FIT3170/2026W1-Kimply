@@ -34,6 +34,10 @@ Things that are not obvious from the diff:
   A Google identity whose email matches an existing password account is linked to it, so the same player keeps one account and one history.
   That is safe only because Google has proven the address; `email_verified: false` is refused outright.
   An email already linked to a different Google subject is refused rather than silently re-linked.
+- **Linking removes the account's password and ends its sessions.**
+  Registration never proves who owns an email, so anyone can register a password account for someone else's address before they sign up.
+  If linking kept that password, whoever set it would share the real owner's account once the owner signed in with Google.
+  The cost is that a genuine owner who registered with a password signs in with Google from then on; `signIn` tells them so with `use-google`.
 - **The client ID comes from an environment variable, not `METEOR_SETTINGS`.**
   Production configuration lives in `/opt/kimply/.env` and neither compose file passes `METEOR_SETTINGS`, so `GOOGLE_CLIENT_ID` follows the same path as `MONGO_URL`.
   The browser reads it through `playerAccounts.googleClientId`, so the value is set once per box and needs no rebuild.

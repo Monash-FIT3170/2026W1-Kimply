@@ -263,7 +263,7 @@ Each definition is wrapped in a `global._<Name>Collection` guard so it survives 
   gamesPlayed: 0, wins: 0, bestRound: 0,
   sessions: [{ hash, createdAt, expiresAt }], createdAt, updatedAt }
 ```
-An account has a password, a `googleSub`, or both. One created by Google sign-in has no password fields; a password account gains `googleSub` when its owner first signs in with Google using the same verified email.
+An account has either a password or a `googleSub`, never both. One created by Google sign-in has no password fields. A password account that its owner signs in to with Google, using the same verified email, gains `googleSub` and **loses its password and sessions**, because registration never proved who owned that email.
 `gamesPlayed` and `wins` are incremented by `recordGlobalResult` in `gameMethods.js` when a game with a linked account ends.
 `sessions` holds the SHA-256 of each live session token, never the token itself. Sessions last 30 days, and expired ones are pruned whenever a new one is issued.
 
@@ -374,7 +374,7 @@ There is no timer or deadline, so one player leaving mid-round stalls that game 
 | `playerAccounts.register` | 120 | `{ displayName, email, password }` | Salted SHA-256, min 8-char password. Returns `{ _id, displayName, email, sessionToken }` |
 | `playerAccounts.signIn` | 160 | `{ email, password }` | Returns `{ _id, displayName, email, sessionToken }`. Each sign-in is its own session. Throws `use-google` for a Google-only account |
 | `playerAccounts.googleClientId` | 190 | none | The public OAuth client ID, or `null` when Google sign-in is off |
-| `playerAccounts.googleSignIn` | 194 | `idToken` | Verifies a Google ID token (audience, signature, `email_verified`), then finds by `googleSub`, links by email, or creates. Returns the same shape as `signIn` |
+| `playerAccounts.googleSignIn` | 194 | `idToken` | Verifies a Google ID token (audience, signature, `email_verified`), then finds by `googleSub`, links by email (removing that account's password and sessions), or creates. Returns the same shape as `signIn` |
 | `playerAccounts.resume` | 222 | `token` | Returns `{ _id, displayName, email }` for a live session, else throws `invalid-session` |
 | `playerAccounts.signOut` | 230 | `token` | Deletes that one session. Unknown tokens are a no-op |
 

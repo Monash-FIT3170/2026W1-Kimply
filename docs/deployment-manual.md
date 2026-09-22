@@ -528,7 +528,8 @@ For local development, put `GOOGLE_CLIENT_ID=<CLIENT_ID>` in the repository-root
 
 **How it is verified.** The browser gets a signed ID token from Google and sends it to `playerAccounts.googleSignIn`.
 The server checks the signature against Google's published keys with `google-auth-library`, requires this client ID as the audience, and requires `email_verified`.
-A Google identity that matches an existing account's email is linked to that account, so a player who registered with a password can also sign in with Google.
+A Google identity that matches an existing account's email is linked to that account, keeping its history.
+Linking removes that account's password and signs out its other sessions, because registration never proved who owned the email; from then on that player signs in with Google.
 
 **Content-Security-Policy.** There is no CSP today.
 If one is added, it must allow `https://accounts.google.com/gsi/client` in `script-src`, `https://accounts.google.com/gsi/` in `frame-src` and `connect-src`, and `https://accounts.google.com/gsi/style` in `style-src`.

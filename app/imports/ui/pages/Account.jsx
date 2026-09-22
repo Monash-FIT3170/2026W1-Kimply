@@ -9,6 +9,20 @@ const GOOGLE_SCRIPT_SRC = 'https://accounts.google.com/gsi/client';
 const GOOGLE_BUTTON_MAX_WIDTH = 400; // Google renders the button at most 400px wide.
 
 let googleScript = null;
+let googleInitializedFor = null;
+// Set by whichever GoogleSignIn is mounted, so Google's one-time callback reaches it.
+let handleGoogleCredential = null;
+
+// Google Identity Services must be initialized once per page, not on every render
+// of the button, or it logs a warning and may drop the earlier callback.
+function initializeGoogle(google, clientId) {
+  if (googleInitializedFor === clientId) return;
+  google.accounts.id.initialize({
+    client_id: clientId,
+    callback: ({ credential }) => handleGoogleCredential?.(credential),
+  });
+  googleInitializedFor = clientId;
+}
 
 // Loads Google Identity Services once per page load.
 function loadGoogleScript() {
@@ -37,6 +51,13 @@ function GoogleSignIn({ mode, onCredential }) {
   onCredentialRef.current = onCredential;
 
   useEffect(() => {
+    handleGoogleCredential = (credential) => onCredentialRef.current(credential);
+    return () => {
+      handleGoogleCredential = null;
+    };
+  }, []);
+
+  useEffect(() => {
     Meteor.call('playerAccounts.googleClientId', (err, id) => {
       if (!err && id) setClientId(id);
     });
@@ -48,10 +69,7 @@ function GoogleSignIn({ mode, onCredential }) {
     loadGoogleScript()
       .then((google) => {
         if (cancelled || !buttonRef.current) return;
-        google.accounts.id.initialize({
-          client_id: clientId,
-          callback: ({ credential }) => onCredentialRef.current(credential),
-        });
+        initializeGoogle(google, clientId);
         buttonRef.current.replaceChildren();
         google.accounts.id.renderButton(buttonRef.current, {
           theme: 'filled_black',
