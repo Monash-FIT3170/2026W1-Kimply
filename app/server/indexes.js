@@ -34,6 +34,11 @@ const INDEXES = [
   { collection: PlayerAccountsCollection, keys: { 'sessions.hash': 1 }, options: { name: 'sessions_hash' } },
   {
     collection: PlayerAccountsCollection,
+    keys: { displayNameKey: 1 },
+    options: { unique: true, sparse: true, name: 'displayNameKey_unique' },
+  },
+  {
+    collection: PlayerAccountsCollection,
     keys: { googleSub: 1 },
     options: { unique: true, sparse: true, name: 'googleSub_unique' },
   },

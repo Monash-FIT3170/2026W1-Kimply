@@ -208,7 +208,7 @@ Meteor's connect handler does this by default when the whole app is proxied.
 | `/play` | `PlayRoute` | username entry, then Create Room or Join Room |
 | `/play/join` | `JoinRoom` | 5-slot code entry; reads `?code=` from invite links |
 | `/play/:pin` | `PlayerLobby` | host view or joined view based on `location.state.isHost` |
-| `/account` | `Account` | register / sign in, with a Google button when `GOOGLE_CLIENT_ID` is set |
+| `/account` | `Account` | register / sign in, with a Google button when `GOOGLE_CLIENT_ID` is set. Signed in: rename display name, sign out |
 | `*` | `Navigate to="/"` | catch-all |
 
 `main.jsx:24` and `:26` declare **two identical `path="*"` routes**.
@@ -226,6 +226,7 @@ React Router v7 ranks by specificity rather than declaration order, so `/account
 | `RoundsCollection` | `rounds` | `imports/api/rounds.js:6` |
 | `PlayersCollection` | `players` | `imports/api/players.js:6` |
 | `LeaderboardCollection` | `leaderboard` | `imports/api/leaderboard.js:6` |
+| `GlobalLeaderboardCollection` | `globalLeaderboard` | `imports/api/globalLeaderboard.js:6` |
 | `PlayerAccountsCollection` | `playerAccounts` | `imports/api/playerAccounts.js:8` |
 
 Each definition is wrapped in a `global._<Name>Collection` guard so it survives double evaluation under `meteor test --full-app`.
@@ -257,14 +258,23 @@ Each definition is wrapped in a `global._<Name>Collection` guard so it survives 
 { gameId, playerId, name, lives, roundId, completedAt }
 ```
 
-**`playerAccounts`** (written by `playerAccounts.register`, `:144-155`, and by `playerAccounts.googleSignIn` through `findOrCreateGoogleAccount`)
+**`playerAccounts`** (written by `playerAccounts.register`, `:238-250`, and by `playerAccounts.googleSignIn` through `findOrCreateGoogleAccount`)
 ```js
-{ displayName, email, passwordSalt?, passwordHash?, googleSub?,
+{ displayName, displayNameKey, email, passwordSalt?, passwordHash?, googleSub?,
   gamesPlayed: 0, wins: 0, bestRound: 0,
   sessions: [{ hash, createdAt, expiresAt }], createdAt, updatedAt }
 ```
 An account has a password, a `googleSub`, or both. One created by Google sign-in has no password fields; a password account gains `googleSub` when its owner first signs in with Google using the same verified email.
+`displayName` is unique ignoring case and repeated whitespace. `displayNameKey` is its lower-cased, whitespace-collapsed form, and the unique index is built on it.
+Registration and `updateDisplayName` reject a taken name with `name-taken`. A first Google sign-in whose name is taken gets the next free variant ("Alice G 2").
+`ensureUniqueDisplayNames()` runs at startup before `ensureIndexes()`, fills in missing keys, and suffixes duplicates (the oldest account keeps the name) so the index can build.
 `gamesPlayed` and `wins` are incremented by `recordGlobalResult` in `gameMethods.js` when a game with a linked account ends.
+
+**`globalLeaderboard`** (written by `recordGlobalResult` in `gameMethods.js`, one row per account)
+```js
+{ accountId, displayName, bestRound, achievedAt, gamesPlayed, wins, updatedAt }
+```
+`displayName` is always the account's display name, never the in-game name typed on `/play`. A rename updates the row immediately.
 `sessions` holds the SHA-256 of each live session token, never the token itself. Sessions last 30 days, and expired ones are pruned whenever a new one is issued.
 
 ### Indexes
@@ -286,7 +296,10 @@ A failure is logged and does not take the server down, because a unique index ca
 | `leaderboard` | `{ completedAt: 1 }` | TTL 7 days |
 | `playerAccounts` | `{ email: 1 }` | unique |
 | `playerAccounts` | `{ 'sessions.hash': 1 }` | |
+| `playerAccounts` | `{ displayNameKey: 1 }` | unique, sparse |
 | `playerAccounts` | `{ googleSub: 1 }` | unique, sparse |
+| `globalLeaderboard` | `{ accountId: 1 }` | unique (created in `globalLeaderboard.js`) |
+| `globalLeaderboard` | `{ bestRound: -1, wins: -1, achievedAt: 1 }` | (created in `globalLeaderboard.js`) |
 
 The TTL indexes on `rooms` and `rounds` are what replaced the old destructive startup wipe: data expires on a timer instead of being deleted out from under live games on every restart.
 `leaderboard` is append-only and nothing deletes from it, so its TTL is what keeps it inside the 512 MB Atlas free-tier allowance.
@@ -303,6 +316,7 @@ All publications are **scoped to a single game**. `gameId` is the 5-character ro
 | `players` | `server/publications.js:35` | `gameId` | `{ gameId }` | excludes `attemptedSequence` |
 | `leaderboard` | `server/publications.js:40` | `gameId` | `{ gameId }` | none |
 | `rooms.lobby` | `imports/api/rooms.js:20` | `pin` | `{ pin }` | `_id, pin, status, gameName, hostName, players.name, players.id` |
+| `globalLeaderboard` | `server/publications.js:40` | none | `{}`, top 50 by `bestRound`, `wins`, `achievedAt` | none. The one publication not scoped by game, by design: it is the cross-game ranking |
 
 Three properties are load-bearing and must not be undone:
 
@@ -371,12 +385,13 @@ There is no timer or deadline, so one player leaving mid-round stalls that game 
 
 | Method | Line | Args | Description |
 |---|---|---|---|
-| `playerAccounts.register` | 120 | `{ displayName, email, password }` | Salted SHA-256, min 8-char password. Returns `{ _id, displayName, email, sessionToken }` |
-| `playerAccounts.signIn` | 160 | `{ email, password }` | Returns `{ _id, displayName, email, sessionToken }`. Each sign-in is its own session. Throws `use-google` for a Google-only account |
-| `playerAccounts.googleClientId` | 190 | none | The public OAuth client ID, or `null` when Google sign-in is off |
-| `playerAccounts.googleSignIn` | 194 | `idToken` | Verifies a Google ID token (audience, signature, `email_verified`), then finds by `googleSub`, links by email, or creates. Returns the same shape as `signIn` |
-| `playerAccounts.resume` | 222 | `token` | Returns `{ _id, displayName, email }` for a live session, else throws `invalid-session` |
-| `playerAccounts.signOut` | 230 | `token` | Deletes that one session. Unknown tokens are a no-op |
+| `playerAccounts.register` | 208 | `{ displayName, email, password }` | Salted SHA-256, min 8-char password. Rejects a taken display name (`name-taken`). Returns `{ _id, displayName, email, sessionToken }` |
+| `playerAccounts.signIn` | 263 | `{ email, password }` | Returns `{ _id, displayName, email, sessionToken }`. Each sign-in is its own session. Throws `use-google` for a Google-only account |
+| `playerAccounts.googleClientId` | 293 | none | The public OAuth client ID, or `null` when Google sign-in is off |
+| `playerAccounts.googleSignIn` | 297 | `idToken` | Verifies a Google ID token (audience, signature, `email_verified`), then finds by `googleSub`, links by email, or creates. Returns the same shape as `signIn` |
+| `playerAccounts.resume` | 325 | `token` | Returns `{ _id, displayName, email }` for a live session, else throws `invalid-session` |
+| `playerAccounts.updateDisplayName` | 335 | `token, name` | Renames the account behind the session token (never a client-supplied id) and its leaderboard row. `name-taken` if another account holds it |
+| `playerAccounts.signOut` | 364 | `token` | Deletes that one session. Unknown tokens are a no-op |
 
 `PlayerAccountsCollection` is never published, so hashes and salts stay server-side.
 Meteor's `accounts-base` / `accounts-password` / `accounts-google` packages are **not** installed; this is a hand-rolled implementation.
@@ -425,7 +440,7 @@ How to write and run them is the `test` skill. What exists today:
 | File | Covers |
 |---|---|
 | `rooms.test.js` | `rooms.create`, `rooms.join`, `rooms.kick` |
-| `playerAccounts.test.js` | register and signIn validation, hashing, normalisation; session issue, resume, expiry, sign-out; Google sign-in create, link, reject (verifier stubbed) |
+| `playerAccounts.test.js` | register and signIn validation, hashing, normalisation; session issue, resume, expiry, sign-out; Google sign-in create, link, reject (verifier stubbed); unique display names, rename, startup de-duplication |
 | `roundAdvance.test.js` | `rounds.advance` increments, player migration, idempotency |
 | `lifeDeduction.test.js` | life loss on wrong guess, streak reset |
 | `streak.test.js` | current vs longest streak |
@@ -435,6 +450,7 @@ How to write and run them is the `test` skill. What exists today:
 | `sequence.test.js` | `imports/api/sequence.js` (the copy the game does not use) |
 | `publications.test.js` | scoped `rounds` / `players` / `leaderboard` pubs, no `attemptedSequence` |
 | `leaderboardModel.test.js` | live leaderboard row helpers in `leaderboardModels.js` |
+| `globalLeaderboard.test.js` | `recordGlobalResult`: wins, losses, guests excluded, best round kept, top-50 cap, account name recorded rather than in-game name |
 
 **Not covered:** any authorization case, any concurrency or race scenario, `rooms.start`, `rooms.disconnect`, `rooms.updateGameName`, `rooms.reconnect`.
 

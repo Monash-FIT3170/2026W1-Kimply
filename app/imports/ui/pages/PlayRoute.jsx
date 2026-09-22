@@ -212,6 +212,10 @@ export function PlayRoute() {
           ) : signedInAccount ? (
             <p className="mt-3 text-center font-manrope text-[13px] text-fg3">
               Signed in as {signedInAccount.email} ·{' '}
+              <Link to="/account" className="font-outfit font-bold text-fg">
+                Account
+              </Link>{' '}
+              ·{' '}
               <button
                 onClick={signOut}
                 className="cursor-pointer border-none bg-transparent p-0 font-outfit font-bold text-fg"

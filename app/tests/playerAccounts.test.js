@@ -1,6 +1,12 @@
 import { Meteor } from 'meteor/meteor';
 import assert from 'assert';
-import { PlayerAccountsCollection, SESSION_LIFETIME_MS, hashSessionToken } from '/imports/api/playerAccounts';
+import {
+  PlayerAccountsCollection,
+  SESSION_LIFETIME_MS,
+  hashSessionToken,
+  ensureUniqueDisplayNames,
+} from '/imports/api/playerAccounts';
+import { GlobalLeaderboardCollection } from '/imports/api/globalLeaderboard';
 import { setGoogleVerifierForTests } from '/imports/api/googleAuth';
 
 if (Meteor.isServer) {
@@ -376,6 +382,188 @@ if (Meteor.isServer) {
           Meteor.callAsync('playerAccounts.signIn', { email: 'alice@example.com', password: 'password123' }),
           (err) => err.error === 'use-google'
         );
+      });
+    });
+
+    describe('display names', function () {
+      let emailCounter = 0;
+
+      async function register(displayName) {
+        emailCounter += 1;
+        return Meteor.callAsync('playerAccounts.register', {
+          displayName,
+          email: `player-${emailCounter}@example.com`,
+          password: 'password123',
+        });
+      }
+
+      beforeEach(async function () {
+        await GlobalLeaderboardCollection.removeAsync({});
+      });
+
+      afterEach(function () {
+        delete process.env.GOOGLE_CLIENT_ID;
+        setGoogleVerifierForTests();
+      });
+
+      it('stores a normalised name and a case-insensitive key', async function () {
+        const { _id } = await register('  Alice   G  ');
+        const account = await PlayerAccountsCollection.findOneAsync(_id);
+
+        assert.strictEqual(account.displayName, 'Alice G');
+        assert.strictEqual(account.displayNameKey, 'alice g');
+      });
+
+      it('refuses to register a name that is taken in any casing or spacing', async function () {
+        await register('Alice G');
+
+        for (const name of ['Alice G', 'alice g', '  ALICE   g ']) {
+          await assert.rejects(register(name), (err) => err.error === 'name-taken');
+        }
+        assert.strictEqual(await PlayerAccountsCollection.find({}).countAsync(), 1);
+      });
+
+      it('gives a first Google sign-in the next free variant of a taken name', async function () {
+        process.env.GOOGLE_CLIENT_ID = 'test-client.apps.googleusercontent.com';
+        await register('Alice G');
+        await register('Alice G 2');
+
+        let sub = 0;
+        setGoogleVerifierForTests(async () => {
+          sub += 1;
+          return { sub: `google-${sub}`, email: `google-${sub}@example.com`, email_verified: true, name: 'alice g' };
+        });
+
+        const first = await Meteor.callAsync('playerAccounts.googleSignIn', 'token');
+        const second = await Meteor.callAsync('playerAccounts.googleSignIn', 'token');
+
+        assert.strictEqual(first.displayName, 'alice g 3');
+        assert.strictEqual(second.displayName, 'alice g 4');
+      });
+
+      it('keeps a suffixed name within the length limit', async function () {
+        process.env.GOOGLE_CLIENT_ID = 'test-client.apps.googleusercontent.com';
+        const longName = 'N'.repeat(40);
+        await register(longName);
+        setGoogleVerifierForTests(async () => ({
+          sub: 'google-long',
+          email: 'long@example.com',
+          email_verified: true,
+          name: longName,
+        }));
+
+        const result = await Meteor.callAsync('playerAccounts.googleSignIn', 'token');
+
+        assert.strictEqual(result.displayName, `${'N'.repeat(38)} 2`);
+        assert.strictEqual(result.displayName.length, 40);
+      });
+
+      describe('playerAccounts.updateDisplayName', function () {
+        it('renames the account behind the session token and updates its leaderboard row', async function () {
+          const { _id, sessionToken } = await register('Alice');
+          await GlobalLeaderboardCollection.insertAsync({ accountId: _id, displayName: 'Alice', bestRound: 3 });
+
+          const result = await Meteor.callAsync('playerAccounts.updateDisplayName', sessionToken, '  Queen   Alice ');
+
+          assert.deepStrictEqual(result, { _id, displayName: 'Queen Alice', email: result.email });
+          const account = await PlayerAccountsCollection.findOneAsync(_id);
+          assert.strictEqual(account.displayName, 'Queen Alice');
+          assert.strictEqual(account.displayNameKey, 'queen alice');
+          const entry = await GlobalLeaderboardCollection.findOneAsync({ accountId: _id });
+          assert.strictEqual(entry.displayName, 'Queen Alice');
+        });
+
+        it('lets a player change only the casing of their own name', async function () {
+          const { sessionToken } = await register('alice');
+
+          const result = await Meteor.callAsync('playerAccounts.updateDisplayName', sessionToken, 'Alice');
+
+          assert.strictEqual(result.displayName, 'Alice');
+        });
+
+        it('refuses a name another account holds, in any casing', async function () {
+          await register('Bob');
+          const { _id, sessionToken } = await register('Alice');
+
+          await assert.rejects(
+            Meteor.callAsync('playerAccounts.updateDisplayName', sessionToken, 'BOB'),
+            (err) => err.error === 'name-taken'
+          );
+          assert.strictEqual((await PlayerAccountsCollection.findOneAsync(_id)).displayName, 'Alice');
+        });
+
+        it('frees the old name for someone else after a rename', async function () {
+          const { sessionToken } = await register('Alice');
+          await Meteor.callAsync('playerAccounts.updateDisplayName', sessionToken, 'Queen Alice');
+
+          const newcomer = await register('alice');
+
+          assert.strictEqual(newcomer.displayName, 'alice');
+        });
+
+        it('rejects a missing or signed-out session and an empty name', async function () {
+          const { sessionToken } = await register('Alice');
+
+          await assert.rejects(
+            Meteor.callAsync('playerAccounts.updateDisplayName', undefined, 'Mallory'),
+            (err) => err.error === 'invalid-session'
+          );
+          await assert.rejects(
+            Meteor.callAsync('playerAccounts.updateDisplayName', sessionToken, '   '),
+            (err) => err.error === 'invalid-name'
+          );
+
+          await Meteor.callAsync('playerAccounts.signOut', sessionToken);
+          await assert.rejects(
+            Meteor.callAsync('playerAccounts.updateDisplayName', sessionToken, 'Mallory'),
+            (err) => err.error === 'invalid-session'
+          );
+        });
+      });
+
+      describe('ensureUniqueDisplayNames', function () {
+        async function insertLegacyAccount(displayName, createdAt) {
+          return PlayerAccountsCollection.insertAsync({
+            displayName,
+            email: `${createdAt.getTime()}@x.com`,
+            createdAt,
+          });
+        }
+
+        it('suffixes duplicates, keeps the oldest on the original name, and syncs the leaderboard', async function () {
+          const oldest = await insertLegacyAccount('Alice', new Date('2026-01-01'));
+          const middle = await insertLegacyAccount('alice', new Date('2026-02-01'));
+          const newest = await insertLegacyAccount(' ALICE ', new Date('2026-03-01'));
+          const other = await insertLegacyAccount('Bob', new Date('2026-01-15'));
+          await GlobalLeaderboardCollection.insertAsync({ accountId: newest, displayName: 'in-game name' });
+
+          await ensureUniqueDisplayNames();
+
+          const names = {};
+          for (const id of [oldest, middle, newest, other]) {
+            const account = await PlayerAccountsCollection.findOneAsync(id);
+            names[id] = account.displayName;
+            assert.strictEqual(account.displayNameKey, account.displayName.toLowerCase());
+          }
+          assert.strictEqual(names[oldest], 'Alice');
+          assert.strictEqual(names[middle], 'alice 2');
+          assert.strictEqual(names[newest], 'ALICE 3');
+          assert.strictEqual(names[other], 'Bob');
+          assert.strictEqual(
+            (await GlobalLeaderboardCollection.findOneAsync({ accountId: newest })).displayName,
+            'ALICE 3'
+          );
+        });
+
+        it('is a no-op on clean data', async function () {
+          await register('Alice');
+          const before = await PlayerAccountsCollection.find({}).fetchAsync();
+
+          await ensureUniqueDisplayNames();
+          await ensureUniqueDisplayNames();
+
+          assert.deepStrictEqual(await PlayerAccountsCollection.find({}).fetchAsync(), before);
+        });
       });
     });
   });

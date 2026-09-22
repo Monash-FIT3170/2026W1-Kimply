@@ -20,6 +20,35 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-09-22 - Display names are unique and editable, and they are what the leaderboard shows
+
+Two accounts could share a display name, and their global leaderboard rows were indistinguishable: same name, same avatar letter, and the same avatar colour, because the colour is derived from the name (#125).
+No account could be renamed, including one named from a Google profile on first sign-in.
+And the leaderboard recorded the in-game name from the player's last game, so a row drifted away from its account and anyone could post results under anyone's name.
+
+Now `recordGlobalResult` writes the account's display name, display names are unique ignoring case and whitespace, and signed-in players can rename themselves on `/account`.
+
+Things that are not obvious from the diff:
+
+- **Uniqueness is enforced by an index on `displayNameKey`, not only by the check before writing.**
+  The check gives a friendly `name-taken` error; the unique index is what actually stops two simultaneous registrations or renames from both winning.
+  A duplicate-key error from the index is translated into the same `name-taken`.
+- **Google sign-in never fails because of a name clash.**
+  It takes the next free variant ("Alice G 2", "Alice G 3") and retries if it loses a race, since a player signing in with Google has no form on which to pick another name.
+  They can change it on `/account` afterwards.
+- **Existing duplicates are repaired at startup, before the index is built.**
+  `ensureUniqueDisplayNames()` sorts accounts by `createdAt`, lets the oldest keep a name, and suffixes the rest.
+  It also rewrites every leaderboard row's name from its account, which is what removes the in-game names already stored there.
+  It is idempotent, so it costs one scan of `playerAccounts` per startup and changes nothing once the data is clean.
+- **`updateDisplayName` is the first method that trusts the session token for identity.**
+  It takes the token, not an account id, so a player can only rename themselves.
+  The methods from #108 that still take a client-supplied `accountId` are unchanged.
+- **The in-game name is still free-form.**
+  It is what other players see in the room and on the end-of-game screen, and rooms already make it unique within a room. Only the global leaderboard uses the account name.
+- `AGENTS.md` had never listed the `globalLeaderboard` collection, publication, or test file. They are documented now.
+
+Files: `app/imports/api/playerAccounts.js`, `app/imports/api/gameMethods.js`, `app/server/main.js`, `app/server/indexes.js`, `app/imports/ui/accountSession.js`, `app/imports/ui/pages/Account.jsx`, `app/imports/ui/pages/PlayRoute.jsx`, `app/tests/playerAccounts.test.js`, `app/tests/globalLeaderboard.test.js`, `AGENTS.md`.
+
 ## 2026-09-22 - Google sign-in
 
 Players can sign up and sign in with Google from `/account` (#105).
