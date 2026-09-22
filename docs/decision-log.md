@@ -70,6 +70,7 @@ Things that are not obvious from the diff:
   `googleAuth.js` is imported by `playerAccounts.js`, which the client bundle includes through `globalLeaderboard.js`.
   A dynamic import alone is not enough: Rspack still tries to bundle the Node-only library for the browser and fails with 14 errors, so `rspack.config.js` resolves it to nothing for the client.
 - **The verifier has a test seam**, `setGoogleVerifierForTests`, so the tests cover create, link, and refusal paths without a network call or a real Google token.
+  The override is stored on `global`, not in a module variable, because CI's `meteor test --full-app` evaluates the module twice and registers the methods from the other copy. A module variable passed locally under `npm test` and failed all six stubbed tests in CI.
   The real verification path was exercised against the running dev server: a malformed token reaches `google-auth-library` and is rejected with its own error, which is logged server-side.
 
 Setup is in `docs/deployment-manual.md` section 9f. The new UI pattern is in `docs/design_system.md` under Third-party sign-in.
