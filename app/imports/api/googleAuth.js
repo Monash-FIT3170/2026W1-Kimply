@@ -25,15 +25,22 @@ async function verifyWithGoogle(idToken, audience) {
   return ticket.getPayload();
 }
 
-let verifier = verifyWithGoogle;
+// The test override lives on `global`, not in a module variable. `meteor test --full-app`
+// (what CI runs) evaluates this module twice, once in the app bundle and once in the test
+// bundle, and the methods are registered by whichever copy loads first. A module variable
+// set by the tests would only reach their own copy, so the stub would never be used.
+if (!global._googleVerifierOverride) {
+  global._googleVerifierOverride = { fn: null };
+}
+const override = global._googleVerifierOverride;
 
 // Returns the verified token payload ({ sub, email, email_verified, name, ... }),
 // or throws if the signature, expiry, issuer, or audience is wrong.
 export function verifyGoogleIdToken(idToken, audience) {
-  return verifier(idToken, audience);
+  return (override.fn || verifyWithGoogle)(idToken, audience);
 }
 
 // Tests replace the network-bound verifier with a stub. Pass nothing to restore it.
 export function setGoogleVerifierForTests(fn) {
-  verifier = fn || verifyWithGoogle;
+  override.fn = fn || null;
 }
