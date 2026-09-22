@@ -22,7 +22,7 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ## 2026-09-22 - Production target moves to ECS on Fargate, with Terraform for the infrastructure
 
-The production design for replacing the single EC2 instance was worked out and recorded in `docs/ecs-target-architecture.md` (decisions D1-D38), and the Terraform to build it now exists under `infra/terraform/`.
+The production design for replacing the single EC2 instance was worked out and recorded in `docs/ecs-target-architecture.md` (decisions D1-D39), and the Terraform to build it now exists under `infra/terraform/`.
 Nothing has been applied yet, and the EC2 stack is still what serves `kimply.online`.
 
 Things that are not obvious from the diff:
