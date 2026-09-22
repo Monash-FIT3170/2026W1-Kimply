@@ -118,6 +118,7 @@ The full loop is built end to end:
 - A live per-round leaderboard and an end-of-game ranking screen
 - Optional player accounts (register and sign in)
 - A lobby-only reconnect prompt backed by `localStorage`
+- The last username used is remembered in `localStorage` and prefilled on `/play` and `/play/join`
 
 ---
 
@@ -184,6 +185,7 @@ app/
 │       ├── ColourSequence.jsx     # sequence playback + tile input
 │       ├── roomCode.js            # pure helpers for the 5-slot code entry
 │       ├── keyboard.js            # pure key handlers
+│       ├── savedUsername.js       # remembers the last username in localStorage
 │       └── styles.css             # Tailwind directives + keyframes
 └── tests/                    # meteortesting:mocha specs, see Testing below
 ```
@@ -416,7 +418,7 @@ How to write and run them is the `test` skill. What exists today:
 | `streak.test.js` | current vs longest streak |
 | `accuracy.test.js` | `totalGuesses` / `correctGuesses` |
 | `updateWinner.test.js` | last-one-standing winner selection |
-| `uiHelpers.test.js` | `roomCode.js` and `keyboard.js` pure helpers |
+| `uiHelpers.test.js` | `roomCode.js`, `keyboard.js`, and `savedUsername.js` pure helpers |
 | `sequence.test.js` | `imports/api/sequence.js` (the copy the game does not use) |
 | `publications.test.js` | scoped `rounds` / `players` / `leaderboard` pubs, no `attemptedSequence` |
 | `leaderboardModel.test.js` | live leaderboard row helpers in `leaderboardModels.js` |

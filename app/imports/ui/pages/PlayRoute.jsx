@@ -4,6 +4,7 @@ import { Meteor } from 'meteor/meteor';
 import { BG, PRIMARY, TILE, HAIRLINE, FG2, TileLattice, Wordmark, Avatar, avatarColor, ArrowIcon, PencilIcon} from '../components/design';
 import { ReconnectPopup } from '../components/ReconnectPopup';
 import { submitOnEnter } from '../keyboard';
+import { loadUsername, saveUsername, USERNAME_MAX_LENGTH } from '../savedUsername';
 
 
 
@@ -70,8 +71,8 @@ export function PlayRoute() {
   const { state } = useLocation();
   const signedInAccount = state?.playerAccount;
 
-  const [name, setName] = useState(signedInAccount?.displayName || '');
-  const [editing, setEditing] = useState(!signedInAccount?.displayName);
+  const [name, setName] = useState(() => signedInAccount?.displayName || loadUsername());
+  const [editing, setEditing] = useState(() => !name.trim());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -126,6 +127,7 @@ export function PlayRoute() {
     if (!hasName || loading) return;
     setLoading(true);
     setError('');
+    saveUsername(trimmedName);
 
     Meteor.call('rooms.create', trimmedName, signedInAccount?._id, (err, result) => {
       setLoading(false);
@@ -146,6 +148,7 @@ export function PlayRoute() {
 
   const handleJoin = () => {
     if (!hasName) return;
+    saveUsername(trimmedName);
     navigate('/play/join', { state: { playerName: trimmedName, playerAccount: signedInAccount } });
   };
 
@@ -182,7 +185,7 @@ export function PlayRoute() {
               onBlur={() => hasName && setEditing(false)}
               onKeyDown={submitOnEnter(() => setEditing(false), { when: () => hasName })}
               placeholder="Enter your username"
-              maxLength={30}
+              maxLength={USERNAME_MAX_LENGTH}
               className="w-full rounded-[14px] border border-hairline bg-surface px-4 py-3.5 font-outfit text-lg font-semibold text-fg outline-none placeholder:text-fg3"
               style={{ caretColor: PRIMARY }}
             />

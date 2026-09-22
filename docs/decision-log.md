@@ -20,6 +20,24 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-09-22 - The last username is remembered between visits
+
+Players had to type their username on every visit (#119).
+The last name used is now kept in `localStorage` under `kimply.username` and prefilled on `/play` and on `/play/join`, including when `/play/join` is opened from an invite link with no router state.
+
+Things that are not obvious from the diff:
+
+- **The name is saved when it is used, not while it is typed.**
+  It is written on Create Room, on Join Room from `/play`, and after a successful `rooms.join`, so a half-typed or abandoned name never replaces the last one that actually got someone into a game.
+- **A signed-in account's display name still wins over the saved name on `/play`.**
+  On a shared device, the saved name belongs to whoever played last, while a signed-in account is a stronger statement of who is at the keyboard.
+- **Storage failures are silent.**
+  Every read and write is wrapped, so private browsing or blocked site data just means the field starts empty, as it did before.
+- `JoinRoom.handleJoin` now refuses to submit with a blank name.
+  Before, pressing Enter in the code slots could call `rooms.join` with an empty name even though the button was disabled.
+
+Files: `app/imports/ui/savedUsername.js` (new), `app/imports/ui/pages/PlayRoute.jsx`, `app/imports/ui/pages/JoinRoom.jsx`, `app/tests/uiHelpers.test.js`, `AGENTS.md`.
+
 ## 2026-09-04 - The Quality Assurance Plan is now a document in the repo
 
 The QA plan existed only as a submission document, written before most of the machinery it described was built.
