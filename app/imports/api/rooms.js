@@ -85,7 +85,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
 
       const update = { gameMode };
       if (GAME_MODE_PRESETS[gameMode]) {
-        update.customSettings = GAME_MODE_PRESETS[gameMode];
+        update.customSettings = { ...GAME_MODE_PRESETS[gameMode] };
       }
 
       await RoomsCollection.updateAsync(
@@ -100,6 +100,9 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       const room = await RoomsCollection.findOneAsync({ pin });
       if (room?.gameMode !== 'custom') {
         throw new Meteor.Error('not-custom-mode', 'Settings only apply in custom game mode');
+      }
+      if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+        throw new Meteor.Error('invalid-settings', 'Invalid settings');
       }
 
       const validSpeeds = ['slow', 'medium', 'fast'];
@@ -116,17 +119,22 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       ) {
         throw new Meteor.Error('invalid-length', 'startingSequenceLength must be a positive integer');
       }
+      if (settings.sequenceGrowth != null && (!Number.isInteger(settings.sequenceGrowth) || settings.sequenceGrowth < 1)) {
+        throw new Meteor.Error('invalid-growth', 'sequenceGrowth must be a positive integer');
+      }
 
-      await RoomsCollection.updateAsync({ pin }, { $set: { customSettings: settings } });
+      const customSettings = { ...GAME_MODE_PRESETS.custom, ...room.customSettings, ...settings };
+      await RoomsCollection.updateAsync({ pin }, { $set: { customSettings } });
     },
 
-    async 'rooms.start'(pin, gameMode = 'standard') {
+    async 'rooms.start'(pin, gameMode = null) {
       if (typeof pin !== 'string' || !pin.trim()) {
         throw new Meteor.Error('invalid', 'Invalid PIN');
       }
       const room = await RoomsCollection.findOneAsync({ pin: pin.trim() });
       if (!room) throw new Meteor.Error('not-found', 'Room not found');
       if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
+      const selectedGameMode = gameMode || room.gameMode || 'default';
 
       // Drop anyone who disconnected in the lobby and did not reconnect.
       await RoomsCollection.updateAsync({ _id: room._id }, { $pull: { players: { connected: false } } });
@@ -135,7 +143,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       await PlayersCollection.removeAsync({ gameId: pin });
       await RoundsCollection.removeAsync({ gameId: pin });
 
-      await RoomsCollection.updateAsync({ _id: room._id }, { $set: { status: 'in_progress', gameMode } });
+      await RoomsCollection.updateAsync({ _id: room._id }, { $set: { status: 'in_progress', gameMode: selectedGameMode } });
       await Meteor.callAsync('rounds.generate', room.pin);
     },
 
@@ -202,7 +210,12 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
         }
       );
 
-      return { roomId: room.pin, playerId: playerId };
+      return {
+        roomId: room.pin,
+        playerId: playerId,
+        gameMode: room.gameMode,
+        customSettings: room.customSettings,
+      };
     },
 
     async 'rooms.updateGameName'(pin, gameName) {

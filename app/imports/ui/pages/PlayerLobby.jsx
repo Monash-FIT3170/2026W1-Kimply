@@ -22,6 +22,7 @@ import {
 
 function getGameModeColor(mode) {
   const colors = {
+    default: 'oklch(0.70 0.22 70)',
     easy: 'oklch(0.75 0.20 120)',
     medium: 'oklch(0.70 0.22 70)',
     hard: 'oklch(0.65 0.22 25)',
@@ -29,6 +30,11 @@ function getGameModeColor(mode) {
     battle_royale: 'oklch(0.50 0.25 340)',
   };
   return colors[mode] || 'oklch(0.60 0.20 270)';
+}
+
+function getGameModeLabel(mode) {
+  if (mode === 'battle_royale') return 'Battle Royale Mode';
+  return `${(mode || 'default').charAt(0).toUpperCase()}${(mode || 'default').slice(1)} Mode`;
 }
 
 function BackButton({ onClick }) {
@@ -282,6 +288,7 @@ function HostView({ room, playerName, playerId, playerAccount, onBack, navigate,
 
 function JoinedView({ room, playerName, playerId, playerAccount, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
+  const selectedGameMode = room.gameMode || gameMode || 'default';
 
   const stillInRoom = !playerName || players.some((p) => p.name === playerName);
   useEffect(() => {
@@ -303,7 +310,7 @@ function JoinedView({ room, playerName, playerId, playerAccount, onBack, navigat
   useEffect(() => {
     if (room?.status === 'in_progress') {
       navigate('/game', {
-        state: { playerName, playerId, pin: room.pin, gameMode: room.gameMode || 'standard', playerAccount },
+        state: { playerName, playerId, pin: room.pin, gameMode: selectedGameMode, playerAccount },
       });
     }
   }, [room?.status]);
@@ -336,13 +343,9 @@ function JoinedView({ room, playerName, playerId, playerAccount, onBack, navigat
           {/* Game Mode Badge */}
           <div
             className="flex w-fit items-center gap-2 rounded-full px-4 py-2"
-            style={{ background: getGameModeColor(gameMode) }}
+            style={{ background: getGameModeColor(selectedGameMode) }}
           >
-            <span className="font-outfit text-sm font-semibold text-bg">
-              {gameMode === 'battle_royale'
-                ? 'Battle Royale Mode'
-                : gameMode.charAt(0).toUpperCase() + gameMode.slice(1) + ' Mode'}
-            </span>
+            <span className="font-outfit text-sm font-semibold text-bg">{getGameModeLabel(selectedGameMode)}</span>
           </div>
           <div className="flex items-center justify-between">
             <p className="font-outfit text-sm font-bold uppercase tracking-widest text-fg2">
@@ -385,18 +388,18 @@ export function PlayerLobby() {
   const playerId = state?.playerId || '';
   const isHost = state?.isHost === true;
   const playerAccount = state?.playerAccount;
-  const gameMode = state?.gameMode || 'standard';
-  const customSettings = state?.customSettings || null;
   const gameStarted = useRef(false);
   const [showExitPopup, setShowExitPopup] = useState(false);
   const isLoading = useSubscribe('rooms.lobby', pin);
   const room = useTracker(() => RoomsCollection.findOne({ pin }));
+  const gameMode = room?.gameMode || state?.gameMode || 'default';
+  const customSettings = room?.customSettings || state?.customSettings || null;
 
   useEffect(() => {
     if (room?.status === 'in_progress' && !gameStarted.current) {
       gameStarted.current = true;
       navigate('/game', {
-        state: { playerName, playerId, pin: room.pin, gameMode: room.gameMode || 'standard', playerAccount },
+        state: { playerName, playerId, pin: room.pin, gameMode, playerAccount },
       });
     }
   }, [room?.status]);

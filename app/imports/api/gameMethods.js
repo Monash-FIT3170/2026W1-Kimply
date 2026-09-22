@@ -239,13 +239,18 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       const length = room?.customSettings?.startingSequenceLength
         ? room.customSettings.startingSequenceLength
         : DEFAULT_SEQUENCE_LENGTH;
+      const sequenceGrowth = room?.customSettings?.sequenceGrowth ?? 1;
+      const startingLives = room?.customSettings?.startingLives ?? DEFAULT_STARTING_LIVES;
 
       const sequence = generateSequence(length);
 
       return RoundsCollection.insertAsync({
         gameId,
+        gameMode: room?.gameMode ?? 'default',
         level: length, // level matches sequence length
         lengthOfSequence: length,
+        lives: startingLives,
+        sequenceGrowth,
         sequence,
         createdAt: new Date(),
         advanced: false,
@@ -502,14 +507,20 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       });
 
       // increase sequence size for next round
-      const nextLength = currentRound.lengthOfSequence + 1;
+      const room = await RoomsCollection.findOneAsync({ pin: currentRound.gameId });
+      const sequenceGrowth = currentRound.sequenceGrowth ?? room?.customSettings?.sequenceGrowth ?? 1;
+      const nextLength = currentRound.lengthOfSequence + sequenceGrowth;
       const nextSequence = generateSequence(nextLength);
       const nextRoundNumber = (currentRound.roundNumber ?? 1) + 1;
 
       // create next round
       const nextRoundId = await RoundsCollection.insertAsync({
         gameId: currentRound.gameId,
+        gameMode: currentRound.gameMode ?? room?.gameMode ?? 'default',
+        level: nextLength,
         lengthOfSequence: nextLength,
+        lives: currentRound.lives ?? room?.customSettings?.startingLives ?? DEFAULT_STARTING_LIVES,
+        sequenceGrowth,
         sequence: nextSequence,
         createdAt: new Date(),
         advanced: false,

@@ -2,7 +2,8 @@
 #
 # Probe a Kimply deployment's readiness endpoint with retry and backoff.
 #
-# Used by deploy/deploy.sh to gate a release, and runnable by hand to check a
+# Used by deploy/deploy.sh (EC2) and deploy/ecs-deploy.sh (ECS) to gate a
+# release, and runnable by hand to check a
 # live deployment. Hitting the PUBLIC URL is the point: it exercises DNS, the
 # Elastic IP, the security group, nginx, TLS, the app and MongoDB in one call, so
 # a pass means the whole path works rather than just the container.
@@ -68,6 +69,6 @@ done
 log "NOT READY after $ATTEMPTS attempts"
 log "Diagnose with:"
 log "  curl -v ${CURL_OPTS[*]} $URL"
-log "  docker compose -f docker-compose.prod.yml logs --tail=50 app"
-log "  docker compose -f docker-compose.prod.yml logs --tail=50 nginx"
+log "  EC2: docker compose -f docker-compose.prod.yml logs --tail=50 app nginx"
+log "  ECS: aws logs tail /ecs/kimply-prod --since 15m"
 exit 1

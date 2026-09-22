@@ -1,21 +1,24 @@
-# Build the arm64 image, push it to ECR by commit SHA, and deploy it to the
-# instance for this branch.
+# Build the arm64 image, push it to ECR by commit SHA, and deploy it.
 #
-#   main -> production   (kimply.online)
-#   dev  -> development  (dev.kimply.online)
+#   main -> production on ECS Fargate      (ecs.kimply.online, www at cutover)
+#        -> production EC2 instance        (kimply.online, until cutover)
+#   dev  -> development EC2 instance       (dev.kimply.online)
 #
-# The two environments share nothing: not the instance, not the Elastic IP, not
-# the ECR repository, not the IAM roles, not the database, not the certificate.
-# The only thing they share is this file.
+# During the parallel run (docs/ecs-target-architecture.md, D37/D39) main deploys
+# to BOTH production stacks so they always serve the same version. At cutover the
+# main half of deploy-ec2 is removed.
+#
+# The EC2 jobs run only from the upstream repository, because their IAM roles
+# trust only it. The ECS roles also trust the migration fork, so the fork builds
+# and deploys to ECS but skips EC2.
 name: Deploy
 
 on:
   push:
     branches: [main, dev]
 
-# The two branches deploy to two independent stacks, so they must not share a
-# queue. cancel-in-progress stays false: a half-finished deploy is worse than a
-# slow one.
+# The two branches deploy to independent stacks, so they must not share a queue.
+# cancel-in-progress stays false: a half-finished deploy is worse than a slow one.
 concurrency:
   group: kimply-deploy-${{ github.ref_name }}
   cancel-in-progress: false
@@ -28,30 +31,25 @@ env:
   AWS_REGION: ap-southeast-2
   TAG: ${{ github.sha }}
   ECR_REPOSITORY: ${{ github.ref_name == 'main' && 'kimply' || 'kimply-dev' }}
-  INSTANCE_ID: ${{ github.ref_name == 'main' && 'i-08184036cf37c932c' || 'i-09575e88c984e1c7d' }}
   ECR_ROLE: ${{ github.ref_name == 'main' && 'arn:aws:iam::827152325060:role/GitHubActionsECRPush' || 'arn:aws:iam::827152325060:role/GitHubActionsECRPushDev' }}
-  SSM_ROLE: ${{ github.ref_name == 'main' && 'arn:aws:iam::827152325060:role/GitHubActionsEC2Commands' || 'arn:aws:iam::827152325060:role/GitHubActionsEC2CommandsDev' }}
 
 jobs:
-  build-and-deploy:
+  build:
+    # dev's roles trust only the upstream repository.
+    if: github.ref_name == 'main' || github.repository == 'Monash-FIT3170/2026W1-Kimply'
     runs-on: ubuntu-24.04-arm
 
     steps:
       # A branch added to the trigger above without a matching entry in the env
-      # block would otherwise resolve to the development target and quietly
-      # deploy the wrong code to dev. Fail instead.
+      # block would otherwise resolve to the development target. Fail instead.
       - name: Guard against an unconfigured target
         run: |
-          echo "Branch      : ${{ github.ref_name }}"
-          echo "ECR repo    : $ECR_REPOSITORY"
-          echo "Instance    : $INSTANCE_ID"
+          echo "Repository : ${{ github.repository }}"
+          echo "Branch     : ${{ github.ref_name }}"
+          echo "ECR repo   : $ECR_REPOSITORY"
           case "${{ github.ref_name }}" in
             main|dev) ;;
             *) echo "::error::no deployment target configured for '${{ github.ref_name }}'"; exit 1 ;;
-          esac
-          case "$INSTANCE_ID" in
-            i-*) ;;
-            *) echo "::error::INSTANCE_ID is not a valid instance id: '$INSTANCE_ID'"; exit 1 ;;
           esac
 
       - name: Checkout repository
@@ -64,17 +62,59 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
-        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
       # build-push.sh reads ECR_REPOSITORY and AWS_REGION from the environment
-      # and derives the registry from the caller identity, so it needs no
-      # per-environment arguments.
+      # and derives the registry from the caller identity.
       - name: Build and Push Docker Image
         run: ./deploy/build-push.sh
+
+  deploy-ecs:
+    if: github.ref_name == 'main'
+    needs: build
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Can register task definitions and update the kimply-prod service only.
+      - name: Configure AWS credentials ECS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::827152325060:role/kimply-prod-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Registers a revision from infra/ecs/task-definition.prod.json, waits for
+      # ECS to report the rollout COMPLETED (circuit breaker and canary alarm roll
+      # back on their own), then probes /health/ready on the public URL.
+      - name: Deploy to ECS
+        run: ./deploy/ecs-deploy.sh "$TAG"
+        env:
+          SERVICE_URL: https://ecs.kimply.online
+
+  deploy-ec2:
+    # dev always; main only until cutover. Upstream only, because these roles
+    # trust only the upstream repository.
+    if: github.repository == 'Monash-FIT3170/2026W1-Kimply'
+    needs: build
+    runs-on: ubuntu-24.04-arm
+
+    env:
+      INSTANCE_ID: ${{ github.ref_name == 'main' && 'i-08184036cf37c932c' || 'i-09575e88c984e1c7d' }}
+      SSM_ROLE: ${{ github.ref_name == 'main' && 'arn:aws:iam::827152325060:role/GitHubActionsEC2Commands' || 'arn:aws:iam::827152325060:role/GitHubActionsEC2CommandsDev' }}
+
+    steps:
+      - name: Guard against an unconfigured instance
+        run: |
+          echo "Instance : $INSTANCE_ID"
+          case "$INSTANCE_ID" in
+            i-*) ;;
+            *) echo "::error::INSTANCE_ID is not a valid instance id: '$INSTANCE_ID'"; exit 1 ;;
+          esac
 
       - name: Configure AWS credentials EC2
         uses: aws-actions/configure-aws-credentials@v4
