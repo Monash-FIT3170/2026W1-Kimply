@@ -116,7 +116,7 @@ The full loop is built end to end:
 - The game itself: sequence playback, tile input, life deduction, streaks, accuracy tracking
 - Round advancement, elimination, and winner detection
 - A live per-round leaderboard and an end-of-game ranking screen
-- Optional player accounts (register, sign in, sign out), with a session that survives reloads, new tabs, and the end of a game
+- Optional player accounts (register, sign in with a password or Google, sign out), with a session that survives reloads, new tabs, and the end of a game
 - A lobby-only reconnect prompt backed by `localStorage`
 
 ---
@@ -172,7 +172,8 @@ app/
 │   │   ├── players.js        # PlayersCollection (definition only)
 │   │   ├── leaderboard.js    # LeaderboardCollection (definition only)
 │   │   ├── gameMethods.js    # The game loop: rounds.*, players.* methods
-│   │   ├── playerAccounts.js # PlayerAccountsCollection + register/signIn/resume/signOut
+│   │   ├── playerAccounts.js # PlayerAccountsCollection + register/signIn/googleSignIn/resume/signOut
+│   │   ├── googleAuth.js     # GOOGLE_CLIENT_ID + Google ID-token verification (server use only)
 │   │   └── sequence.js       # COLOURS + generateSequence (see note below)
 │   └── ui/
 │       ├── pages/            # Splash, PlayRoute, JoinRoom, PlayerLobby, GamePage, Account
@@ -207,7 +208,7 @@ Meteor's connect handler does this by default when the whole app is proxied.
 | `/play` | `PlayRoute` | username entry, then Create Room or Join Room |
 | `/play/join` | `JoinRoom` | 5-slot code entry; reads `?code=` from invite links |
 | `/play/:pin` | `PlayerLobby` | host view or joined view based on `location.state.isHost` |
-| `/account` | `Account` | register / sign in |
+| `/account` | `Account` | register / sign in, with a Google button when `GOOGLE_CLIENT_ID` is set |
 | `*` | `Navigate to="/"` | catch-all |
 
 `main.jsx:24` and `:26` declare **two identical `path="*"` routes**.
@@ -256,12 +257,13 @@ Each definition is wrapped in a `global._<Name>Collection` guard so it survives 
 { gameId, playerId, name, lives, roundId, completedAt }
 ```
 
-**`playerAccounts`** (written by `playerAccounts.register`, `:95-106`)
+**`playerAccounts`** (written by `playerAccounts.register`, `:144-155`, and by `playerAccounts.googleSignIn` through `findOrCreateGoogleAccount`)
 ```js
-{ displayName, email, passwordSalt, passwordHash,
+{ displayName, email, passwordSalt?, passwordHash?, googleSub?,
   gamesPlayed: 0, wins: 0, bestRound: 0,
   sessions: [{ hash, createdAt, expiresAt }], createdAt, updatedAt }
 ```
+An account has a password, a `googleSub`, or both. One created by Google sign-in has no password fields; a password account gains `googleSub` when its owner first signs in with Google using the same verified email.
 `gamesPlayed` and `wins` are incremented by `recordGlobalResult` in `gameMethods.js` when a game with a linked account ends.
 `sessions` holds the SHA-256 of each live session token, never the token itself. Sessions last 30 days, and expired ones are pruned whenever a new one is issued.
 
@@ -284,6 +286,7 @@ A failure is logged and does not take the server down, because a unique index ca
 | `leaderboard` | `{ completedAt: 1 }` | TTL 7 days |
 | `playerAccounts` | `{ email: 1 }` | unique |
 | `playerAccounts` | `{ 'sessions.hash': 1 }` | |
+| `playerAccounts` | `{ googleSub: 1 }` | unique, sparse |
 
 The TTL indexes on `rooms` and `rounds` are what replaced the old destructive startup wipe: data expires on a timer instead of being deleted out from under live games on every restart.
 `leaderboard` is append-only and nothing deletes from it, so its TTL is what keeps it inside the 512 MB Atlas free-tier allowance.
@@ -368,13 +371,17 @@ There is no timer or deadline, so one player leaving mid-round stalls that game 
 
 | Method | Line | Args | Description |
 |---|---|---|---|
-| `playerAccounts.register` | 71 | `{ displayName, email, password }` | Salted SHA-256, min 8-char password. Returns `{ _id, displayName, email, sessionToken }` |
-| `playerAccounts.signIn` | 111 | `{ email, password }` | Returns `{ _id, displayName, email, sessionToken }`. Each sign-in is its own session |
-| `playerAccounts.resume` | 136 | `token` | Returns `{ _id, displayName, email }` for a live session, else throws `invalid-session` |
-| `playerAccounts.signOut` | 144 | `token` | Deletes that one session. Unknown tokens are a no-op |
+| `playerAccounts.register` | 120 | `{ displayName, email, password }` | Salted SHA-256, min 8-char password. Returns `{ _id, displayName, email, sessionToken }` |
+| `playerAccounts.signIn` | 160 | `{ email, password }` | Returns `{ _id, displayName, email, sessionToken }`. Each sign-in is its own session. Throws `use-google` for a Google-only account |
+| `playerAccounts.googleClientId` | 190 | none | The public OAuth client ID, or `null` when Google sign-in is off |
+| `playerAccounts.googleSignIn` | 194 | `idToken` | Verifies a Google ID token (audience, signature, `email_verified`), then finds by `googleSub`, links by email, or creates. Returns the same shape as `signIn` |
+| `playerAccounts.resume` | 222 | `token` | Returns `{ _id, displayName, email }` for a live session, else throws `invalid-session` |
+| `playerAccounts.signOut` | 230 | `token` | Deletes that one session. Unknown tokens are a no-op |
 
 `PlayerAccountsCollection` is never published, so hashes and salts stay server-side.
-Meteor's `accounts-base` / `accounts-password` packages are **not** installed; this is a hand-rolled implementation.
+Meteor's `accounts-base` / `accounts-password` / `accounts-google` packages are **not** installed; this is a hand-rolled implementation.
+Google sign-in uses Google Identity Services in the browser and `google-auth-library` on the server, loaded lazily from `imports/api/googleAuth.js`.
+That module reaches the client bundle through `playerAccounts.js`, so `app/rspack.config.js` aliases `google-auth-library` to nothing for the client build.
 
 ---
 
@@ -418,7 +425,7 @@ How to write and run them is the `test` skill. What exists today:
 | File | Covers |
 |---|---|
 | `rooms.test.js` | `rooms.create`, `rooms.join`, `rooms.kick` |
-| `playerAccounts.test.js` | register and signIn validation, hashing, normalisation; session issue, resume, expiry, sign-out |
+| `playerAccounts.test.js` | register and signIn validation, hashing, normalisation; session issue, resume, expiry, sign-out; Google sign-in create, link, reject (verifier stubbed) |
 | `roundAdvance.test.js` | `rounds.advance` increments, player migration, idempotency |
 | `lifeDeduction.test.js` | life loss on wrong guess, streak reset |
 | `streak.test.js` | current vs longest streak |
@@ -469,9 +476,10 @@ Dev, from `docker-compose.yml`:
 - `ROOT_URL` - app root URL (`http://localhost:3000`)
 - `PORT` - 3000
 - `CHOKIDAR_USEPOLLING` / `CHOKIDAR_INTERVAL` - file watch polling, for Windows
+- `GOOGLE_CLIENT_ID` - optional, in both compose files. Empty turns Google sign-in off. Set up in [`docs/deployment-manual.md`](docs/deployment-manual.md) section 9f
 
-`METEOR_SETTINGS` is passed by `docker-compose.prod.yml` but **`Meteor.settings` is never read anywhere in the codebase**.
-There is no configuration surface: starting lives (3), initial sequence length (4), PIN length (5), and minimum password length (8) are all hardcoded literals.
+`METEOR_SETTINGS` is not passed by either compose file, and **`Meteor.settings` is never read anywhere in the codebase**.
+Apart from `GOOGLE_CLIENT_ID`, there is no configuration surface: starting lives (3), initial sequence length (4), PIN length (5), and minimum password length (8) are all hardcoded literals.
 
 ---
 

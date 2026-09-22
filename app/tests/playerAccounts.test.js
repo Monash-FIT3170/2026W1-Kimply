@@ -1,6 +1,7 @@
 import { Meteor } from 'meteor/meteor';
 import assert from 'assert';
 import { PlayerAccountsCollection, SESSION_LIFETIME_MS, hashSessionToken } from '/imports/api/playerAccounts';
+import { setGoogleVerifierForTests } from '/imports/api/googleAuth';
 
 if (Meteor.isServer) {
   describe('player accounts API', function () {
@@ -245,6 +246,136 @@ if (Meteor.isServer) {
         await registerAlice();
         await Meteor.callAsync('playerAccounts.signOut', 'not-a-real-token');
         await Meteor.callAsync('playerAccounts.signOut', undefined);
+      });
+    });
+
+    describe('Google sign-in', function () {
+      const CLIENT_ID = 'test-client.apps.googleusercontent.com';
+      let previousClientId;
+      let verifiedAudiences;
+
+      function googleReturns(payload) {
+        setGoogleVerifierForTests(async (idToken, audience) => {
+          verifiedAudiences.push(audience);
+          if (idToken !== 'valid-id-token') throw new Error('bad signature');
+          return payload;
+        });
+      }
+
+      const alice = { sub: 'google-sub-alice', email: 'Alice@Example.com', email_verified: true, name: 'Alice G' };
+
+      beforeEach(function () {
+        previousClientId = process.env.GOOGLE_CLIENT_ID;
+        process.env.GOOGLE_CLIENT_ID = CLIENT_ID;
+        verifiedAudiences = [];
+      });
+
+      afterEach(function () {
+        if (previousClientId === undefined) delete process.env.GOOGLE_CLIENT_ID;
+        else process.env.GOOGLE_CLIENT_ID = previousClientId;
+        setGoogleVerifierForTests();
+      });
+
+      it('reports the client ID, or null when Google sign-in is off', async function () {
+        assert.strictEqual(await Meteor.callAsync('playerAccounts.googleClientId'), CLIENT_ID);
+        delete process.env.GOOGLE_CLIENT_ID;
+        assert.strictEqual(await Meteor.callAsync('playerAccounts.googleClientId'), null);
+      });
+
+      it('refuses every call when Google sign-in is off', async function () {
+        delete process.env.GOOGLE_CLIENT_ID;
+        googleReturns(alice);
+        await assert.rejects(
+          Meteor.callAsync('playerAccounts.googleSignIn', 'valid-id-token'),
+          (err) => err.error === 'google-disabled'
+        );
+        assert.deepStrictEqual(verifiedAudiences, []);
+      });
+
+      it('creates a passwordless account on first sign-in and issues a session', async function () {
+        googleReturns(alice);
+
+        const result = await Meteor.callAsync('playerAccounts.googleSignIn', 'valid-id-token');
+        const account = await PlayerAccountsCollection.findOneAsync({ email: 'alice@example.com' });
+
+        assert.deepStrictEqual(verifiedAudiences, [CLIENT_ID]);
+        assert.strictEqual(account.googleSub, 'google-sub-alice');
+        assert.strictEqual(account.displayName, 'Alice G');
+        assert.strictEqual(account.passwordHash, undefined);
+        assert.strictEqual(result._id, account._id);
+        assert.strictEqual((await Meteor.callAsync('playerAccounts.resume', result.sessionToken))._id, account._id);
+      });
+
+      it('signs in to the same account on a later sign-in', async function () {
+        googleReturns(alice);
+        const first = await Meteor.callAsync('playerAccounts.googleSignIn', 'valid-id-token');
+        googleReturns({ ...alice, email: 'alice.new@example.com', name: 'Renamed' });
+        const second = await Meteor.callAsync('playerAccounts.googleSignIn', 'valid-id-token');
+
+        assert.strictEqual(second._id, first._id);
+        assert.strictEqual(await PlayerAccountsCollection.find({}).countAsync(), 1);
+      });
+
+      it('links Google to an existing email-and-password account with the same verified email', async function () {
+        const registered = await Meteor.callAsync('playerAccounts.register', {
+          displayName: 'Alice',
+          email: 'alice@example.com',
+          password: 'password123',
+        });
+        googleReturns(alice);
+
+        const result = await Meteor.callAsync('playerAccounts.googleSignIn', 'valid-id-token');
+        const account = await PlayerAccountsCollection.findOneAsync(registered._id);
+
+        assert.strictEqual(result._id, registered._id);
+        assert.strictEqual(account.googleSub, 'google-sub-alice');
+        assert.ok(account.passwordHash, 'the password still works');
+        assert.ok(
+          await Meteor.callAsync('playerAccounts.signIn', { email: 'alice@example.com', password: 'password123' })
+        );
+      });
+
+      it('refuses to link an email already linked to a different Google account', async function () {
+        googleReturns(alice);
+        await Meteor.callAsync('playerAccounts.googleSignIn', 'valid-id-token');
+        googleReturns({ ...alice, sub: 'google-sub-someone-else' });
+
+        await assert.rejects(
+          Meteor.callAsync('playerAccounts.googleSignIn', 'valid-id-token'),
+          (err) => err.error === 'account-linked'
+        );
+      });
+
+      it('rejects an unverified Google email without creating an account', async function () {
+        googleReturns({ ...alice, email_verified: false });
+
+        await assert.rejects(
+          Meteor.callAsync('playerAccounts.googleSignIn', 'valid-id-token'),
+          (err) => err.error === 'unverified-email'
+        );
+        assert.strictEqual(await PlayerAccountsCollection.find({}).countAsync(), 0);
+      });
+
+      it('rejects a token the verifier refuses, or a missing token', async function () {
+        googleReturns(alice);
+
+        for (const token of ['forged-token', '', undefined]) {
+          await assert.rejects(
+            Meteor.callAsync('playerAccounts.googleSignIn', token),
+            (err) => err.error === 'invalid-google-token'
+          );
+        }
+        assert.strictEqual(await PlayerAccountsCollection.find({}).countAsync(), 0);
+      });
+
+      it('tells a Google-only account to use Google when signing in with a password', async function () {
+        googleReturns(alice);
+        await Meteor.callAsync('playerAccounts.googleSignIn', 'valid-id-token');
+
+        await assert.rejects(
+          Meteor.callAsync('playerAccounts.signIn', { email: 'alice@example.com', password: 'password123' }),
+          (err) => err.error === 'use-google'
+        );
       });
     });
   });
