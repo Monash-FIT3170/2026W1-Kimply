@@ -57,6 +57,10 @@ Things that are not obvious from the diff:
   DNS moves before the deploy: a `ROOT_URL` the DNS does not yet serve gives a page that loads and a game that cannot connect, and it fails the canary, which now rolls deploys back.
   The apex keeps its GoDaddy forwarding to `www`, so apex links with a path reach a GoDaddy 404 (A3). `ecs.kimply.online` and `ecs-dev.kimply.online` stay as second names that bypass the redirect.
   `deployment-manual.md` and `dev-environment.md` now carry a banner saying they describe the superseded EC2 stack.
+- **`elasticloadbalancing:DescribeTargetHealth` cannot be scoped to a target group.**
+  The statement named the exact ARN and was still denied: the action does not support resource-level permissions, so it has to be `Resource: "*"`. It reads health and can change nothing.
+- **The rollout log prints only when something changes.**
+  ECS holds a deployment `IN_PROGRESS` while it bakes the new tasks against the canary alarm, so a healthy rollout repeated the same block every 15s and looked like a stuck loop. It now prints on change, notes once that the bake has started, and otherwise emits a one-line heartbeat each minute.
 - **Reporting in the deploy script can never fail a deploy.**
   A denied `elasticloadbalancing:DescribeTargetHealth` killed a dev deploy that ECS had already completed: under `set -o pipefail` the AWS CLI's exit 254 became the pipeline's status even though the rest of the pipeline succeeded.
   The reporting and diagnostic functions now run without `-e` and `-o pipefail` and always return 0, and print what is missing instead.
