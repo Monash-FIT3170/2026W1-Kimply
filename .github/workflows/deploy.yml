@@ -39,7 +39,7 @@ env:
 
 jobs:
   config:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     outputs:
       environment: ${{ steps.resolve.outputs.environment }}
