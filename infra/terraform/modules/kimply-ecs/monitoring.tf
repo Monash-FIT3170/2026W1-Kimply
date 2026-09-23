@@ -201,6 +201,13 @@ data "archive_file" "canary" {
 }
 
 resource "aws_synthetics_canary" "ready" {
+  lifecycle {
+    precondition {
+      condition     = !var.check_apex_redirect || var.apex_domain != ""
+      error_message = "check_apex_redirect needs apex_domain to be set."
+    }
+  }
+
   # Canary names are limited to 21 characters.
   name                 = substr("${var.name}-ready", 0, 21)
   artifact_s3_location = "s3://${aws_s3_bucket.canary.bucket}/"

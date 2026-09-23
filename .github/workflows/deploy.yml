@@ -2,15 +2,16 @@
 #
 #   main -> production on ECS Fargate      (ecs.kimply.online, www at cutover)
 #        -> production EC2 instance        (kimply.online, until cutover)
-#   dev  -> development EC2 instance       (dev.kimply.online)
+#   dev  -> development on ECS Fargate     (ecs-dev.kimply.online)
+#        -> development EC2 instance       (dev.kimply.online, until cutover)
 #
 # During the parallel run (docs/ecs-target-architecture.md, D37/D39) main deploys
 # to BOTH production stacks so they always serve the same version. At cutover the
 # main half of deploy-ec2 is removed.
 #
-# The EC2 jobs run only from the upstream repository, because their IAM roles
-# trust only it. The ECS roles also trust the migration fork, so the fork builds
-# and deploys to ECS but skips EC2.
+# The EC2 job runs only from the upstream repository, because the SSM roles trust
+# only it. The ECR and ECS roles trust the migration fork as well, so the fork
+# builds and deploys to ECS but skips EC2.
 name: Deploy
 
 on:
@@ -35,8 +36,6 @@ env:
 
 jobs:
   build:
-    # dev's roles trust only the upstream repository.
-    if: github.ref_name == 'main' || github.repository == 'Monash-FIT3170/2026W1-Kimply'
     runs-on: ubuntu-24.04-arm
 
     steps:
@@ -73,9 +72,15 @@ jobs:
         run: ./deploy/build-push.sh
 
   deploy-ecs:
-    if: github.ref_name == 'main'
     needs: build
     runs-on: ubuntu-24.04-arm
+
+    env:
+      ECS_ROLE: ${{ github.ref_name == 'main' && 'arn:aws:iam::827152325060:role/kimply-prod-github-deploy' || 'arn:aws:iam::827152325060:role/kimply-dev-github-deploy' }}
+      ECS_CLUSTER: ${{ github.ref_name == 'main' && 'kimply-prod' || 'kimply-dev' }}
+      ECS_SERVICE: ${{ github.ref_name == 'main' && 'kimply-prod' || 'kimply-dev' }}
+      SERVICE_URL: ${{ github.ref_name == 'main' && 'https://ecs.kimply.online' || 'https://ecs-dev.kimply.online' }}
+      TASK_DEF_TEMPLATE: ${{ github.ref_name == 'main' && 'infra/ecs/task-definition.prod.json' || 'infra/ecs/task-definition.dev.json' }}
 
     steps:
       - name: Checkout repository
@@ -85,16 +90,14 @@ jobs:
       - name: Configure AWS credentials ECS
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::827152325060:role/kimply-prod-github-deploy
+          role-to-assume: ${{ env.ECS_ROLE }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # Registers a revision from infra/ecs/task-definition.prod.json, waits for
-      # ECS to report the rollout COMPLETED (circuit breaker and canary alarm roll
-      # back on their own), then probes /health/ready on the public URL.
+      # Registers a revision from this environment's template, waits for ECS to
+      # report the rollout COMPLETED (circuit breaker and canary alarm roll back
+      # on their own), then probes /health/ready on the public URL.
       - name: Deploy to ECS
         run: ./deploy/ecs-deploy.sh "$TAG"
-        env:
-          SERVICE_URL: https://ecs.kimply.online
 
   deploy-ec2:
     # dev always; main only until cutover. Upstream only, because these roles

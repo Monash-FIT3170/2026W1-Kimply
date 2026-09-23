@@ -9,7 +9,9 @@ Diagrams of the runtime, the Terraform files and a deploy are in [infra/docs/arc
 | `bootstrap/` | The S3 bucket for Terraform state. Local state, applied once |
 | `modules/kimply-ecs/` | One Kimply environment: private subnets, NAT, ALB, ACM, ECS, IAM, secret, canary, alarms, scaling, budget |
 | `envs/prod/` | Production. Calls the module with prod values |
-| `../ecs/task-definition.prod.json` | The task definition template, shared with the deploy pipeline |
+| `envs/dev/` | Development. Same module, `FARGATE_SPOT`, 1-2 tasks, and it borrows production's NAT gateway (D40) |
+| `../ecs/task-definition.prod.json` | The production task definition template, shared with the deploy pipeline |
+| `../ecs/task-definition.dev.json` | The same for development |
 
 Terraform 1.10 or newer is required, for S3-native state locking.
 
@@ -108,6 +110,37 @@ Both stacks use the same Atlas database.
 
 9. **Turn on the canary**, which also turns on alarm-based rollback: set `canary_enabled = true` in `terraform.tfvars` and apply.
    This is the moment to deliberately test a rollback, for example by deploying a revision whose secret points at a wrong database name.
+
+## First-time build (development)
+
+Development is the same module with different values, and it serves `ecs-dev.kimply.online` beside the EC2 dev instance on `dev.kimply.online`.
+It has one extra step, because its template needs the secret's ARN and the ARN's suffix is random.
+
+Work from `infra/terraform/envs/dev`.
+
+1. `cp terraform.tfvars.example terraform.tfvars`, edit it, then `terraform init`.
+2. Certificate first, as in production:
+
+   ```bash
+   terraform apply -target=module.kimply.aws_acm_certificate.app
+   terraform output acm_validation_records
+   ```
+
+   Add both CNAMEs at GoDaddy (`ecs-dev` and `dev`).
+3. Create the secret on its own, then put its ARN in the template:
+
+   ```bash
+   terraform apply -target=module.kimply.aws_secretsmanager_secret.mongo_url
+   aws secretsmanager describe-secret --region ap-southeast-2 \
+     --secret-id kimply/dev/mongo-url --query ARN --output text
+   ```
+
+   Replace the `...mongo-url-REPLACE` placeholder in `infra/ecs/task-definition.dev.json` with that ARN.
+   A precondition fails the plan until it matches.
+4. `terraform plan -out=dev.tfplan` and `terraform apply dev.tfplan`.
+5. Put the development `MONGO_URL` into `kimply/dev/mongo-url`, exactly as in production step 5.
+6. In the **development** Atlas cluster, allowlist the shared NAT IP (`terraform output -raw nat_gateway_id` egresses through production's Elastic IP, `terraform -chdir=../prod output -raw nat_public_ip`).
+7. Start the tasks, add the `ecs-dev` CNAME, then set `canary_enabled = true`, as in production steps 7-9.
 
 ## Cutover to `www.kimply.online` (later)
 

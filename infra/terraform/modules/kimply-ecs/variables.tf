@@ -20,8 +20,21 @@ variable "public_subnet_ids" {
 }
 
 variable "nat_public_subnet_id" {
-  description = "The public subnet that hosts the single NAT gateway (D22)."
+  description = "The public subnet that hosts this environment's NAT gateway (D22). Required when create_nat_gateway is true."
   type        = string
+  default     = null
+}
+
+variable "create_nat_gateway" {
+  description = "Create a NAT gateway and Elastic IP for this environment. False means reuse an existing one (D40)."
+  type        = bool
+  default     = true
+}
+
+variable "nat_gateway_id" {
+  description = "An existing NAT gateway to route through when create_nat_gateway is false. Its Elastic IP is the address the database allowlist must hold."
+  type        = string
+  default     = null
 }
 
 variable "private_subnets" {
@@ -42,8 +55,9 @@ variable "certificate_names" {
 }
 
 variable "apex_domain" {
-  description = "Bare domain that GoDaddy forwards to domain_name (D17)."
+  description = "Bare domain that GoDaddy forwards to domain_name (D17). Only needed where check_apex_redirect is true."
   type        = string
+  default     = ""
 }
 
 # --- Task definition ----------------------------------------------------------

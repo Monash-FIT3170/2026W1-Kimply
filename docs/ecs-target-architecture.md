@@ -81,7 +81,7 @@ CloudWatch: task logs · canary on /health/ready → alarm → ECS rollback + SN
 |---|---|---|
 | D1 | ECS owns task recovery and deploys; AWS owns host failure | An ASG or a host restart policy only sees machines, not containers |
 | D2 | ECS on Fargate, arm64 | Chosen for learning, to mirror the ECS on Fargate setup used at work. ECS on EC2 is deliberately **not** ruled out and may be revisited |
-| D3 | One cluster per environment: `kimply-prod` now, `kimply-dev` later | Keeps the "prod and dev share nothing" property and lets IAM scope by cluster |
+| D3 | One cluster per environment: `kimply-prod` and `kimply-dev`, from the same module | Keeps environments separate and lets IAM scope by cluster. Dev differs only in values: `FARGATE_SPOT`, 1-2 tasks, its own ECR repo, secret, domain and log group |
 | D4 | Tasks in private subnets, egress through a NAT gateway with an Elastic IP | Task IPs change every deploy; Atlas M0 needs one stable IP to allowlist |
 | D5 | Prod uses the `FARGATE` capacity provider; dev will use `FARGATE_SPOT` | A Spot interruption drops every DDP session on the task |
 | D6 | Fargate bills per running task; idle savings come only from service scaling | Fargate does not scale to zero on its own |
@@ -116,6 +116,7 @@ CloudWatch: task logs · canary on /health/ready → alarm → ECS rollback + SN
 | D35 | Separate GitHub OIDC roles for ECR push and ECS deploy | Least privilege per step. Both trust `main` on the upstream repo and, until it is deleted, this fork |
 | D36 | Terraform owns infrastructure and the initial task definition; the pipeline owns revisions; the Terraform service ignores task definition changes | Stops `terraform apply` and the pipeline fighting over the running revision |
 | D37 | Cutover by parallel run | Verify on the ALB hostname, switch GoDaddy, then retire the instance, its Elastic IP and its Atlas entry |
+| D40 | Development borrows production's NAT gateway instead of paying for a second one | A NAT gateway is about US$43/month, more than the rest of dev. It is the single deliberate exception to "prod and dev share nothing", and it keeps one IP on both Atlas allowlists |
 | D39 | Until cutover, the stack serves `ecs.kimply.online` beside the EC2 stack, against the same Atlas database. The certificate covers `ecs` and `www` from the start | A real hostname with a real certificate to play on before any production DNS changes. Same database because that is exactly what cutover will run against |
 | D38 | The canary also checks that the apex root redirects to `www` | GoDaddy forwarding is otherwise unmonitored. Only the root is checked, because forwarding drops paths (A3) |
 
@@ -144,6 +145,7 @@ CloudWatch: task logs · canary on /health/ready → alarm → ECS rollback + SN
 | R7 | A secret change takes effect only after a forced new deployment |
 | R8 | After credits run out, the NAT, ALB, tasks and canary cost several times one `t4g.small` |
 | R9 | I1-I4 below are unfixed |
+| R12 | Dev egresses through prod's NAT gateway, so replacing that NAT cuts dev off from its database until dev is re-applied. Dev's Terraform also reads prod's state |
 | R11 | Until the EC2 instance is retired, EC2 and ECS are separate app processes on the same database, so the cross-process issues (I1-I4) apply between them, and a bug in an ECS build writes to live data |
 | R10 | `iam:PassRole` and `ecs:ExecuteCommand` are where IAM is most likely to become too broad |
 

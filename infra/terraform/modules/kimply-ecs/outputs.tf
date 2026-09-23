@@ -13,8 +13,13 @@ output "alb_dns_name" {
 }
 
 output "nat_public_ip" {
-  description = "Add this to the Atlas network access list."
-  value       = aws_eip.nat.public_ip
+  description = "Add this to the Atlas network access list. Null when this environment borrows another's NAT gateway."
+  value       = one(aws_eip.nat[*].public_ip)
+}
+
+output "nat_gateway_id" {
+  description = "The NAT gateway these tasks egress through, whether created here or borrowed."
+  value       = local.nat_gateway_id
 }
 
 output "cluster_name" {
