@@ -52,6 +52,10 @@ Things that are not obvious from the diff:
   `envs/dev` differs from `envs/prod` only in values: `FARGATE_SPOT`, 1-2 tasks, its own cluster, ECR repository, secret, log group and domain (`ecs-dev.kimply.online`).
   A second NAT gateway would have cost more than the whole dev environment, so dev routes through production's and reads its ID from production's Terraform state.
   That is the one resource the environments share, and the cost is a real coupling: replacing production's NAT cuts dev off from its database until dev is re-applied.
+- **A failed deploy now prints why, in the run itself.**
+  `deploy/ecs-deploy.sh` writes a summary table to the GitHub run page (revision, image, deployment id, duration, tasks and their AZs), groups its noisy output, and on failure dumps the service events plus the task's CloudWatch logs.
+  That needed three read-only permissions on the deploy role, scoped to one cluster and one log group: `ecs:ListTasks`, `ecs:DescribeTasks` and `logs:FilterLogEvents`.
+  Without the logs, a failure showed ECS's view ("tasks failed to start") but never the application's own error.
 - **The pipeline deploys only to ECS. The SSM path is gone.**
   Keeping both targets would have kept the EC2 stacks in step until cutover, at the cost of a workflow that had to reason about two deployment systems.
   The consequence is accepted deliberately: `kimply.online` and `dev.kimply.online` now lag their branches until each cutover, and shipping to one in the meantime means running `deploy/deploy.sh` on that instance by hand.

@@ -141,6 +141,36 @@ data "aws_iam_policy_document" "github_deploy" {
     resources = [aws_ecs_service.app.arn]
   }
 
+  # Read-only, so a failed deploy can print what actually happened instead of
+  # only "deployment failed": which tasks are running, and what the app logged.
+  statement {
+    sid       = "ExplainFailures"
+    actions   = ["ecs:DescribeTasks"]
+    resources = ["arn:${data.aws_partition.current.partition}:ecs:${local.region}:${local.account_id}:task/${var.name}/*"]
+  }
+
+  statement {
+    sid       = "ListTasksInThisClusterOnly"
+    actions   = ["ecs:ListTasks"]
+    resources = ["*"]
+
+    condition {
+      test     = "ArnEquals"
+      variable = "ecs:cluster"
+      values   = [aws_ecs_cluster.this.arn]
+    }
+  }
+
+  statement {
+    sid = "ReadThisEnvironmentsLogs"
+    actions = [
+      "logs:FilterLogEvents",
+      "logs:GetLogEvents",
+      "logs:DescribeLogStreams",
+    ]
+    resources = [aws_cloudwatch_log_group.app.arn, "${aws_cloudwatch_log_group.app.arn}:*"]
+  }
+
   # Registering a task definition hands these roles to ECS. Without the
   # condition, the same permission could pass them to any other service.
   statement {
