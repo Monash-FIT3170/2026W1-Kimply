@@ -149,13 +149,27 @@ GoDaddy remains the registrar. Only the nameservers change.
 Each phase is safe to stop at.
 
 **Phase 1: build the zone while GoDaddy is still answering.**
-`manage_dns` is already set in both environments, so:
+`manage_dns` is already set in both environments.
+
+The production certificate gains the apex, so it is reissued, and ACM validates against whichever nameservers are live: still GoDaddy's.
+Terraform writes the records into Route 53, which nobody is asking yet, so request the certificate first and publish its record by hand one last time:
+
+```bash
+terraform -chdir=envs/prod apply -target=module.kimply.aws_acm_certificate.app
+terraform -chdir=envs/prod output acm_validation_records
+```
+
+Add the record for `kimply.online` as a CNAME at GoDaddy.
+`www` keeps the record it already has, because ACM reuses one validation token per domain per account.
+Then build the rest:
 
 ```bash
 terraform -chdir=envs/prod apply     # hosted zone, ALIAS records, validation records, DMARC
 terraform -chdir=envs/dev  apply     # dev records in the same zone
 terraform -chdir=envs/prod output hosted_zone_nameservers
 ```
+
+Dev's certificate is reissued too, dropping its retired build-time name, and it validates against the record already at GoDaddy.
 
 Nothing changes yet: the zone is not authoritative until the registrar points at it.
 Check it answers correctly by querying it directly, where `ns-xxx` is one of those nameservers:
@@ -167,9 +181,14 @@ dig +short @ns-xxx.awsdns-xx.com dev.kimply.online
 dig +short @ns-xxx.awsdns-xx.com _dmarc.kimply.online TXT
 ```
 
+The apex must return load balancer addresses, not GoDaddy's forwarding servers.
+
 **Phase 2: switch the nameservers** at GoDaddy (Domain settings, Nameservers, "I'll use my own") to the four from the output.
 Propagation takes up to a couple of hours, during which some resolvers still use GoDaddy. Both answer correctly, so nobody notices.
 Afterwards, delete GoDaddy's domain forwarding; the apex now resolves to the load balancer.
+Leave GoDaddy's other records in place for a while: pointing the nameservers back is an instant rollback, but only while they still exist.
+
+The retired `ecs` and `ecs-dev` names (D39) are not carried into Route 53, so their GoDaddy records and validation records can go at the same time.
 
 **Phase 3 (optional): make the apex canonical.** One PR:
 - `infra/ecs/task-definition.prod.json`: `ROOT_URL` to `https://kimply.online`

@@ -49,12 +49,13 @@ module "kimply" {
   }
 
   # domain_name is what the app serves as ROOT_URL, and it must match the
-  # template (a precondition enforces it). The certificate also covers
-  # ecs.kimply.online, which stays as a second name that bypasses the apex
-  # redirect and is how the stack was verified before cutover (D39).
-  # GoDaddy forwards the apex here, because it cannot alias it to an ALB (D17).
+  # template (a precondition enforces it). The certificate covers the apex as
+  # well, because Route 53 points it straight at this load balancer (D41) and it
+  # becomes the canonical name once ROOT_URL follows.
+  # ecs.kimply.online was the temporary name the stack was built on (D39); it is
+  # retired here, so its DNS record and validation record can go too.
   domain_name       = "www.kimply.online"
-  certificate_names = ["ecs.kimply.online", "www.kimply.online"]
+  certificate_names = ["kimply.online", "www.kimply.online"]
   apex_domain       = "kimply.online"
 
   task_definition_template = "${path.root}/../../../ecs/task-definition.prod.json"
@@ -82,7 +83,7 @@ module "kimply" {
   manage_dns         = true
   create_hosted_zone = true
   dns_zone_name      = "kimply.online"
-  dns_alias_names    = ["kimply.online", "www.kimply.online", "ecs.kimply.online"]
+  dns_alias_names    = ["kimply.online", "www.kimply.online"]
   redirect_hosts     = []
 
   github_subject_prefixes = [
