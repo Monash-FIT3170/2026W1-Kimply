@@ -52,6 +52,9 @@ Things that are not obvious from the diff:
   `envs/dev` differs from `envs/prod` only in values: `FARGATE_SPOT`, 1-2 tasks, its own cluster, ECR repository, secret, log group and domain (`ecs-dev.kimply.online`).
   A second NAT gateway would have cost more than the whole dev environment, so dev routes through production's and reads its ID from production's Terraform state.
   That is the one resource the environments share, and the cost is a real coupling: replacing production's NAT cuts dev off from its database until dev is re-applied.
+- **The deploy workflow resolves every branch-specific value in one `config` job.**
+  A `case` on the branch name maps it to the ECR repository, roles, cluster, service, task definition template, smoke-test URL and EC2 target, and an unrecognised branch fails there.
+  The previous `github.ref_name == 'main' && ... || ...` expressions treated every non-main branch as development, which would have silently pointed a future `staging` branch at the dev stack.
 - **GitHub roles trust exact OIDC subject prefixes, not repository names.**
   The first pipeline run from the fork failed to assume `GitHubActionsECRPush` because the fork uses GitHub's immutable subject format, `repo:owner@<id>/name@<id>`, while the upstream repository still sends `repo:owner/name`.
   `StringEquals` needs the exact string, so each repository is listed by the prefix GitHub reports for it.

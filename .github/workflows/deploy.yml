@@ -5,9 +5,14 @@
 #   dev  -> development on ECS Fargate     (ecs-dev.kimply.online)
 #        -> development EC2 instance       (dev.kimply.online, until cutover)
 #
-# During the parallel run (docs/ecs-target-architecture.md, D37/D39) main deploys
-# to BOTH production stacks so they always serve the same version. At cutover the
-# main half of deploy-ec2 is removed.
+# Every branch-specific value is resolved in ONE place, the `config` job below.
+# Adding an environment (staging, say) is one more arm of its case statement plus
+# a matching infra/terraform/envs/<name>. An unrecognised branch fails there
+# rather than silently deploying somewhere.
+#
+# During the parallel run (docs/ecs-target-architecture.md, D37/D39) each branch
+# deploys to BOTH of its stacks so they always serve the same version. At each
+# cutover, set that branch's deploy_ec2 to false.
 #
 # The EC2 job runs only from the upstream repository, because the SSM roles trust
 # only it. The ECR and ECS roles trust the migration fork as well, so the fork
@@ -18,7 +23,7 @@ on:
   push:
     branches: [main, dev]
 
-# The two branches deploy to independent stacks, so they must not share a queue.
+# Branches deploy to independent stacks, so they must not share a queue.
 # cancel-in-progress stays false: a half-finished deploy is worse than a slow one.
 concurrency:
   group: kimply-deploy-${{ github.ref_name }}
@@ -31,33 +36,110 @@ permissions:
 env:
   AWS_REGION: ap-southeast-2
   TAG: ${{ github.sha }}
-  ECR_REPOSITORY: ${{ github.ref_name == 'main' && 'kimply' || 'kimply-dev' }}
-  ECR_ROLE: ${{ github.ref_name == 'main' && 'arn:aws:iam::827152325060:role/GitHubActionsECRPush' || 'arn:aws:iam::827152325060:role/GitHubActionsECRPushDev' }}
 
 jobs:
-  build:
-    runs-on: ubuntu-24.04-arm
+  config:
+    runs-on: ubuntu-latest
+
+    outputs:
+      environment: ${{ steps.resolve.outputs.environment }}
+      ecr_repository: ${{ steps.resolve.outputs.ecr_repository }}
+      ecr_role: ${{ steps.resolve.outputs.ecr_role }}
+      ecs_role: ${{ steps.resolve.outputs.ecs_role }}
+      ecs_cluster: ${{ steps.resolve.outputs.ecs_cluster }}
+      ecs_service: ${{ steps.resolve.outputs.ecs_service }}
+      service_url: ${{ steps.resolve.outputs.service_url }}
+      task_def_template: ${{ steps.resolve.outputs.task_def_template }}
+      deploy_ec2: ${{ steps.resolve.outputs.deploy_ec2 }}
+      instance_id: ${{ steps.resolve.outputs.instance_id }}
+      ssm_role: ${{ steps.resolve.outputs.ssm_role }}
 
     steps:
-      # A branch added to the trigger above without a matching entry in the env
-      # block would otherwise resolve to the development target. Fail instead.
-      - name: Guard against an unconfigured target
+      # The branch name reaches the script through the environment rather than by
+      # string substitution, so a branch name can never be read as shell.
+      - name: Resolve deployment targets
+        id: resolve
+        env:
+          REF: ${{ github.ref_name }}
+          ACCOUNT: "827152325060"
         run: |
-          echo "Repository : ${{ github.repository }}"
-          echo "Branch     : ${{ github.ref_name }}"
-          echo "ECR repo   : $ECR_REPOSITORY"
-          case "${{ github.ref_name }}" in
-            main|dev) ;;
-            *) echo "::error::no deployment target configured for '${{ github.ref_name }}'"; exit 1 ;;
+          set -euo pipefail
+
+          case "$REF" in
+            main)
+              environment=production
+              ecr_repository=kimply
+              ecr_role="arn:aws:iam::$ACCOUNT:role/GitHubActionsECRPush"
+              ecs_role="arn:aws:iam::$ACCOUNT:role/kimply-prod-github-deploy"
+              ecs_cluster=kimply-prod
+              ecs_service=kimply-prod
+              service_url=https://ecs.kimply.online
+              task_def_template=infra/ecs/task-definition.prod.json
+              deploy_ec2=true
+              instance_id=i-08184036cf37c932c
+              ssm_role="arn:aws:iam::$ACCOUNT:role/GitHubActionsEC2Commands"
+              ;;
+            dev)
+              environment=development
+              ecr_repository=kimply-dev
+              ecr_role="arn:aws:iam::$ACCOUNT:role/GitHubActionsECRPushDev"
+              ecs_role="arn:aws:iam::$ACCOUNT:role/kimply-dev-github-deploy"
+              ecs_cluster=kimply-dev
+              ecs_service=kimply-dev
+              service_url=https://ecs-dev.kimply.online
+              task_def_template=infra/ecs/task-definition.dev.json
+              deploy_ec2=true
+              instance_id=i-09575e88c984e1c7d
+              ssm_role="arn:aws:iam::$ACCOUNT:role/GitHubActionsEC2CommandsDev"
+              ;;
+            *)
+              echo "::error::no deployment target configured for branch '$REF'."
+              echo "::error::Add a case arm here and a matching infra/terraform/envs/<name>."
+              exit 1
+              ;;
           esac
 
+          {
+            echo "environment=$environment"
+            echo "ecr_repository=$ecr_repository"
+            echo "ecr_role=$ecr_role"
+            echo "ecs_role=$ecs_role"
+            echo "ecs_cluster=$ecs_cluster"
+            echo "ecs_service=$ecs_service"
+            echo "service_url=$service_url"
+            echo "task_def_template=$task_def_template"
+            echo "deploy_ec2=$deploy_ec2"
+            echo "instance_id=$instance_id"
+            echo "ssm_role=$ssm_role"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Deploying $environment (branch \`$REF\`)"
+            echo ""
+            echo "| Target | Value |"
+            echo "|---|---|"
+            echo "| ECR repository | \`$ecr_repository\` |"
+            echo "| ECS cluster / service | \`$ecs_cluster\` / \`$ecs_service\` |"
+            echo "| Task definition | \`$task_def_template\` |"
+            echo "| Smoke test | $service_url |"
+            echo "| Also deploy EC2 | $deploy_ec2 |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    needs: config
+    runs-on: ubuntu-24.04-arm
+
+    env:
+      ECR_REPOSITORY: ${{ needs.config.outputs.ecr_repository }}
+
+    steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Configure AWS credentials ECR
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ env.ECR_ROLE }}
+          role-to-assume: ${{ needs.config.outputs.ecr_role }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
@@ -72,25 +154,25 @@ jobs:
         run: ./deploy/build-push.sh
 
   deploy-ecs:
-    needs: build
+    needs: [config, build]
     runs-on: ubuntu-24.04-arm
 
     env:
-      ECS_ROLE: ${{ github.ref_name == 'main' && 'arn:aws:iam::827152325060:role/kimply-prod-github-deploy' || 'arn:aws:iam::827152325060:role/kimply-dev-github-deploy' }}
-      ECS_CLUSTER: ${{ github.ref_name == 'main' && 'kimply-prod' || 'kimply-dev' }}
-      ECS_SERVICE: ${{ github.ref_name == 'main' && 'kimply-prod' || 'kimply-dev' }}
-      SERVICE_URL: ${{ github.ref_name == 'main' && 'https://ecs.kimply.online' || 'https://ecs-dev.kimply.online' }}
-      TASK_DEF_TEMPLATE: ${{ github.ref_name == 'main' && 'infra/ecs/task-definition.prod.json' || 'infra/ecs/task-definition.dev.json' }}
+      ECR_REPOSITORY: ${{ needs.config.outputs.ecr_repository }}
+      ECS_CLUSTER: ${{ needs.config.outputs.ecs_cluster }}
+      ECS_SERVICE: ${{ needs.config.outputs.ecs_service }}
+      SERVICE_URL: ${{ needs.config.outputs.service_url }}
+      TASK_DEF_TEMPLATE: ${{ needs.config.outputs.task_def_template }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Can register task definitions and update the kimply-prod service only.
+      # Can register task definitions and update this environment's service only.
       - name: Configure AWS credentials ECS
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ env.ECS_ROLE }}
+          role-to-assume: ${{ needs.config.outputs.ecs_role }}
           aws-region: ${{ env.AWS_REGION }}
 
       # Registers a revision from this environment's template, waits for ECS to
@@ -100,29 +182,20 @@ jobs:
         run: ./deploy/ecs-deploy.sh "$TAG"
 
   deploy-ec2:
-    # dev always; main only until cutover. Upstream only, because these roles
-    # trust only the upstream repository.
-    if: github.repository == 'Monash-FIT3170/2026W1-Kimply'
-    needs: build
+    # Until this environment's cutover, and upstream only: the SSM roles trust
+    # only the upstream repository.
+    needs: [config, build]
+    if: needs.config.outputs.deploy_ec2 == 'true' && github.repository == 'Monash-FIT3170/2026W1-Kimply'
     runs-on: ubuntu-24.04-arm
 
     env:
-      INSTANCE_ID: ${{ github.ref_name == 'main' && 'i-08184036cf37c932c' || 'i-09575e88c984e1c7d' }}
-      SSM_ROLE: ${{ github.ref_name == 'main' && 'arn:aws:iam::827152325060:role/GitHubActionsEC2Commands' || 'arn:aws:iam::827152325060:role/GitHubActionsEC2CommandsDev' }}
+      INSTANCE_ID: ${{ needs.config.outputs.instance_id }}
 
     steps:
-      - name: Guard against an unconfigured instance
-        run: |
-          echo "Instance : $INSTANCE_ID"
-          case "$INSTANCE_ID" in
-            i-*) ;;
-            *) echo "::error::INSTANCE_ID is not a valid instance id: '$INSTANCE_ID'"; exit 1 ;;
-          esac
-
       - name: Configure AWS credentials EC2
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ env.SSM_ROLE }}
+          role-to-assume: ${{ needs.config.outputs.ssm_role }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Pull and Deploy Docker Image
