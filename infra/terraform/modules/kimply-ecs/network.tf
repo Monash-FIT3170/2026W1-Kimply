@@ -38,7 +38,8 @@ resource "aws_nat_gateway" "this" {
   subnet_id     = var.nat_public_subnet_id
 
   # Deliberately the repository name rather than var.name, unlike every other
-  # resource here: the NAT is named after the app it serves, not the environment.
+  # resource here: this NAT carries every environment's egress (D40), so naming
+  # it after one of them would be misleading.
   tags = {
     Name = var.ecr_repository_name
   }
