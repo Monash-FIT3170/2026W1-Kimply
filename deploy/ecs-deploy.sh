@@ -25,7 +25,7 @@
 #   ECS_SERVICE        kimply-prod
 #   ECR_REPOSITORY     kimply
 #   TASK_DEF_TEMPLATE  infra/ecs/task-definition.prod.json
-#   SERVICE_URL        https://ecs.kimply.online
+#   SERVICE_URL        https://www.kimply.online
 #   LOG_GROUP          /ecs/<ECS_CLUSTER>
 #   ROLLOUT_TIMEOUT    seconds to wait for the rollout, default 1800
 #
@@ -43,7 +43,7 @@ ECS_CLUSTER="${ECS_CLUSTER:-kimply-prod}"
 ECS_SERVICE="${ECS_SERVICE:-kimply-prod}"
 ECR_REPOSITORY="${ECR_REPOSITORY:-kimply}"
 TASK_DEF_TEMPLATE="${TASK_DEF_TEMPLATE:-$REPO_ROOT/infra/ecs/task-definition.prod.json}"
-SERVICE_URL="${SERVICE_URL:-https://ecs.kimply.online}"
+SERVICE_URL="${SERVICE_URL:-https://www.kimply.online}"
 LOG_GROUP="${LOG_GROUP:-/ecs/$ECS_CLUSTER}"
 ROLLOUT_TIMEOUT="${ROLLOUT_TIMEOUT:-1800}"
 export AWS_REGION

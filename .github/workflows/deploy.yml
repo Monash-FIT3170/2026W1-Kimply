@@ -1,7 +1,7 @@
 # Build the arm64 image, push it to ECR by commit SHA, and deploy it.
 #
-#   main -> production on ECS Fargate   (ecs.kimply.online, www at cutover)
-#   dev  -> development on ECS Fargate  (ecs-dev.kimply.online)
+#   main -> production on ECS Fargate   (kimply.online)
+#   dev  -> development on ECS Fargate  (dev.kimply.online)
 #
 # Every branch-specific value is resolved in ONE place, the `config` job below.
 # Adding an environment (staging, say) is one more arm of its case statement plus
