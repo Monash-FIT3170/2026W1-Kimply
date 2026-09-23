@@ -57,6 +57,9 @@ Things that are not obvious from the diff:
   DNS moves before the deploy: a `ROOT_URL` the DNS does not yet serve gives a page that loads and a game that cannot connect, and it fails the canary, which now rolls deploys back.
   The apex keeps its GoDaddy forwarding to `www`, so apex links with a path reach a GoDaddy 404 (A3). `ecs.kimply.online` and `ecs-dev.kimply.online` stay as second names that bypass the redirect.
   `deployment-manual.md` and `dev-environment.md` now carry a banner saying they describe the superseded EC2 stack.
+- **Reporting in the deploy script can never fail a deploy.**
+  A denied `elasticloadbalancing:DescribeTargetHealth` killed a dev deploy that ECS had already completed: under `set -o pipefail` the AWS CLI's exit 254 became the pipeline's status even though the rest of the pipeline succeeded.
+  The reporting and diagnostic functions now run without `-e` and `-o pipefail` and always return 0, and print what is missing instead.
 - **A failed deploy now prints why, in the run itself.**
   `deploy/ecs-deploy.sh` writes a summary table to the GitHub run page (revision, image, deployment id, duration, tasks and their AZs), groups its noisy output, and on failure dumps the service events plus the task's CloudWatch logs.
   That needed three read-only permissions on the deploy role, scoped to one cluster and one log group: `ecs:ListTasks`, `ecs:DescribeTasks` and `logs:FilterLogEvents`.

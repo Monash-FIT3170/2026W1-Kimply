@@ -46,7 +46,8 @@ TASK_DEF_TEMPLATE="${TASK_DEF_TEMPLATE:-$REPO_ROOT/infra/ecs/task-definition.pro
 SERVICE_URL="${SERVICE_URL:-https://www.kimply.online}"
 LOG_GROUP="${LOG_GROUP:-/ecs/$ECS_CLUSTER}"
 ROLLOUT_TIMEOUT="${ROLLOUT_TIMEOUT:-1800}"
-export AWS_REGION
+# LOG_GROUP is exported so scripts/health-check.sh can name it when it fails.
+export AWS_REGION LOG_GROUP
 
 log() { printf '[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 die() { log "ERROR: $*" >&2; exit 2; }
@@ -116,6 +117,9 @@ finish() {
 
 # Everything the app itself said, which is usually the real reason for a failure.
 dump_diagnostics() {
+  # Diagnostics only. Never let a failed lookup mask the failure being reported.
+  set +e +o pipefail
+
   group "Service events"
   aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" \
     --query 'services[0].events[0:10].message' --output text | tr '\t' '\n' | sed 's/^/  /'
@@ -127,6 +131,9 @@ dump_diagnostics() {
     --query 'events[-50:].message' --output text 2>/dev/null | sed 's/^/  /' \
     || echo "  (could not read $LOG_GROUP)"
   endgroup
+
+  set -e -o pipefail
+  return 0
 }
 
 # --- Wait for this deployment's own outcome -------------------------------------
@@ -137,7 +144,12 @@ deadline=$(( STARTED_AT + ROLLOUT_TIMEOUT ))
 # Every deployment on the service, not just the new one: during a rollout the old
 # revision is still serving, and that is what you actually want to see.
 #   PRIMARY = the one being rolled out, ACTIVE = the previous one still draining.
+#
+# This is reporting, not control flow. It runs without -e and -o pipefail and
+# always returns 0: a missing read-only permission or a throttled call must never
+# fail a deployment that ECS itself reports as healthy.
 print_state() {
+  set +e +o pipefail
   aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" \
     --query "services[0].deployments[].[status, taskDefinition, runningCount, desiredCount, pendingCount, failedTasks, rolloutState]" \
     --output text |
@@ -152,8 +164,15 @@ print_state() {
     targets="$(aws elbv2 describe-target-health --target-group-arn "$TARGET_GROUP_ARN" \
       --query 'TargetHealthDescriptions[].[Target.Id, TargetHealth.State]' --output text 2>/dev/null |
       awk '{printf "%s:%s ", $1, $2}')"
-    [[ -n "$targets" ]] && printf '    targets  %s\n' "$targets"
+    if [[ -n "$targets" ]]; then
+      printf '    targets  %s\n' "$targets"
+    else
+      printf '    targets  (not readable: needs elasticloadbalancing:DescribeTargetHealth)\n'
+    fi
   fi
+
+  set -e -o pipefail
+  return 0
 }
 
 group "Rollout"
@@ -197,6 +216,7 @@ done
 
 # --- What is actually running now -------------------------------------------------
 group "Running tasks"
+set +e +o pipefail
 TASK_ARNS="$(aws ecs list-tasks --cluster "$ECS_CLUSTER" --service-name "$ECS_SERVICE" \
   --desired-status RUNNING --query 'taskArns' --output text 2>/dev/null || true)"
 TASK_ROWS=""
@@ -210,6 +230,7 @@ if [[ -n "$TASK_ARNS" && "$TASK_ARNS" != "None" ]]; then
     printf '  %s  %s  %s/%s  %s  %s\n' "${tarn##*/}" "$taz" "$tstatus" "$thealth" "${ttaskdef##*/}" "${timage##*:}"
   done <<< "$TASK_ROWS"
 fi
+set -e -o pipefail
 print_state
 endgroup
 
