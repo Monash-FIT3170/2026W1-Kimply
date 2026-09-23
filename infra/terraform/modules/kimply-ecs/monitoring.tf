@@ -231,7 +231,7 @@ resource "aws_synthetics_canary" "ready" {
     environment_variables = {
       READY_URL      = "https://${var.domain_name}/health/ready"
       CHECK_APEX     = tostring(var.check_apex_redirect)
-      APEX_URL       = "https://${var.apex_domain}/"
+      APEX_URL       = var.apex_domain == "" ? "" : "https://${var.apex_domain}/"
       CANONICAL_HOST = var.domain_name
     }
   }
