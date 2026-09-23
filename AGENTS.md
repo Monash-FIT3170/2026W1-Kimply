@@ -495,8 +495,8 @@ Everything else - `deploy/`, `nginx/`, `docker-compose.prod.yml`, `scripts/` - i
 
 **Production is migrating to ECS on Fargate** (issue #1), designed in [`docs/ecs-target-architecture.md`](docs/ecs-target-architecture.md) and built from `infra/terraform/` and `infra/ecs/task-definition.prod.json`.
 Until the cutover step in that document, the EC2 stack above is still what serves `kimply.online`.
-During that parallel run, a push to `main` deploys to both: ECS through `deploy/ecs-deploy.sh` (serving `ecs.kimply.online`), and the EC2 instance through SSM, which runs only from the upstream repository because its roles trust only that repository.
-Development has the same shape: `dev` deploys to the `kimply-dev` cluster (serving `ecs-dev.kimply.online`) and to the dev EC2 instance, from `infra/terraform/envs/dev`.
+The pipeline now deploys **only** to ECS: `main` to the `kimply-prod` cluster (serving `ecs.kimply.online`) and `dev` to `kimply-dev` (serving `ecs-dev.kimply.online`), both through `deploy/ecs-deploy.sh`.
+The EC2 instances therefore keep serving whatever they last received until each cutover. To ship to one in the meantime, run `deploy/deploy.sh <sha>` on that instance by hand.
 
 ---
 

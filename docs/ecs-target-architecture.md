@@ -105,7 +105,7 @@ CloudWatch: task logs · canary on /health/ready → alarm → ECS rollback + SN
 | D24 | Meteor polling interval lowered to a few seconds | Without an oplog on M0, a write on one task reaches the other task's subscribers only on its next poll |
 | D25 | SockJS fallback kept, ALB cookie stickiness on | Long-polling requests must reach one task. Classroom networks may block WebSockets |
 | D26 | Rolling deploy with min 100% / max 200%, smoke test on `/health/ready` after the service is stable | Old tasks keep serving until new ones are healthy |
-| D27 | Retire `deploy.sh`, the SSM deploy step and role, Compose, Nginx, certbot, the bootstrap scripts and the host `.env` for prod | Replaced by ECS, ALB, ACM, Secrets Manager |
+| D27 | Retire the SSM deploy step and role, Compose, Nginx, certbot, the bootstrap scripts and the host `.env` for prod | Replaced by ECS, ALB, ACM, Secrets Manager. `deploy/deploy.sh` stays on the instances for manual use until they are retired |
 | D28 | The task definition is a JSON template in the repo; the pipeline fills in the SHA and registers a revision | Runtime changes are reviewed in PRs |
 | D29 | Deregistration delay 30s | Draining cannot finish a DDP connection, only postpone it |
 | D30 | Deployment circuit breaker with rollback | Catches tasks that never become healthy |
@@ -145,6 +145,7 @@ CloudWatch: task logs · canary on /health/ready → alarm → ECS rollback + SN
 | R7 | A secret change takes effect only after a forced new deployment |
 | R8 | After credits run out, the NAT, ALB, tasks and canary cost several times one `t4g.small` |
 | R9 | I1-I4 below are unfixed |
+| R13 | The pipeline no longer deploys to the EC2 instances, so `kimply.online` and `dev.kimply.online` drift behind `main` and `dev` until each cutover. A deploy to one of them is a manual `deploy/deploy.sh` on the box |
 | R12 | Dev egresses through prod's NAT gateway, so replacing that NAT cuts dev off from its database until dev is re-applied. Dev's Terraform also reads prod's state |
 | R11 | Until the EC2 instance is retired, EC2 and ECS are separate app processes on the same database, so the cross-process issues (I1-I4) apply between them, and a bug in an ECS build writes to live data |
 | R10 | `iam:PassRole` and `ecs:ExecuteCommand` are where IAM is most likely to become too broad |

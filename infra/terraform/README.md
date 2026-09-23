@@ -150,6 +150,7 @@ Work from `infra/terraform/envs/dev`.
    GoDaddy forwarding was tested on 2026-09-22: HTTPS works, but paths and query strings are dropped (A2, A3).
 3. Set `check_apex_redirect = true` and apply.
 4. Retire the EC2 instance, release its Elastic IP, and remove that IP from the Atlas network access list.
+   The pipeline already ignores it, so nothing in CI changes.
 
 ## Day to day
 

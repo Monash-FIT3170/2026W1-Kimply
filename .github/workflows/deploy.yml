@@ -1,22 +1,17 @@
 # Build the arm64 image, push it to ECR by commit SHA, and deploy it.
 #
-#   main -> production on ECS Fargate      (ecs.kimply.online, www at cutover)
-#        -> production EC2 instance        (kimply.online, until cutover)
-#   dev  -> development on ECS Fargate     (ecs-dev.kimply.online)
-#        -> development EC2 instance       (dev.kimply.online, until cutover)
+#   main -> production on ECS Fargate   (ecs.kimply.online, www at cutover)
+#   dev  -> development on ECS Fargate  (ecs-dev.kimply.online)
 #
 # Every branch-specific value is resolved in ONE place, the `config` job below.
 # Adding an environment (staging, say) is one more arm of its case statement plus
 # a matching infra/terraform/envs/<name>. An unrecognised branch fails there
 # rather than silently deploying somewhere.
 #
-# During the parallel run (docs/ecs-target-architecture.md, D37/D39) each branch
-# deploys to BOTH of its stacks so they always serve the same version. At each
-# cutover, set that branch's deploy_ec2 to false.
-#
-# The EC2 job runs only from the upstream repository, because the SSM roles trust
-# only it. The ECR and ECS roles trust the migration fork as well, so the fork
-# builds and deploys to ECS but skips EC2.
+# ECS is the only deploy target. The old SSM path to the EC2 instances is gone,
+# so kimply.online and dev.kimply.online keep serving whatever they last received
+# until each cutover points its DNS at the load balancer. To ship to one of them
+# in the meantime, run deploy/deploy.sh on that instance by hand.
 name: Deploy
 
 on:
@@ -50,9 +45,6 @@ jobs:
       ecs_service: ${{ steps.resolve.outputs.ecs_service }}
       service_url: ${{ steps.resolve.outputs.service_url }}
       task_def_template: ${{ steps.resolve.outputs.task_def_template }}
-      deploy_ec2: ${{ steps.resolve.outputs.deploy_ec2 }}
-      instance_id: ${{ steps.resolve.outputs.instance_id }}
-      ssm_role: ${{ steps.resolve.outputs.ssm_role }}
 
     steps:
       # The branch name reaches the script through the environment rather than by
@@ -75,9 +67,6 @@ jobs:
               ecs_service=kimply-prod
               service_url=https://ecs.kimply.online
               task_def_template=infra/ecs/task-definition.prod.json
-              deploy_ec2=true
-              instance_id=i-08184036cf37c932c
-              ssm_role="arn:aws:iam::$ACCOUNT:role/GitHubActionsEC2Commands"
               ;;
             dev)
               environment=development
@@ -88,9 +77,6 @@ jobs:
               ecs_service=kimply-dev
               service_url=https://ecs-dev.kimply.online
               task_def_template=infra/ecs/task-definition.dev.json
-              deploy_ec2=true
-              instance_id=i-09575e88c984e1c7d
-              ssm_role="arn:aws:iam::$ACCOUNT:role/GitHubActionsEC2CommandsDev"
               ;;
             *)
               echo "::error::no deployment target configured for branch '$REF'."
@@ -108,9 +94,6 @@ jobs:
             echo "ecs_service=$ecs_service"
             echo "service_url=$service_url"
             echo "task_def_template=$task_def_template"
-            echo "deploy_ec2=$deploy_ec2"
-            echo "instance_id=$instance_id"
-            echo "ssm_role=$ssm_role"
           } >> "$GITHUB_OUTPUT"
 
           {
@@ -122,7 +105,6 @@ jobs:
             echo "| ECS cluster / service | \`$ecs_cluster\` / \`$ecs_service\` |"
             echo "| Task definition | \`$task_def_template\` |"
             echo "| Smoke test | $service_url |"
-            echo "| Also deploy EC2 | $deploy_ec2 |"
           } >> "$GITHUB_STEP_SUMMARY"
 
   build:
@@ -180,53 +162,3 @@ jobs:
       # on their own), then probes /health/ready on the public URL.
       - name: Deploy to ECS
         run: ./deploy/ecs-deploy.sh "$TAG"
-
-  deploy-ec2:
-    # Until this environment's cutover, and upstream only: the SSM roles trust
-    # only the upstream repository.
-    needs: [config, build]
-    if: needs.config.outputs.deploy_ec2 == 'true' && github.repository == 'Monash-FIT3170/2026W1-Kimply'
-    runs-on: ubuntu-24.04-arm
-
-    env:
-      INSTANCE_ID: ${{ needs.config.outputs.instance_id }}
-
-    steps:
-      - name: Configure AWS credentials EC2
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ needs.config.outputs.ssm_role }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Pull and Deploy Docker Image
-        run: |
-          COMMAND_ID=$(aws ssm send-command \
-            --region "$AWS_REGION" \
-            --instance-ids "$INSTANCE_ID" \
-            --document-name "AWS-RunShellScript" \
-            --parameters "commands=['/opt/kimply/deploy/deploy.sh $TAG']" \
-            --query "Command.CommandId" \
-            --output text)
-
-          echo "SSM command: $COMMAND_ID"
-
-          aws ssm wait command-executed \
-            --region "$AWS_REGION" \
-            --command-id "$COMMAND_ID" \
-            --instance-id "$INSTANCE_ID" || true
-
-          aws ssm get-command-invocation \
-            --region "$AWS_REGION" \
-            --command-id "$COMMAND_ID" \
-            --instance-id "$INSTANCE_ID"
-
-          STATUS=$(aws ssm get-command-invocation \
-            --region "$AWS_REGION" \
-            --command-id "$COMMAND_ID" \
-            --instance-id "$INSTANCE_ID" \
-            --query "Status" \
-            --output text)
-
-          echo "Deployment status: $STATUS"
-
-          [ "$STATUS" = "Success" ]
