@@ -52,6 +52,11 @@ Things that are not obvious from the diff:
   `envs/dev` differs from `envs/prod` only in values: `FARGATE_SPOT`, 1-2 tasks, its own cluster, ECR repository, secret, log group and domain (`ecs-dev.kimply.online`).
   A second NAT gateway would have cost more than the whole dev environment, so dev routes through production's and reads its ID from production's Terraform state.
   That is the one resource the environments share, and the cost is a real coupling: replacing production's NAT cuts dev off from its database until dev is re-applied.
+- **DNS moves to Route 53, because GoDaddy forwarding broke deep links (D41).**
+  `https://kimply.online/play` reached a GoDaddy 404: forwarding keeps the domain but drops the path, which A3 recorded as a known limitation and which turned out to matter as soon as anyone shared a link.
+  No record type at GoDaddy can point a bare domain at a load balancer; Route 53's ALIAS can, so the registrar stays and only the nameservers move.
+  Terraform now writes the certificate validation records too, so a renewal can no longer fail because someone deleted a hand-pasted CNAME.
+  The zone is created and fully populated before the nameservers change, so the switch is a cutover rather than a build.
 - **`www.kimply.online` and `dev.kimply.online` now point at the load balancers.**
   `ROOT_URL`, the Terraform `domain_name` and the workflow's `service_url` moved together, because the app tells the browser where to open its DDP socket and a Terraform precondition keeps the first two in step.
   DNS moves before the deploy: a `ROOT_URL` the DNS does not yet serve gives a page that loads and a game that cannot connect, and it fails the canary, which now rolls deploys back.

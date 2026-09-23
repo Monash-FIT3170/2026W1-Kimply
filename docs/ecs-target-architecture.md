@@ -95,7 +95,7 @@ CloudWatch: task logs · canary on /health/ready → alarm → ECS rollback + SN
 | D14 | `/health/ready` kept for the deploy smoke test, the canary and the runbook | It is the only check that proves the Atlas path, and nothing it drives can restart a task |
 | D15 | ALB replaces Nginx: ACM cert, :80 redirect, target type `ip`, raised idle timeout | The proxy must learn task IPs from ECS |
 | D16 | Tasks get no public IP | The ALB reaches them privately; they reach out through the NAT |
-| D17 | DNS stays at GoDaddy; `www.kimply.online` is canonical and the apex is forwarded | GoDaddy cannot alias the apex to an ALB. `ROOT_URL` becomes `https://www.kimply.online` |
+| ~~D17~~ | ~~DNS stays at GoDaddy; `www.kimply.online` is canonical and the apex is forwarded~~ | **Superseded by D41.** The forwarding worked for the homepage but dropped paths, which broke apex deep links in practice |
 | D18 | Reuse the default VPC, add two private subnets and a NAT route table | No new VPC needed |
 | D19 | `sg-alb`: 80/443 from anywhere. `sg-kimply-task`: 3000 from `sg-alb` only | Port 3000 is unreachable from the internet by two independent layers |
 | D20 | Task egress is allow-all | Avoids breaking on a forgotten dependency port. Atlas is 27017, not 443 |
@@ -116,6 +116,7 @@ CloudWatch: task logs · canary on /health/ready → alarm → ECS rollback + SN
 | D35 | Separate GitHub OIDC roles for ECR push and ECS deploy | Least privilege per step. Both trust `main` on the upstream repo and, until it is deleted, this fork |
 | D36 | Terraform owns infrastructure and the initial task definition; the pipeline owns revisions; the Terraform service ignores task definition changes | Stops `terraform apply` and the pipeline fighting over the running revision |
 | D37 | Cutover by parallel run | Verify on the ALB hostname, switch GoDaddy, then retire the instance, its Elastic IP and its Atlas entry |
+| D41 | DNS moves to a Route 53 hosted zone. GoDaddy stays the registrar, and only the nameservers change | GoDaddy forwarding drops the path, so `https://kimply.online/play` reached a GoDaddy 404 (A3). An ALIAS record points the apex straight at the load balancer, which no GoDaddy record type can do. Terraform then owns DNS and certificate validation, removing the hand-pasted records |
 | D40 | Development borrows production's NAT gateway instead of paying for a second one | A NAT gateway is about US$43/month, more than the rest of dev. It is the single deliberate exception to "prod and dev share nothing", and it keeps one IP on both Atlas allowlists |
 | D39 | The stack was built serving `ecs.kimply.online` beside the EC2 stack, against the same Atlas database, before taking `www`. The certificate covered both from the start | A real hostname with a real certificate to play on before any production DNS changes. Same database because that is exactly what cutover will run against |
 | D38 | The canary also checks that the apex root redirects to `www` | GoDaddy forwarding is otherwise unmonitored. Only the root is checked, because forwarding drops paths (A3) |
@@ -139,7 +140,7 @@ CloudWatch: task logs · canary on /health/ready → alarm → ECS rollback + SN
 | R1 | Until I3 is resolved, a deploy or the overnight trim during a live game may remove players who are still playing. Deploy when no games are running |
 | R2 | Polling cost grows with active rooms × tasks ÷ polling interval, against the M0 operation limit |
 | R3 | Single NAT gateway: an outage in its AZ leaves the site up but unable to reach Atlas |
-| R4 | The apex depends on GoDaddy forwarding: apex deep links show a GoDaddy 404, and the forward may land on `http://www` for one unencrypted hop before the ALB upgrades it |
+| ~~R4~~ | ~~The apex depends on GoDaddy forwarding~~. Resolved by D41: the apex is an ALIAS to the load balancer, so deep links work and there is no unencrypted hop |
 | R5 | Alarm-based rollback is not zero-downtime: a few minutes on the bad version |
 | R6 | An Atlas outage during a bake period triggers a harmless but unnecessary rollback |
 | R7 | A secret change takes effect only after a forced new deployment |

@@ -22,6 +22,16 @@ output "nat_gateway_id" {
   value       = local.nat_gateway_id
 }
 
+output "hosted_zone_id" {
+  description = "The zone this environment's records live in, whether created here or shared."
+  value       = local.zone_id
+}
+
+output "hosted_zone_nameservers" {
+  description = "Set these as the domain's nameservers at the registrar. Null unless this environment created the zone."
+  value       = one(aws_route53_zone.this[*].name_servers)
+}
+
 output "cluster_name" {
   value = aws_ecs_cluster.this.name
 }

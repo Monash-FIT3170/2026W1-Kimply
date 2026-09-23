@@ -78,6 +78,11 @@ module "kimply" {
   monthly_budget_usd = var.monthly_budget_usd
   canary_enabled     = var.canary_enabled
 
+  # Records live in the hosted zone production owns (D41).
+  manage_dns      = true
+  hosted_zone_id  = data.terraform_remote_state.prod.outputs.hosted_zone_id
+  dns_alias_names = ["dev.kimply.online", "ecs-dev.kimply.online"]
+
   github_subject_prefixes = [
     "repo:Monash-FIT3170/2026W1-Kimply",
     "repo:R4chC0dE@140041789/2026W1-Kimply-ECS-Rollover@1380939227",

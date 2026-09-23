@@ -143,6 +143,41 @@ Work from `infra/terraform/envs/dev`.
 6. In the **development** Atlas cluster, allowlist the shared NAT IP (`terraform output -raw nat_gateway_id` egresses through production's Elastic IP, `terraform -chdir=../prod output -raw nat_public_ip`).
 7. Start the tasks, add the `ecs-dev` CNAME, then set `canary_enabled = true`, as in production steps 7-9.
 
+## Moving DNS to Route 53 (D41)
+
+GoDaddy remains the registrar. Only the nameservers change.
+Each phase is safe to stop at.
+
+**Phase 1: build the zone while GoDaddy is still answering.**
+`manage_dns` is already set in both environments, so:
+
+```bash
+terraform -chdir=envs/prod apply     # hosted zone, ALIAS records, validation records, DMARC
+terraform -chdir=envs/dev  apply     # dev records in the same zone
+terraform -chdir=envs/prod output hosted_zone_nameservers
+```
+
+Nothing changes yet: the zone is not authoritative until the registrar points at it.
+Check it answers correctly by querying it directly, where `ns-xxx` is one of those nameservers:
+
+```bash
+dig +short @ns-xxx.awsdns-xx.com kimply.online
+dig +short @ns-xxx.awsdns-xx.com www.kimply.online
+dig +short @ns-xxx.awsdns-xx.com dev.kimply.online
+dig +short @ns-xxx.awsdns-xx.com _dmarc.kimply.online TXT
+```
+
+**Phase 2: switch the nameservers** at GoDaddy (Domain settings, Nameservers, "I'll use my own") to the four from the output.
+Propagation takes up to a couple of hours, during which some resolvers still use GoDaddy. Both answer correctly, so nobody notices.
+Afterwards, delete GoDaddy's domain forwarding; the apex now resolves to the load balancer.
+
+**Phase 3 (optional): make the apex canonical.** One PR:
+- `infra/ecs/task-definition.prod.json`: `ROOT_URL` to `https://kimply.online`
+- `envs/prod/main.tf`: `domain_name` to `"kimply.online"`, and `redirect_hosts = ["www.kimply.online"]`
+- `.github/workflows/deploy.yml`: that branch's `service_url`
+
+Then apply, with `check_apex_redirect = false`: the apex is the canonical name now, so there is no redirect left to watch.
+
 ## Cutover
 
 The app's `ROOT_URL` is what the browser opens its DDP socket against, so **DNS moves first**.

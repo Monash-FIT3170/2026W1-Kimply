@@ -74,6 +74,17 @@ module "kimply" {
   # Exact OIDC subject prefixes. The upstream repository uses the plain form; the
   # migration fork uses GitHub's immutable form, with owner and repository IDs.
   # The fork is listed only until it is merged upstream and deleted.
+  # Route 53 (D41). Production owns the hosted zone for the whole domain;
+  # development takes its id, as with the NAT gateway.
+  # Phase 1 creates the zone and every record while GoDaddy is still answering,
+  # so the nameserver switch is a cutover with nothing left to set up.
+  # redirect_hosts stays empty until the canonical name moves to the apex.
+  manage_dns         = true
+  create_hosted_zone = true
+  dns_zone_name      = "kimply.online"
+  dns_alias_names    = ["kimply.online", "www.kimply.online", "ecs.kimply.online"]
+  redirect_hosts     = []
+
   github_subject_prefixes = [
     "repo:Monash-FIT3170/2026W1-Kimply",
     "repo:R4chC0dE@140041789/2026W1-Kimply-ECS-Rollover@1380939227",
