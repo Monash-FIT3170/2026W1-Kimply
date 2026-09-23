@@ -162,6 +162,12 @@ data "aws_iam_policy_document" "github_deploy" {
   }
 
   statement {
+    sid       = "ReadTargetHealth"
+    actions   = ["elasticloadbalancing:DescribeTargetHealth"]
+    resources = [aws_lb_target_group.app.arn]
+  }
+
+  statement {
     sid = "ReadThisEnvironmentsLogs"
     actions = [
       "logs:FilterLogEvents",

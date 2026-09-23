@@ -93,6 +93,9 @@ DEPLOYMENT_ID="$(aws ecs update-service \
 [[ -n "$DEPLOYMENT_ID" && "$DEPLOYMENT_ID" != "None" ]] || { log "ERROR: no deployment started for $TASK_DEF_ARN"; exit 1; }
 log "Deployment $DEPLOYMENT_ID started"
 
+TARGET_GROUP_ARN="$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" \
+  --query 'services[0].loadBalancers[0].targetGroupArn' --output text 2>/dev/null || true)"
+
 # Everything known before the outcome, so the summary is useful even on failure.
 summary "## Deploy to \`$ECS_CLUSTER\`"
 summary ""
@@ -130,14 +133,38 @@ dump_diagnostics() {
 # Not `aws ecs wait services-stable`: after a circuit-breaker rollback the service
 # is stable again on the OLD revision, and that waiter would report success.
 deadline=$(( STARTED_AT + ROLLOUT_TIMEOUT ))
+
+# Every deployment on the service, not just the new one: during a rollout the old
+# revision is still serving, and that is what you actually want to see.
+#   PRIMARY = the one being rolled out, ACTIVE = the previous one still draining.
+print_state() {
+  aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" \
+    --query "services[0].deployments[].[status, taskDefinition, runningCount, desiredCount, pendingCount, failedTasks, rolloutState]" \
+    --output text |
+  while IFS=$'\t' read -r dstatus dtaskdef drunning ddesired dpending dfailed drollout; do
+    printf '    %-8s %-18s running %s/%s  pending %s  failed %s  %s\n' \
+      "$dstatus" "${dtaskdef##*/}" "$drunning" "$ddesired" "$dpending" "$dfailed" "$drollout"
+  done
+
+  # The load balancer's own view: which task IPs are actually taking traffic.
+  if [[ -n "$TARGET_GROUP_ARN" && "$TARGET_GROUP_ARN" != "None" ]]; then
+    local targets
+    targets="$(aws elbv2 describe-target-health --target-group-arn "$TARGET_GROUP_ARN" \
+      --query 'TargetHealthDescriptions[].[Target.Id, TargetHealth.State]' --output text 2>/dev/null |
+      awk '{printf "%s:%s ", $1, $2}')"
+    [[ -n "$targets" ]] && printf '    targets  %s\n' "$targets"
+  fi
+}
+
 group "Rollout"
 while :; do
-  read -r state running pending failed reason < <(aws ecs describe-services \
+  read -r state reason < <(aws ecs describe-services \
     --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" \
-    --query "services[0].deployments[?id=='$DEPLOYMENT_ID'] | [0].[rolloutState, runningCount, pendingCount, failedTasks, rolloutStateReason]" \
+    --query "services[0].deployments[?id=='$DEPLOYMENT_ID'] | [0].[rolloutState, rolloutStateReason]" \
     --output text)
 
-  log "$state  running=$running pending=$pending failed=$failed"
+  log "rollout $state"
+  print_state
 
   case "$state" in
     COMPLETED) endgroup; break ;;
@@ -176,9 +203,14 @@ TASK_ROWS=""
 if [[ -n "$TASK_ARNS" && "$TASK_ARNS" != "None" ]]; then
   # shellcheck disable=SC2086
   TASK_ROWS="$(aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks $TASK_ARNS \
-    --query 'tasks[].[availabilityZone, lastStatus, healthStatus, taskDefinitionArn]' --output text 2>/dev/null || true)"
-  echo "$TASK_ROWS" | sed 's/^/  /'
+    --query 'tasks[].[taskArn, availabilityZone, lastStatus, healthStatus, taskDefinitionArn, containers[0].image]' \
+    --output text 2>/dev/null || true)"
+  while IFS=$'\t' read -r tarn taz tstatus thealth ttaskdef timage; do
+    [[ -z "$tarn" ]] && continue
+    printf '  %s  %s  %s/%s  %s  %s\n' "${tarn##*/}" "$taz" "$tstatus" "$thealth" "${ttaskdef##*/}" "${timage##*:}"
+  done <<< "$TASK_ROWS"
 fi
+print_state
 endgroup
 
 # --- Public probe ----------------------------------------------------------------
@@ -194,8 +226,8 @@ if ! "$REPO_ROOT/scripts/health-check.sh" "$SERVICE_URL"; then
 fi
 
 TASK_COUNT="$(printf '%s' "${TASK_ROWS:-}" | grep -c . || true)"
-AZS="$(printf '%s' "${TASK_ROWS:-}" | awk '{print $1}' | sort -u | paste -sd', ' -)"
+AZS="$(printf '%s' "${TASK_ROWS:-}" | awk -F'\t' '{print $2}' | sort -u | paste -sd', ' -)"
 finish "✅ COMPLETED"
-summary "$TASK_COUNT task(s) running in ${AZS:-unknown}, readiness probe passed."
+summary "**Now serving:** $TASK_COUNT task(s) on \`$REVISION\` in ${AZS:-unknown}, readiness probe passed."
 
 log "SUCCESS: $IMAGE is live on $ECS_CLUSTER/$ECS_SERVICE"
