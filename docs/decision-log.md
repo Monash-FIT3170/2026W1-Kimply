@@ -20,6 +20,62 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-09-22 - Production target moves to ECS on Fargate, with Terraform for the infrastructure
+
+The production design for replacing the single EC2 instance was worked out and recorded in `docs/ecs-target-architecture.md` (decisions D1-D39), and the Terraform to build it now exists under `infra/terraform/`.
+Nothing has been applied yet, and the EC2 stack is still what serves `kimply.online`.
+
+Things that are not obvious from the diff:
+
+- **The ALB health check is `/health/live`, not `/health/ready`.**
+  In ECS a failing load balancer check also replaces the task, so a Mongo-dependent check would restart every task in a loop through an Atlas outage.
+  `/health/ready` moves to the external canary, which can roll a deploy back but can never restart a task.
+- **The canonical host becomes `www.kimply.online`.**
+  DNS stays at GoDaddy, which cannot alias the apex to a load balancer, so GoDaddy forwards the apex to `www` and `ROOT_URL` changes with it.
+- **The task definition template is shared by Terraform and the pipeline.**
+  Terraform renders it once for the first revision and then ignores the service's revision, so an apply never undoes a deploy.
+  Because the template hard-codes names and ARNs, preconditions fail the plan if it and the infrastructure drift apart.
+- **Until cutover the stack serves `ecs.kimply.online`, against the live database.**
+  The EC2 stack keeps `kimply.online` and `www` untouched, so nothing about production DNS changes until the ECS stack has been played on.
+  The certificate covers `www` from the start so cutover does not wait on validation.
+  GoDaddy forwarding was tested first: it serves HTTPS but drops paths and query strings, so after cutover apex deep links land on a GoDaddy 404.
+- **The secret is referenced by its full ARN, random suffix and all.**
+  The first deploy referenced it by name, and ECS read that as an SSM Parameter Store parameter and failed with `ssm:GetParameters` denied.
+  A precondition now fails the plan if the template's `valueFrom` is not the secret's ARN.
+- **The polling interval drops to 3s through `METEOR_POLLING_INTERVAL_MS`, with no code change.**
+  Atlas M0 has no oplog, so with two tasks a write on one only reaches the other's subscribers at its next poll.
+- **Four application issues surfaced that matter more with two tasks**, recorded as I1-I4 in the architecture document rather than fixed here.
+  The most serious is that an in-game DDP reconnect may never re-bind `connectionId`, so a player who reconnects could be removed after the 15s grace window.
+  It needs an end-to-end reproduction before it goes in the defect register.
+
+- **Development reuses the same module and borrows production's NAT gateway.**
+  `envs/dev` differs from `envs/prod` only in values: `FARGATE_SPOT`, 1-2 tasks, its own cluster, ECR repository, secret, log group and domain (`ecs-dev.kimply.online`).
+  A second NAT gateway would have cost more than the whole dev environment, so dev routes through production's and reads its ID from production's Terraform state.
+  That is the one resource the environments share, and the cost is a real coupling: replacing production's NAT cuts dev off from its database until dev is re-applied.
+- **`www.kimply.online` and `dev.kimply.online` now point at the load balancers.**
+  `ROOT_URL`, the Terraform `domain_name` and the workflow's `service_url` moved together, because the app tells the browser where to open its DDP socket and a Terraform precondition keeps the first two in step.
+  DNS moves before the deploy: a `ROOT_URL` the DNS does not yet serve gives a page that loads and a game that cannot connect, and it fails the canary, which now rolls deploys back.
+  The apex keeps its GoDaddy forwarding to `www`, so apex links with a path reach a GoDaddy 404 (A3). `ecs.kimply.online` and `ecs-dev.kimply.online` stay as second names that bypass the redirect.
+  `deployment-manual.md` and `dev-environment.md` now carry a banner saying they describe the superseded EC2 stack.
+- **A failed deploy now prints why, in the run itself.**
+  `deploy/ecs-deploy.sh` writes a summary table to the GitHub run page (revision, image, deployment id, duration, tasks and their AZs), groups its noisy output, and on failure dumps the service events plus the task's CloudWatch logs.
+  That needed three read-only permissions on the deploy role, scoped to one cluster and one log group: `ecs:ListTasks`, `ecs:DescribeTasks` and `logs:FilterLogEvents`.
+  Without the logs, a failure showed ECS's view ("tasks failed to start") but never the application's own error.
+- **The pipeline deploys only to ECS. The SSM path is gone.**
+  Keeping both targets would have kept the EC2 stacks in step until cutover, at the cost of a workflow that had to reason about two deployment systems.
+  The consequence is accepted deliberately: `kimply.online` and `dev.kimply.online` now lag their branches until each cutover, and shipping to one in the meantime means running `deploy/deploy.sh` on that instance by hand.
+- **The deploy workflow resolves every branch-specific value in one `config` job.**
+  A `case` on the branch name maps it to the ECR repository, roles, cluster, service, task definition template, smoke-test URL and EC2 target, and an unrecognised branch fails there.
+  The previous `github.ref_name == 'main' && ... || ...` expressions treated every non-main branch as development, which would have silently pointed a future `staging` branch at the dev stack.
+- **GitHub roles trust exact OIDC subject prefixes, not repository names.**
+  The first pipeline run from the fork failed to assume `GitHubActionsECRPush` because the fork uses GitHub's immutable subject format, `repo:owner@<id>/name@<id>`, while the upstream repository still sends `repo:owner/name`.
+  `StringEquals` needs the exact string, so each repository is listed by the prefix GitHub reports for it.
+- **During the parallel run, `main` deploys to both production stacks.**
+  The deploy workflow is split into build, ECS and EC2 jobs so `kimply.online` and `ecs.kimply.online` always run the same image.
+  `deploy/ecs-deploy.sh` waits on the outcome of its own deployment ID rather than `aws ecs wait services-stable`, because after a circuit-breaker rollback the service is stable again on the old revision and that waiter would report success.
+
+Files: `docs/ecs-target-architecture.md` (new), `infra/` (new), `deploy/ecs-deploy.sh` (new), `.github/workflows/deploy.yml`, `scripts/health-check.sh`, `AGENTS.md`, `.gitignore`.
+
 ## 2026-09-04 - The Quality Assurance Plan is now a document in the repo
 
 The QA plan existed only as a submission document, written before most of the machinery it described was built.
