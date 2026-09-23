@@ -57,10 +57,10 @@ module "kimply" {
     "ap-southeast-2b" = "172.31.176.0/20"
   }
 
-  # Serves ecs-dev.kimply.online beside the EC2 stack on dev.kimply.online,
-  # the same parallel-run shape as production (D39). The certificate covers the
-  # cutover name as well, so cutover does not wait on validation.
-  domain_name       = "ecs-dev.kimply.online"
+  # As in production: domain_name is served as ROOT_URL and must match the
+  # template, and ecs-dev.kimply.online stays as a second name. There is no apex
+  # here, so dev needs no forwarding and no apex check.
+  domain_name       = "dev.kimply.online"
   certificate_names = ["ecs-dev.kimply.online", "dev.kimply.online"]
 
   task_definition_template = "${path.root}/../../../ecs/task-definition.dev.json"

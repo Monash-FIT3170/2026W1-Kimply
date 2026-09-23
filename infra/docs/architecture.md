@@ -8,8 +8,8 @@ In VS Code, a Mermaid preview extension does the same.
 
 ## 1. Runtime: how a request and a database call travel
 
-This is the end state after cutover.
-Until then the same stack serves `ecs.kimply.online` (a GoDaddy CNAME to the ALB), and `kimply.online` and `www` still point at the EC2 instance (D39).
+`ecs.kimply.online` also resolves to the same load balancer, as a second name that bypasses the apex redirect.
+Development has the identical shape on `dev.kimply.online` (and `ecs-dev.kimply.online`), with no apex step.
 
 Solid arrows are traffic players cause.
 Dotted arrows are traffic the tasks start themselves.

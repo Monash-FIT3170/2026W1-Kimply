@@ -48,11 +48,12 @@ module "kimply" {
     "ap-southeast-2b" = "172.31.144.0/20"
   }
 
-  # Until cutover the stack serves ecs.kimply.online, beside the EC2 stack on
-  # kimply.online (D39). The certificate already covers www so cutover does not
-  # wait on validation. At cutover, domain_name and ROOT_URL in the template
-  # both change to www.kimply.online.
-  domain_name       = "ecs.kimply.online"
+  # domain_name is what the app serves as ROOT_URL, and it must match the
+  # template (a precondition enforces it). The certificate also covers
+  # ecs.kimply.online, which stays as a second name that bypasses the apex
+  # redirect and is how the stack was verified before cutover (D39).
+  # GoDaddy forwards the apex here, because it cannot alias it to an ALB (D17).
+  domain_name       = "www.kimply.online"
   certificate_names = ["ecs.kimply.online", "www.kimply.online"]
   apex_domain       = "kimply.online"
 

@@ -65,7 +65,7 @@ jobs:
               ecs_role="arn:aws:iam::$ACCOUNT:role/kimply-prod-github-deploy"
               ecs_cluster=kimply-prod
               ecs_service=kimply-prod
-              service_url=https://ecs.kimply.online
+              service_url=https://www.kimply.online
               task_def_template=infra/ecs/task-definition.prod.json
               ;;
             dev)
@@ -75,7 +75,7 @@ jobs:
               ecs_role="arn:aws:iam::$ACCOUNT:role/kimply-dev-github-deploy"
               ecs_cluster=kimply-dev
               ecs_service=kimply-dev
-              service_url=https://ecs-dev.kimply.online
+              service_url=https://dev.kimply.online
               task_def_template=infra/ecs/task-definition.dev.json
               ;;
             *)

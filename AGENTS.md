@@ -495,7 +495,8 @@ Everything else - `deploy/`, `nginx/`, `docker-compose.prod.yml`, `scripts/` - i
 
 **Production is migrating to ECS on Fargate** (issue #1), designed in [`docs/ecs-target-architecture.md`](docs/ecs-target-architecture.md) and built from `infra/terraform/` and `infra/ecs/task-definition.prod.json`.
 Until the cutover step in that document, the EC2 stack above is still what serves `kimply.online`.
-The pipeline now deploys **only** to ECS: `main` to the `kimply-prod` cluster (serving `ecs.kimply.online`) and `dev` to `kimply-dev` (serving `ecs-dev.kimply.online`), both through `deploy/ecs-deploy.sh`.
+The pipeline now deploys **only** to ECS: `main` to the `kimply-prod` cluster (serving `www.kimply.online`, with the apex forwarded to it) and `dev` to `kimply-dev` (serving `dev.kimply.online`), both through `deploy/ecs-deploy.sh`.
+Both also answer on `ecs.kimply.online` / `ecs-dev.kimply.online`, which bypass the apex redirect.
 The EC2 instances therefore keep serving whatever they last received until each cutover. To ship to one in the meantime, run `deploy/deploy.sh <sha>` on that instance by hand.
 
 ---

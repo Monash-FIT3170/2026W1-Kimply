@@ -22,7 +22,7 @@
         }
       ],
       "environment": [
-        { "name": "ROOT_URL", "value": "https://ecs-dev.kimply.online" },
+        { "name": "ROOT_URL", "value": "https://dev.kimply.online" },
         { "name": "PORT", "value": "3000" },
         { "name": "METEOR_POLLING_INTERVAL_MS", "value": "3000" }
       ],

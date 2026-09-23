@@ -52,6 +52,11 @@ Things that are not obvious from the diff:
   `envs/dev` differs from `envs/prod` only in values: `FARGATE_SPOT`, 1-2 tasks, its own cluster, ECR repository, secret, log group and domain (`ecs-dev.kimply.online`).
   A second NAT gateway would have cost more than the whole dev environment, so dev routes through production's and reads its ID from production's Terraform state.
   That is the one resource the environments share, and the cost is a real coupling: replacing production's NAT cuts dev off from its database until dev is re-applied.
+- **`www.kimply.online` and `dev.kimply.online` now point at the load balancers.**
+  `ROOT_URL`, the Terraform `domain_name` and the workflow's `service_url` moved together, because the app tells the browser where to open its DDP socket and a Terraform precondition keeps the first two in step.
+  DNS moves before the deploy: a `ROOT_URL` the DNS does not yet serve gives a page that loads and a game that cannot connect, and it fails the canary, which now rolls deploys back.
+  The apex keeps its GoDaddy forwarding to `www`, so apex links with a path reach a GoDaddy 404 (A3). `ecs.kimply.online` and `ecs-dev.kimply.online` stay as second names that bypass the redirect.
+  `deployment-manual.md` and `dev-environment.md` now carry a banner saying they describe the superseded EC2 stack.
 - **A failed deploy now prints why, in the run itself.**
   `deploy/ecs-deploy.sh` writes a summary table to the GitHub run page (revision, image, deployment id, duration, tasks and their AZs), groups its noisy output, and on failure dumps the service events plus the task's CloudWatch logs.
   That needed three read-only permissions on the deploy role, scoped to one cluster and one log group: `ecs:ListTasks`, `ecs:DescribeTasks` and `logs:FilterLogEvents`.

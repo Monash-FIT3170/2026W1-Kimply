@@ -38,7 +38,8 @@ Preconditions on the task definition fail the plan if the template and the infra
 ## First-time build (production)
 
 Work from `infra/terraform`.
-The stack is built to serve `ecs.kimply.online` beside the EC2 stack, which keeps serving `kimply.online` and `www` untouched (D39).
+The stack serves `www.kimply.online`, and `ecs.kimply.online` remains as a second name that bypasses the apex redirect.
+During the build it served `ecs.kimply.online` alone, beside the EC2 stack (D39).
 Both stacks use the same Atlas database.
 
 1. **State bucket**
@@ -105,7 +106,7 @@ Both stacks use the same Atlas database.
    Then check it end to end and play a game on it:
 
    ```bash
-   curl -s https://ecs.kimply.online/health/ready    # {"status":"ready"}
+   curl -s https://ecs.kimply.online/health/ready    # {"status":"ready"}, before any apex change
    ```
 
 9. **Turn on the canary**, which also turns on alarm-based rollback: set `canary_enabled = true` in `terraform.tfvars` and apply.
@@ -113,7 +114,7 @@ Both stacks use the same Atlas database.
 
 ## First-time build (development)
 
-Development is the same module with different values, and it serves `ecs-dev.kimply.online` beside the EC2 dev instance on `dev.kimply.online`.
+Development is the same module with different values, serving `dev.kimply.online` (and `ecs-dev.kimply.online` as a second name).
 It has one extra step, because its template needs the secret's ARN and the ARN's suffix is random.
 
 Work from `infra/terraform/envs/dev`.
@@ -142,15 +143,33 @@ Work from `infra/terraform/envs/dev`.
 6. In the **development** Atlas cluster, allowlist the shared NAT IP (`terraform output -raw nat_gateway_id` egresses through production's Elastic IP, `terraform -chdir=../prod output -raw nat_public_ip`).
 7. Start the tasks, add the `ecs-dev` CNAME, then set `canary_enabled = true`, as in production steps 7-9.
 
-## Cutover to `www.kimply.online` (later)
+## Cutover
 
-1. Change `ROOT_URL` in `infra/ecs/task-definition.prod.json` and `domain_name` in `envs/prod/main.tf` to `www.kimply.online` in the same PR, and deploy it through the pipeline.
-   The certificate already covers `www`.
-2. At GoDaddy, in one sitting: point the `www` CNAME at the ALB, and replace the apex A record with forwarding to `https://www.kimply.online` (permanent 301, forward only, no masking).
-   GoDaddy forwarding was tested on 2026-09-22: HTTPS works, but paths and query strings are dropped (A2, A3).
-3. Set `check_apex_redirect = true` and apply.
-4. Retire the EC2 instance, release its Elastic IP, and remove that IP from the Atlas network access list.
-   The pipeline already ignores it, so nothing in CI changes.
+The app's `ROOT_URL` is what the browser opens its DDP socket against, so **DNS moves first**.
+Deploying a `ROOT_URL` the DNS does not yet serve gives a page that loads and a game that cannot connect, and it fails the canary.
+
+1. **GoDaddy, DNS records.** Point the hostname at the load balancer, replacing the old A record:
+
+   | Type | Name | Value |
+   |---|---|---|
+   | CNAME | `www` | prod ALB (`terraform -chdir=envs/prod output -raw alb_dns_name`) |
+   | CNAME | `dev` | dev ALB (`terraform -chdir=envs/dev output -raw alb_dns_name`) |
+
+   Leave the two `_<hash>.www` / `_<hash>.dev` ACM validation CNAMEs in place permanently: they are what renews the certificates.
+
+2. **Deploy the new `ROOT_URL`.** In one PR, change all three, which a Terraform precondition keeps in step:
+   - `infra/ecs/task-definition.<env>.json`: `ROOT_URL`
+   - `infra/terraform/envs/<env>/main.tf`: `domain_name`
+   - `.github/workflows/deploy.yml`: that branch's `service_url`
+
+3. **GoDaddy, the apex** (production only). Delete the apex `A` record and add **forwarding** to `https://www.kimply.online`, permanent (301), forward only, no masking.
+   Tested on 2026-09-22: HTTPS works, but paths and query strings are dropped (A2, A3), so apex deep links reach a GoDaddy 404. New invite links are built from `window.location.origin`, so they use `www`.
+   `dev` has no apex and needs nothing here.
+
+4. **Apply**, with `check_apex_redirect = true` for production, so the canary also watches the redirect.
+
+5. **Retire the EC2 instances.** Stop the instance, release its Elastic IP, and remove that IP from the Atlas network access list.
+   The pipeline already ignores them, so nothing in CI changes.
 
 ## Day to day
 

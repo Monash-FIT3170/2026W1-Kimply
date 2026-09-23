@@ -3,7 +3,7 @@
 This is the target design for moving Kimply production off a single EC2 instance running Docker Compose and Nginx, and onto ECS on Fargate behind an Application Load Balancer.
 It was worked out one decision at a time on 2026-09-22 (Phase 2 of the migration), and is being built in Phase 3 under issue #1.
 
-Until the cutover in [Migration](#migration) is complete, [deployment-manual.md](deployment-manual.md) still describes what is actually serving traffic.
+[deployment-manual.md](deployment-manual.md) describes the EC2 stack this replaces. It stays accurate only until those instances are retired, which is the last step of [Migration](#migration).
 The development environment (`dev.kimply.online`) is out of scope and stays on EC2 + Compose until it gets its own cluster.
 
 ## At a glance
@@ -117,7 +117,7 @@ CloudWatch: task logs · canary on /health/ready → alarm → ECS rollback + SN
 | D36 | Terraform owns infrastructure and the initial task definition; the pipeline owns revisions; the Terraform service ignores task definition changes | Stops `terraform apply` and the pipeline fighting over the running revision |
 | D37 | Cutover by parallel run | Verify on the ALB hostname, switch GoDaddy, then retire the instance, its Elastic IP and its Atlas entry |
 | D40 | Development borrows production's NAT gateway instead of paying for a second one | A NAT gateway is about US$43/month, more than the rest of dev. It is the single deliberate exception to "prod and dev share nothing", and it keeps one IP on both Atlas allowlists |
-| D39 | Until cutover, the stack serves `ecs.kimply.online` beside the EC2 stack, against the same Atlas database. The certificate covers `ecs` and `www` from the start | A real hostname with a real certificate to play on before any production DNS changes. Same database because that is exactly what cutover will run against |
+| D39 | The stack was built serving `ecs.kimply.online` beside the EC2 stack, against the same Atlas database, before taking `www`. The certificate covered both from the start | A real hostname with a real certificate to play on before any production DNS changes. Same database because that is exactly what cutover will run against |
 | D38 | The canary also checks that the apex root redirects to `www` | GoDaddy forwarding is otherwise unmonitored. Only the root is checked, because forwarding drops paths (A3) |
 
 ## Assumptions to validate
