@@ -29,7 +29,7 @@
       "secrets": [
         {
           "name": "MONGO_URL",
-          "valueFrom": "arn:aws:secretsmanager:ap-southeast-2:827152325060:secret:kimply/dev/mongo-url-REPLACE"
+          "valueFrom": "arn:aws:secretsmanager:ap-southeast-2:827152325060:secret:kimply/dev/mongo-url-uxNVjn"
         }
       ],
       "linuxParameters": {
