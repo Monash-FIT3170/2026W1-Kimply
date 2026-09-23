@@ -70,5 +70,5 @@ log "NOT READY after $ATTEMPTS attempts"
 log "Diagnose with:"
 log "  curl -v ${CURL_OPTS[*]} $URL"
 log "  EC2: docker compose -f docker-compose.prod.yml logs --tail=50 app nginx"
-log "  ECS: aws logs tail /ecs/kimply-prod --since 15m"
+log "  ECS: aws logs tail ${LOG_GROUP:-/ecs/<cluster>} --since 15m"
 exit 1
