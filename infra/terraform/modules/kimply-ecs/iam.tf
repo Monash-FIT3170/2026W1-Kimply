@@ -161,10 +161,13 @@ data "aws_iam_policy_document" "github_deploy" {
     }
   }
 
+  # DescribeTargetHealth does not support resource-level permissions: a statement
+  # scoped to the target group ARN never matches and the call is denied. It reads
+  # health only, and the role cannot change anything through it.
   statement {
     sid       = "ReadTargetHealth"
     actions   = ["elasticloadbalancing:DescribeTargetHealth"]
-    resources = [aws_lb_target_group.app.arn]
+    resources = ["*"]
   }
 
   statement {

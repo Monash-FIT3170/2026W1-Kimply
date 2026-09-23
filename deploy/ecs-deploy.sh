@@ -176,14 +176,36 @@ print_state() {
 }
 
 group "Rollout"
+previous_block=""
+last_heartbeat=0
+baking_noted=false
 while :; do
   read -r state reason < <(aws ecs describe-services \
     --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" \
     --query "services[0].deployments[?id=='$DEPLOYMENT_ID'] | [0].[rolloutState, rolloutStateReason]" \
     --output text)
 
-  log "rollout $state"
-  print_state
+  # Print the full picture only when something changes. A steady rollout would
+  # otherwise repeat the same block every 15s and read like a stuck loop.
+  block="$(print_state)"
+  now=$(date +%s)
+  if [[ "$block" != "$previous_block" ]]; then
+    log "rollout $state"
+    printf '%s\n' "$block"
+    previous_block="$block"
+    last_heartbeat=$now
+
+    # Tasks healthy but ECS still IN_PROGRESS means it is watching the alarm
+    # before declaring success (D31). Say so once, so the wait is expected.
+    if [[ "$state" == "IN_PROGRESS" && "$baking_noted" == false ]] \
+       && awk '/^ *PRIMARY /{split($4, c, "/"); if (c[1] == c[2] && c[1] + 0 > 0) ok = 1} END{exit !ok}' <<< "$block"; then
+      log "new revision is running; ECS is now baking the deployment against the canary alarm"
+      baking_noted=true
+    fi
+  elif (( now - last_heartbeat >= 60 )); then
+    log "rollout $state, unchanged, $(( now - STARTED_AT ))s elapsed"
+    last_heartbeat=$now
+  fi
 
   case "$state" in
     COMPLETED) endgroup; break ;;
