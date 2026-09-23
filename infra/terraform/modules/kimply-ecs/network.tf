@@ -37,8 +37,10 @@ resource "aws_nat_gateway" "this" {
   allocation_id = aws_eip.nat[0].id
   subnet_id     = var.nat_public_subnet_id
 
+  # Deliberately the repository name rather than var.name, unlike every other
+  # resource here: the NAT is named after the app it serves, not the environment.
   tags = {
-    Name = var.name
+    Name = var.ecr_repository_name
   }
 
   lifecycle {
