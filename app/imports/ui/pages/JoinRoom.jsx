@@ -4,6 +4,7 @@ import { Meteor } from 'meteor/meteor';
 import { PRIMARY, TILE, HAIRLINE, TileLattice, Wordmark, ArrowIcon, BackChevron, FG2 } from '../components/design';
 import { combineKeyHandlers, removeOnBackspace, submitOnEnter } from '../keyboard';
 import { appendRoomCodeInput, clearCapturedInput, roomCodeFromSearchParams } from '../roomCode';
+import { loadUsername, saveUsername, USERNAME_MAX_LENGTH } from '../savedUsername';
 
 const SLOTS = 5;
 
@@ -16,7 +17,7 @@ export function JoinRoom() {
   const inputRef = useRef(null);
   const navigate = useNavigate();
   const { state } = useLocation();
-  const [playerName, setPlayerName] = useState(state?.playerName || '');
+  const [playerName, setPlayerName] = useState(() => state?.playerName || loadUsername());
   const playerAccount = state?.playerAccount;
 
   useEffect(() => {
@@ -39,7 +40,8 @@ export function JoinRoom() {
   };
 
   const handleJoin = () => {
-    if (code.length !== SLOTS || loading) return;
+    const trimmedName = playerName.trim();
+    if (code.length !== SLOTS || !trimmedName || loading) return;
     setLoading(true);
     setError('');
     Meteor.call('rooms.join', code, playerName, playerAccount?._id, (err, res) => {
@@ -61,6 +63,7 @@ export function JoinRoom() {
       }
 
       localStorage.setItem('reconnectData', JSON.stringify(reconnectData));
+      saveUsername(trimmedName);
       navigate(`/play/${code}`, {
         state: {
           playerName,
@@ -158,7 +161,7 @@ export function JoinRoom() {
               onChange={(e) => setPlayerName(e.target.value)}
               onKeyDown={submitOnEnter(handleJoin)}
               placeholder="Enter your username"
-              maxLength={30}
+              maxLength={USERNAME_MAX_LENGTH}
               className="w-full rounded-[14px] border border-hairline bg-surface px-4 py-3 font-outfit text-base font-semibold text-fg outline-none placeholder:text-fg3"
               style={{ caretColor: PRIMARY }}
             />
