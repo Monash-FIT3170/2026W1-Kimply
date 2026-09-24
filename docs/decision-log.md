@@ -83,6 +83,104 @@ Things that are not obvious from the diff:
 
 Files: `docs/ecs-target-architecture.md` (new), `infra/` (new), `deploy/ecs-deploy.sh` (new), `.github/workflows/deploy.yml`, `scripts/health-check.sh`, `AGENTS.md`, `.gitignore`.
 
+## 2026-09-22 - Display names are unique and editable, and they are what the leaderboard shows
+
+Two accounts could share a display name, and their global leaderboard rows were indistinguishable: same name, same avatar letter, and the same avatar colour, because the colour is derived from the name (#125).
+No account could be renamed, including one named from a Google profile on first sign-in.
+And the leaderboard recorded the in-game name from the player's last game, so a row drifted away from its account and could show any name its player typed.
+
+Now `recordGlobalResult` writes the account's display name, display names are unique ignoring case and whitespace, and signed-in players can rename themselves on `/account`.
+
+Things that are not obvious from the diff:
+
+- **Uniqueness is enforced by an index on `displayNameKey`, not only by the check before writing.**
+  The check gives a friendly `name-taken` error; the unique index is what actually stops two simultaneous registrations or renames from both winning.
+  A duplicate-key error from the index is translated into the same `name-taken`.
+- **Google sign-in never fails because of a name clash.**
+  It takes the next free variant ("Alice G 2", "Alice G 3") and retries if it loses a race, since a player signing in with Google has no form on which to pick another name.
+  They can change it on `/account` afterwards.
+- **Existing duplicates are repaired at startup, before the index is built.**
+  `ensureUniqueDisplayNames()` sorts accounts by `createdAt`, lets the oldest keep a name, and suffixes the rest.
+  It also rewrites every leaderboard row's name from its account, which is what removes the in-game names already stored there.
+  It is idempotent, so it costs one scan of `playerAccounts` per startup and changes nothing once the data is clean.
+- **`updateDisplayName` is the first method that trusts the session token for identity.**
+  It takes the token, not an account id, so a player can only rename themselves.
+  The methods from #108 that still take a client-supplied `accountId` are unchanged.
+- **This does not stop someone playing as another account.**
+  Which account a result is credited to still comes from the `accountId` the client passes to `rooms.create`, `rooms.join`, and `players.join`, and the `globalLeaderboard` publication sends every row's `accountId` to every browser.
+  So a player can still copy an id off the leaderboard and have their results land on someone else's row, now under that account's real name.
+  This predates these changes; moving those methods to the session token and unpublishing `accountId` is #127.
+- **The in-game name is still free-form.**
+  It is what other players see in the room and on the end-of-game screen, and rooms already make it unique within a room. Only the global leaderboard uses the account name.
+- `AGENTS.md` had never listed the `globalLeaderboard` collection, publication, or test file. They are documented now.
+
+Files: `app/imports/api/playerAccounts.js`, `app/imports/api/gameMethods.js`, `app/server/main.js`, `app/server/indexes.js`, `app/imports/ui/accountSession.js`, `app/imports/ui/pages/Account.jsx`, `app/imports/ui/pages/PlayRoute.jsx`, `app/tests/playerAccounts.test.js`, `app/tests/globalLeaderboard.test.js`, `AGENTS.md`.
+
+## 2026-09-22 - Google sign-in
+
+Players can sign up and sign in with Google from `/account` (#105).
+It is off unless `GOOGLE_CLIENT_ID` is set, and when it is off the Account page looks exactly as it did before.
+
+Things that are not obvious from the diff:
+
+- **It plugs into the hand-rolled accounts rather than replacing them with `accounts-google`.**
+  Meteor's package would have meant `accounts-base`, `Meteor.userId()`, and a migration of every existing account for one button.
+  Instead the browser gets a signed ID token from Google Identity Services, `playerAccounts.googleSignIn` verifies it with `google-auth-library`, and the result is a normal session from #108.
+- **Linking by email is only done for a Google-verified email.**
+  A Google identity whose email matches an existing password account is linked to it, so the same player keeps one account and one history.
+  That is safe only because Google has proven the address; `email_verified: false` is refused outright.
+  An email already linked to a different Google subject is refused rather than silently re-linked.
+- **Linking removes the account's password and ends its sessions.**
+  Registration never proves who owns an email, so anyone can register a password account for someone else's address before they sign up.
+  If linking kept that password, whoever set it would share the real owner's account once the owner signed in with Google.
+  The cost is that a genuine owner who registered with a password signs in with Google from then on; `signIn` tells them so with `use-google`.
+- **The client ID comes from an environment variable, not `METEOR_SETTINGS`.**
+  `Meteor.settings` is read nowhere in the codebase, so `GOOGLE_CLIENT_ID` follows whatever path each stack already uses for configuration: plain `environment` in `infra/ecs/task-definition.{dev,prod}.json` on ECS, the root `.env` locally, and `/opt/kimply/.env` on the legacy instances.
+  It is public, unlike `MONGO_URL`, so it is not in Secrets Manager: it ships in the task definition and is visible in the page source anyway.
+  The browser reads it through `playerAccounts.googleClientId`, so a change is a task definition revision, not an image rebuild.
+- **`google-auth-library` is aliased away from the client build.**
+  `googleAuth.js` is imported by `playerAccounts.js`, which the client bundle includes through `globalLeaderboard.js`.
+  A dynamic import alone is not enough: Rspack still tries to bundle the Node-only library for the browser and fails with 14 errors, so `rspack.config.js` resolves it to nothing for the client.
+- **The verifier has a test seam**, `setGoogleVerifierForTests`, so the tests cover create, link, and refusal paths without a network call or a real Google token.
+  The override is stored on `global`, not in a module variable, because CI's `meteor test --full-app` evaluates the module twice and registers the methods from the other copy. A module variable passed locally under `npm test` and failed all six stubbed tests in CI.
+  The real verification path was exercised against the running dev server: a malformed token reaches `google-auth-library` and is rejected with its own error, which is logged server-side.
+
+Setup is in [`docs/google-sign-in.md`](google-sign-in.md): one OAuth client, its origins, and where the value lives in each stack. The new UI pattern is in `docs/design_system.md` under Third-party sign-in.
+
+Files: `app/imports/api/googleAuth.js` (new), `app/imports/api/playerAccounts.js`, `app/server/indexes.js`, `app/imports/ui/pages/Account.jsx`, `app/rspack.config.js`, `app/package.json`, `app/package-lock.json`, `app/tests/playerAccounts.test.js`, `infra/ecs/task-definition.dev.json`, `infra/ecs/task-definition.prod.json`, `docker-compose.yml`, `docker-compose.prod.yml`, `.env.production.example`, `docs/google-sign-in.md` (new), `docs/deployment-manual.md`, `docs/design_system.md`, `AGENTS.md`.
+
+## 2026-09-22 - Account sessions persist instead of riding on router state
+
+Testers were signed out when a game ended and when they rejoined one (#108).
+The signed-in account lived only in `location.state.playerAccount`, handed from page to page by hand.
+Any navigation that did not forward it dropped it: the reconnect popup's Rejoin, the lobby's kicked and room-gone redirects, typing `/play` into the address bar, or opening an invite link in a new tab.
+Once dropped, the rest of that game ran without an `accountId`, so its result was not recorded against the account either.
+
+`register` and `signIn` now return a random session token.
+The client keeps it in `localStorage`, resumes it at startup through `playerAccounts.resume`, and every page reads the account from `useSignedInAccount()` in `imports/ui/accountSession.js`.
+`playerAccount` is gone from every `navigate(..., { state })` call.
+`/play` has a Sign out link.
+
+Things that are not obvious from the diff:
+
+- **Only the SHA-256 of a token is stored.**
+  A copy of the `playerAccounts` collection does not contain a usable session.
+  Plain SHA-256 is enough here, unlike for passwords, because the token is 43 random characters and there is nothing to brute-force.
+- **Each sign-in is its own session.**
+  Signing in on a phone does not sign out the laptop, and Sign out ends only the session it was pressed in.
+  Expired sessions are pruned whenever a new one is issued, so the array cannot grow without bound.
+- **A failed resume clears the token only on `invalid-session`.**
+  A dropped connection at startup keeps the token for the next load, rather than signing the player out because the network blinked.
+- **`GamePage` waits for a pending resume before calling `players.join`.**
+  Without that, a reload that lands on `/game` could join without the account, and the late resume would re-run the effect and join a second time.
+- **This is a session, not an authorization boundary.**
+  `rooms.create`, `rooms.join`, and `players.join` still take a client-supplied `accountId`, so a hostile client can still record results against someone else's account.
+  Moving those methods to accept the token and resolve the account server-side is the follow-up.
+- `JoinRoom` now prefills a signed-in player's display name when opened from an invite link.
+
+Files: `app/imports/api/playerAccounts.js`, `app/server/indexes.js`, `app/imports/ui/accountSession.js` (new), `app/client/main.jsx`, `app/imports/ui/pages/{Account,PlayRoute,JoinRoom,PlayerLobby,GamePage,GlobalLeaderboard}.jsx`, `app/imports/ui/EndLeaderboard.jsx`, `app/tests/playerAccounts.test.js`, `AGENTS.md`.
+
+
 ## 2026-09-04 - The Quality Assurance Plan is now a document in the repo
 
 The QA plan existed only as a submission document, written before most of the machinery it described was built.

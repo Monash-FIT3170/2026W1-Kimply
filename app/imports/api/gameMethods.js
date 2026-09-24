@@ -21,7 +21,10 @@ function generateSequence(length) {
   return Array.from({ length }, () => COLOURS[Math.floor(Math.random() * COLOURS.length)]);
 }
 
-async function recordGlobalResult(accountId, displayName, levelReached, won) {
+// The leaderboard shows the account's display name, not the in-game name typed on /play,
+// so a row always matches its account. Which account gets credited still comes from a
+// client-supplied accountId; resolving it from the session token is #127.
+async function recordGlobalResult(accountId, levelReached, won) {
   if (!accountId) return;
 
   const now = new Date();
@@ -34,6 +37,7 @@ async function recordGlobalResult(accountId, displayName, levelReached, won) {
 
   const account = await PlayerAccountsCollection.findOneAsync(accountId);
   if (!account) return;
+  const { displayName } = account;
 
   const existing = await GlobalLeaderboardCollection.findOneAsync({ accountId });
 
@@ -102,7 +106,7 @@ async function checkWinner(gameId, isBattleRoyale = false) {
 
     for (const p of players) {
       const isWinner = winnerIds.has(p._id);
-      await recordGlobalResult(p.accountId, p.name, (p.currentLevel ?? 4) - 3, isWinner);
+      await recordGlobalResult(p.accountId, (p.currentLevel ?? 4) - 3, isWinner);
     }
     return;
   }
@@ -133,7 +137,7 @@ async function checkWinner(gameId, isBattleRoyale = false) {
 
     for (const p of players) {
       const isWinner = p._id === winner._id;
-      await recordGlobalResult(p.accountId, p.name, isWinner ? winnerLevel : p.eliminatedRound ?? 0, isWinner);
+      await recordGlobalResult(p.accountId, isWinner ? winnerLevel : p.eliminatedRound ?? 0, isWinner);
     }
     return;
   }
@@ -167,7 +171,7 @@ async function checkWinner(gameId, isBattleRoyale = false) {
 
     for (const p of players) {
       const isWinner = (p.eliminatedRound ?? 0) === highestRound;
-      await recordGlobalResult(p.accountId, p.name, p.eliminatedRound ?? 0, isWinner);
+      await recordGlobalResult(p.accountId, p.eliminatedRound ?? 0, isWinner);
     }
   }
 }

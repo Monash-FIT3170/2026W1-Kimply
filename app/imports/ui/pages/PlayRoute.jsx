@@ -4,6 +4,7 @@ import { Meteor } from 'meteor/meteor';
 import { BG, PRIMARY, TILE, HAIRLINE, FG2, TileLattice, Wordmark, Avatar, avatarColor, ArrowIcon, PencilIcon} from '../components/design';
 import { ReconnectPopup } from '../components/ReconnectPopup';
 import { submitOnEnter } from '../keyboard';
+import { signOut, useSessionResuming, useSignedInAccount } from '../accountSession';
 
 
 
@@ -68,7 +69,8 @@ function RouteCard({ kind, title, blurb, color, primary, onClick, disabled }) {
 
 export function PlayRoute() {
   const { state } = useLocation();
-  const signedInAccount = state?.playerAccount;
+  const signedInAccount = useSignedInAccount();
+  const sessionResuming = useSessionResuming();
 
   const [name, setName] = useState(signedInAccount?.displayName || '');
   const [editing, setEditing] = useState(!signedInAccount?.displayName);
@@ -77,6 +79,13 @@ export function PlayRoute() {
   const navigate = useNavigate();
 
   const wasKicked = state?.kicked === true;
+
+  // A stored session resumes after the first render, so fill the name in once it arrives.
+  useEffect(() => {
+    if (!signedInAccount?.displayName || name.trim()) return;
+    setName(signedInAccount.displayName);
+    setEditing(false);
+  }, [signedInAccount?.displayName]);
 
   const trimmedName = name.trim();
   const hasName = trimmedName.length > 0;
@@ -139,14 +148,14 @@ export function PlayRoute() {
 
       // localStorage.setItem('reconnectData', JSON.stringify(reconnectData));
       navigate(`/play/modes/${result.pin}`, {
-        state: { playerName: trimmedName, isHost: true, playerId: result.hostId, playerAccount: signedInAccount },
+        state: { playerName: trimmedName, isHost: true, playerId: result.hostId },
       });
     });
   };
 
   const handleJoin = () => {
     if (!hasName) return;
-    navigate('/play/join', { state: { playerName: trimmedName, playerAccount: signedInAccount } });
+    navigate('/play/join', { state: { playerName: trimmedName } });
   };
 
 
@@ -160,7 +169,6 @@ export function PlayRoute() {
         <div className="flex items-center gap-3">
           <Link
             to="/leaderboard"
-            state={{ playerAccount: signedInAccount }}
             className="rounded-full border border-hairline px-3.5 py-1.5 font-outfit text-[11px] font-bold uppercase tracking-wider text-fg2 transition-colors hover:text-fg"
           >
             Leaderboard
@@ -199,8 +207,22 @@ export function PlayRoute() {
             </div>
           )}
 
-          {signedInAccount ? (
-            <p className="mt-3 text-center font-manrope text-[13px] text-fg3">Signed in as {signedInAccount.email}</p>
+          {sessionResuming ? (
+            <p className="mt-3 text-center font-manrope text-[13px] text-fg3" aria-hidden="true">&nbsp;</p>
+          ) : signedInAccount ? (
+            <p className="mt-3 text-center font-manrope text-[13px] text-fg3">
+              Signed in as {signedInAccount.email} ·{' '}
+              <Link to="/account" className="font-outfit font-bold text-fg">
+                Account
+              </Link>{' '}
+              ·{' '}
+              <button
+                onClick={signOut}
+                className="cursor-pointer border-none bg-transparent p-0 font-outfit font-bold text-fg"
+              >
+                Sign out
+              </button>
+            </p>
           ) : (
             <p className="mt-3 text-center font-manrope text-[13px] text-fg3">
               Want to save your stats?{' '}

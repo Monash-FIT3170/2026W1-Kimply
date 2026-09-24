@@ -28,6 +28,8 @@ services:
       MONGO_URL: ${MONGO_URL}
       ROOT_URL: ${ROOT_URL}
       PORT: 3000
+      # Optional. Empty means Google sign-in is off and the button is hidden.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
 
     # The healthcheck is defined in the image (app/Dockerfile) and is inherited
     # here, which is what lets nginx gate on service_healthy below.

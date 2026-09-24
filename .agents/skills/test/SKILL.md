@@ -28,6 +28,17 @@ docker compose exec backend meteor npm run format:check
 
 CI is `.github/workflows/test.yml` on PRs to `main` and `dev` only. Coverage is a smoke gate, not a quality gate.
 
+**CI runs `meteor test --full-app`, and `npm test` does not.** Under `--full-app` every module is evaluated twice (app bundle and test bundle), and methods are registered by whichever copy loads first.
+Any module-level state a test changes, such as a stub or a test seam, must live on `global` (like the `global._<Name>Collection` guards), or the test changes its own copy while the method runs the other.
+Before pushing anything that adds such state, reproduce CI locally:
+
+```bash
+docker compose --profile test run --build --rm test meteor test --once --full-app --driver-package meteortesting:mocha
+```
+
+`--build` matters for both one-shot commands: the test image copies the source at build time, so without it you test stale code.
+`docker compose exec backend meteor npm test` fails with "Can't listen on port 3000" while the dev app is running; use the one-shot container instead.
+
 ## File shape
 
 ```js

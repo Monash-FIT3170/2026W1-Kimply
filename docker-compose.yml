@@ -23,6 +23,8 @@ services:
       METEOR_ALLOW_SUPERUSER: 1
       CHOKIDAR_USEPOLLING: 1
       CHOKIDAR_INTERVAL: 500
+      # Optional. Enables Google sign-in on /account; see docs/deployment-manual.md.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     depends_on:
       - mongodb
     volumes:

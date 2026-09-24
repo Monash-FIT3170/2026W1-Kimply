@@ -24,7 +24,8 @@
       "environment": [
         { "name": "ROOT_URL", "value": "https://www.kimply.online" },
         { "name": "PORT", "value": "3000" },
-        { "name": "METEOR_POLLING_INTERVAL_MS", "value": "3000" }
+        { "name": "METEOR_POLLING_INTERVAL_MS", "value": "3000" },
+        { "name": "GOOGLE_CLIENT_ID", "value": "" }
       ],
       "secrets": [
         {
