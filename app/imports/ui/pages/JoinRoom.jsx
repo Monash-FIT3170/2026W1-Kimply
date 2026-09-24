@@ -4,6 +4,7 @@ import { Meteor } from 'meteor/meteor';
 import { PRIMARY, TILE, HAIRLINE, TileLattice, Wordmark, ArrowIcon, BackChevron, FG2 } from '../components/design';
 import { combineKeyHandlers, removeOnBackspace, submitOnEnter } from '../keyboard';
 import { appendRoomCodeInput, clearCapturedInput, roomCodeFromSearchParams } from '../roomCode';
+import { useSignedInAccount } from '../accountSession';
 
 const SLOTS = 5;
 
@@ -17,7 +18,13 @@ export function JoinRoom() {
   const navigate = useNavigate();
   const { state } = useLocation();
   const [playerName, setPlayerName] = useState(state?.playerName || '');
-  const playerAccount = state?.playerAccount;
+  const playerAccount = useSignedInAccount();
+
+  // Invite links arrive with no name. A signed-in player's display name fills it in,
+  // including when their session resumes after the first render.
+  useEffect(() => {
+    if (playerAccount?.displayName && !playerName.trim()) setPlayerName(playerAccount.displayName);
+  }, [playerAccount?.displayName]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -66,7 +73,6 @@ export function JoinRoom() {
           playerName,
           isHost: false,
           playerId: res.playerId,
-          playerAccount,
           gameMode: res.gameMode,
           customSettings: res.customSettings,
         },

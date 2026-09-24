@@ -124,7 +124,7 @@ function SharePanel({ link }) {
   );
 }
 
-function HostView({ room, playerName, playerId, playerAccount, onBack, navigate, gameMode, customSettings }) {
+function HostView({ room, playerName, playerId, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
   const joinLink = `${window.location.origin}/play/join?code=${room.pin}`;
   const [editing, setEditing] = useState(true);
@@ -138,7 +138,7 @@ function HostView({ room, playerName, playerId, playerAccount, onBack, navigate,
         console.error(err);
         return;
       }
-      navigate('/game', { state: { playerName, playerId, pin: room.pin, gameMode, playerAccount } });
+      navigate('/game', { state: { playerName, playerId, pin: room.pin, gameMode } });
     });
   };
 
@@ -286,7 +286,7 @@ function HostView({ room, playerName, playerId, playerAccount, onBack, navigate,
   );
 }
 
-function JoinedView({ room, playerName, playerId, playerAccount, onBack, navigate, gameMode, customSettings }) {
+function JoinedView({ room, playerName, playerId, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
   const selectedGameMode = room.gameMode || gameMode || 'default';
 
@@ -310,7 +310,7 @@ function JoinedView({ room, playerName, playerId, playerAccount, onBack, navigat
   useEffect(() => {
     if (room?.status === 'in_progress') {
       navigate('/game', {
-        state: { playerName, playerId, pin: room.pin, gameMode: selectedGameMode, playerAccount },
+        state: { playerName, playerId, pin: room.pin, gameMode: selectedGameMode },
       });
     }
   }, [room?.status]);
@@ -387,7 +387,6 @@ export function PlayerLobby() {
   const playerName = state?.playerName || '';
   const playerId = state?.playerId || '';
   const isHost = state?.isHost === true;
-  const playerAccount = state?.playerAccount;
   const gameStarted = useRef(false);
   const [showExitPopup, setShowExitPopup] = useState(false);
   const isLoading = useSubscribe('rooms.lobby', pin);
@@ -399,7 +398,7 @@ export function PlayerLobby() {
     if (room?.status === 'in_progress' && !gameStarted.current) {
       gameStarted.current = true;
       navigate('/game', {
-        state: { playerName, playerId, pin: room.pin, gameMode, playerAccount },
+        state: { playerName, playerId, pin: room.pin, gameMode },
       });
     }
   }, [room?.status]);
@@ -428,7 +427,7 @@ export function PlayerLobby() {
           Meteor.call('rooms.disconnect', pin, playerId);
 
           localStorage.removeItem('reconnectData');
-          navigate('/play', { replace: true, state: { playerAccount } });
+          navigate('/play', { replace: true });
 
         }}
         onCancel={() => {
@@ -447,7 +446,6 @@ export function PlayerLobby() {
           room={room}
           playerName={playerName}
           playerId={playerId}
-          playerAccount={playerAccount}
           onBack={onBack}
           navigate={navigate}
           gameMode={gameMode}
@@ -458,7 +456,6 @@ export function PlayerLobby() {
           room={room}
           playerName={playerName}
           playerId={playerId}
-          playerAccount={playerAccount}
           onBack={onBack}
           navigate={navigate}
           gameMode={gameMode}

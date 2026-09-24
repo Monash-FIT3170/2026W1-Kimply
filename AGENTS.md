@@ -119,7 +119,7 @@ The full loop is built end to end:
 - The game itself: sequence playback, tile input, life deduction, streaks, accuracy tracking
 - Round advancement, elimination, and winner detection
 - A live per-round leaderboard and an end-of-game ranking screen
-- Optional player accounts (register and sign in)
+- Optional player accounts (register, sign in, sign out), with a session that survives reloads, new tabs, and the end of a game
 - A lobby-only reconnect prompt backed by `localStorage`
 
 ---
@@ -175,7 +175,7 @@ app/
 │   │   ├── players.js        # PlayersCollection (definition only)
 │   │   ├── leaderboard.js    # LeaderboardCollection (definition only)
 │   │   ├── gameMethods.js    # The game loop: rounds.*, players.* methods
-│   │   ├── playerAccounts.js # PlayerAccountsCollection + register/signIn
+│   │   ├── playerAccounts.js # PlayerAccountsCollection + register/signIn/resume/signOut
 │   │   └── sequence.js       # COLOURS + generateSequence (see note below)
 │   └── ui/
 │       ├── pages/            # Splash, PlayRoute, JoinRoom, PlayerLobby, GamePage, Account
@@ -187,6 +187,7 @@ app/
 │       ├── ColourSequence.jsx     # sequence playback + tile input
 │       ├── roomCode.js            # pure helpers for the 5-slot code entry
 │       ├── keyboard.js            # pure key handlers
+│       ├── accountSession.js      # signed-in account: session token, resume, useSignedInAccount
 │       └── styles.css             # Tailwind directives + keyframes
 └── tests/                    # meteortesting:mocha specs, see Testing below
 ```
@@ -258,12 +259,14 @@ Each definition is wrapped in a `global._<Name>Collection` guard so it survives 
 { gameId, playerId, name, lives, roundId, completedAt }
 ```
 
-**`playerAccounts`** (written by `playerAccounts.register`, `:55-64`)
+**`playerAccounts`** (written by `playerAccounts.register`, `:95-106`)
 ```js
 { displayName, email, passwordSalt, passwordHash,
-  gamesPlayed: 0, wins: 0, bestRound: 0, createdAt }
+  gamesPlayed: 0, wins: 0, bestRound: 0,
+  sessions: [{ hash, createdAt, expiresAt }], createdAt, updatedAt }
 ```
-`gamesPlayed`, `wins`, and `bestRound` are written once at 0 and never updated by any code.
+`gamesPlayed` and `wins` are incremented by `recordGlobalResult` in `gameMethods.js` when a game with a linked account ends.
+`sessions` holds the SHA-256 of each live session token, never the token itself. Sessions last 30 days, and expired ones are pruned whenever a new one is issued.
 
 ### Indexes
 
@@ -283,6 +286,7 @@ A failure is logged and does not take the server down, because a unique index ca
 | `leaderboard` | `{ gameId: 1, roundId: 1 }` | |
 | `leaderboard` | `{ completedAt: 1 }` | TTL 7 days |
 | `playerAccounts` | `{ email: 1 }` | unique |
+| `playerAccounts` | `{ 'sessions.hash': 1 }` | |
 
 The TTL indexes on `rooms` and `rounds` are what replaced the old destructive startup wipe: data expires on a timer instead of being deleted out from under live games on every restart.
 `leaderboard` is append-only and nothing deletes from it, so its TTL is what keeps it inside the 512 MB Atlas free-tier allowance.
@@ -367,8 +371,10 @@ There is no timer or deadline, so one player leaving mid-round stalls that game 
 
 | Method | Line | Args | Description |
 |---|---|---|---|
-| `playerAccounts.register` | 31 | `{ displayName, email, password }` | Salted SHA-256, min 8-char password |
-| `playerAccounts.signIn` | 69 | `{ email, password }` | Returns `{ displayName, email }`. **Issues no session token** |
+| `playerAccounts.register` | 71 | `{ displayName, email, password }` | Salted SHA-256, min 8-char password. Returns `{ _id, displayName, email, sessionToken }` |
+| `playerAccounts.signIn` | 111 | `{ email, password }` | Returns `{ _id, displayName, email, sessionToken }`. Each sign-in is its own session |
+| `playerAccounts.resume` | 136 | `token` | Returns `{ _id, displayName, email }` for a live session, else throws `invalid-session` |
+| `playerAccounts.signOut` | 144 | `token` | Deletes that one session. Unknown tokens are a no-op |
 
 `PlayerAccountsCollection` is never published, so hashes and salts stay server-side.
 Meteor's `accounts-base` / `accounts-password` packages are **not** installed; this is a hand-rolled implementation.
@@ -385,7 +391,9 @@ There are three unrelated identity mechanisms, none of them Meteor's.
    The host branch that would persist it is commented out at `PlayRoute.jsx:144-150`, so a host who reloads has no reconnect path.
 2. **In-game identity** - the `_id` of a `players` document, held only in React state at `GamePage.jsx:12`.
    Not persisted, so it is lost on refresh (see D7).
-3. **Account identity** - passed via `location.state.playerAccount`, with no token and no DDP session binding.
+3. **Account identity** - a session token from `register` / `signIn`, kept in `localStorage['kimply.session']` and resumed at startup by `imports/ui/accountSession.js`.
+   Pages read the account with `useSignedInAccount()`; it is never passed through router state.
+   The token is not bound to the DDP connection, and methods such as `rooms.join` and `players.join` still accept a client-supplied `accountId`.
 
 `location.state` is stored in `window.history.state.usr`, so it survives F5 on the same history entry but **not** a new tab or a shared link.
 On `/game` a missing `location.state.pin` renders a "no game selected" screen (`gameId` is `null`). The display name still falls back to `'Demo Player'` (`GamePage.jsx:21`). There is deliberately no `'demo'` gameId: a placeholder would subscribe to a game that does not exist and hang on LOADING.
@@ -413,7 +421,7 @@ How to write and run them is the `test` skill. What exists today:
 | File | Covers |
 |---|---|
 | `rooms.test.js` | `rooms.create`, `rooms.join`, `rooms.kick` |
-| `playerAccounts.test.js` | register and signIn validation, hashing, normalisation |
+| `playerAccounts.test.js` | register and signIn validation, hashing, normalisation; session issue, resume, expiry, sign-out |
 | `roundAdvance.test.js` | `rounds.advance` increments, player migration, idempotency |
 | `lifeDeduction.test.js` | life loss on wrong guess, streak reset |
 | `streak.test.js` | current vs longest streak |
@@ -442,7 +450,7 @@ One line each, so a review can cite an ID without opening anything.
 | D5 | `gameMethods.js:79-81` | No round deadline. One player leaving mid-round stalls that game forever |
 | D6 | `rooms.js:172` | `hostId` is never persisted, so `rooms.reconnect` always reports `isHost: false` |
 | D7 | `GamePage.jsx:43-53` | `playerId` lives only in React state, so a refresh mints a second player with fresh lives |
-| D8 | `playerAccounts.js:20-22` | Unstretched SHA-256, non-constant-time compare, no rate limiting, enumeration oracle |
+| D8 | `playerAccounts.js:22-24` | Unstretched SHA-256, non-constant-time compare, no rate limiting, enumeration oracle |
 | D11 | root `package-lock.json` | Desynced against an empty root `package.json`, so `npm ci` at the repo root fails |
 | D12 | `ColourSequence.jsx:80-92` | A new `AudioContext` per tile click, never closed |
 | D14 | repo-wide | `npm run format:check` fails on `main`. Needs one dedicated formatting commit before it can gate CI |
