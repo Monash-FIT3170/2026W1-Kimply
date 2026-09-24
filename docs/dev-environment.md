@@ -1,5 +1,8 @@
 # Kimply Development Environment
 
+> **Superseded by ECS.** `www.kimply.online` and `dev.kimply.online` are served by ECS Fargate behind load balancers, built and operated from [`infra/terraform`](../infra/terraform/README.md) and described in [ecs-target-architecture.md](ecs-target-architecture.md).
+> This document covers the EC2 instances that preceded it. They still exist but no longer receive deploys, and it stays here until they are retired.
+
 A second, fully independent copy of the production stack, deployed automatically on every push to `dev`.
 
 **This document is a delta.**
