@@ -46,6 +46,10 @@ Everything below has a home of its own. Read the home file rather than expecting
 | [`docs/deployment-manual.md`](docs/deployment-manual.md) | Production runbook, from empty AWS account to serving traffic |
 | [`docs/dev-environment.md`](docs/dev-environment.md) | How the development stack differs from production |
 | [`docs/operations.md`](docs/operations.md) | Monitoring, backups, incident runbook, cost |
+| [`docs/ecs-target-architecture.md`](docs/ecs-target-architecture.md) | Target production design on ECS Fargate: decisions, risks, migration order. In progress, not yet serving traffic |
+| [`docs/google-sign-in.md`](docs/google-sign-in.md) | Google sign-in: the OAuth client, its origins, and where `GOOGLE_CLIENT_ID` lives in each environment |
+| [`infra/terraform/README.md`](infra/terraform/README.md) | How to build and operate the ECS stack with Terraform |
+| [`infra/docs/architecture.md`](infra/docs/architecture.md) | Mermaid diagrams of the ECS stack: runtime traffic, which Terraform file builds what, a deploy |
 | [`README.md`](README.md) | WSL2 and Docker setup, and the full local command list |
 | `.agents/skills/<name>/SKILL.md` | How to do a kind of work in this repo (git, tests, Docker). Not product rules |
 
@@ -476,7 +480,11 @@ Dev, from `docker-compose.yml`:
 - `ROOT_URL` - app root URL (`http://localhost:3000`)
 - `PORT` - 3000
 - `CHOKIDAR_USEPOLLING` / `CHOKIDAR_INTERVAL` - file watch polling, for Windows
-- `GOOGLE_CLIENT_ID` - optional, in both compose files. Empty turns Google sign-in off. Set up in [`docs/deployment-manual.md`](docs/deployment-manual.md) section 9f
+- `GOOGLE_CLIENT_ID` - optional. Empty turns Google sign-in off, which is the default everywhere until an OAuth client exists
+
+`GOOGLE_CLIENT_ID` is the only app-level setting with an environment-specific value, and each stack carries it differently:
+`docker-compose.yml` locally (from the root `.env`), plain `environment` in `infra/ecs/task-definition.{dev,prod}.json` on ECS, and `/opt/kimply/.env` on the legacy EC2 instances.
+It is a public value, not a secret, so it is not in Secrets Manager. Setup is [`docs/google-sign-in.md`](docs/google-sign-in.md).
 
 `METEOR_SETTINGS` is not passed by either compose file, and **`Meteor.settings` is never read anywhere in the codebase**.
 Apart from `GOOGLE_CLIENT_ID`, there is no configuration surface: starting lives (3), initial sequence length (4), PIN length (5), and minimum password length (8) are all hardcoded literals.
@@ -505,6 +513,12 @@ The two share no AWS resource: the IAM roles are per-branch, because GitHub's OI
 Everything else - `deploy/`, `nginx/`, `docker-compose.prod.yml`, `scripts/` - is environment-agnostic and reads its configuration from `/opt/kimply/.env` on the box.
 **Do not fork any of those per environment.** If something must differ, it belongs in `.env`.
 `docker-compose.yml` is development only and must stay working.
+
+**Production is migrating to ECS on Fargate** (issue #1), designed in [`docs/ecs-target-architecture.md`](docs/ecs-target-architecture.md) and built from `infra/terraform/` and `infra/ecs/task-definition.prod.json`.
+Until the cutover step in that document, the EC2 stack above is still what serves `kimply.online`.
+The pipeline now deploys **only** to ECS: `main` to the `kimply-prod` cluster (serving `www.kimply.online`, with the apex forwarded to it) and `dev` to `kimply-dev` (serving `dev.kimply.online`), both through `deploy/ecs-deploy.sh`.
+Both also answer on `ecs.kimply.online` / `ecs-dev.kimply.online`, which bypass the apex redirect.
+The EC2 instances therefore keep serving whatever they last received until each cutover. To ship to one in the meantime, run `deploy/deploy.sh <sha>` on that instance by hand.
 
 ---
 
