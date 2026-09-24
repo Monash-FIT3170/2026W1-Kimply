@@ -135,8 +135,9 @@ Things that are not obvious from the diff:
   If linking kept that password, whoever set it would share the real owner's account once the owner signed in with Google.
   The cost is that a genuine owner who registered with a password signs in with Google from then on; `signIn` tells them so with `use-google`.
 - **The client ID comes from an environment variable, not `METEOR_SETTINGS`.**
-  Production configuration lives in `/opt/kimply/.env` and neither compose file passes `METEOR_SETTINGS`, so `GOOGLE_CLIENT_ID` follows the same path as `MONGO_URL`.
-  The browser reads it through `playerAccounts.googleClientId`, so the value is set once per box and needs no rebuild.
+  `Meteor.settings` is read nowhere in the codebase, so `GOOGLE_CLIENT_ID` follows whatever path each stack already uses for configuration: plain `environment` in `infra/ecs/task-definition.{dev,prod}.json` on ECS, the root `.env` locally, and `/opt/kimply/.env` on the legacy instances.
+  It is public, unlike `MONGO_URL`, so it is not in Secrets Manager: it ships in the task definition and is visible in the page source anyway.
+  The browser reads it through `playerAccounts.googleClientId`, so a change is a task definition revision, not an image rebuild.
 - **`google-auth-library` is aliased away from the client build.**
   `googleAuth.js` is imported by `playerAccounts.js`, which the client bundle includes through `globalLeaderboard.js`.
   A dynamic import alone is not enough: Rspack still tries to bundle the Node-only library for the browser and fails with 14 errors, so `rspack.config.js` resolves it to nothing for the client.
@@ -144,9 +145,9 @@ Things that are not obvious from the diff:
   The override is stored on `global`, not in a module variable, because CI's `meteor test --full-app` evaluates the module twice and registers the methods from the other copy. A module variable passed locally under `npm test` and failed all six stubbed tests in CI.
   The real verification path was exercised against the running dev server: a malformed token reaches `google-auth-library` and is rejected with its own error, which is logged server-side.
 
-Setup is in `docs/deployment-manual.md` section 9f. The new UI pattern is in `docs/design_system.md` under Third-party sign-in.
+Setup is in [`docs/google-sign-in.md`](google-sign-in.md): one OAuth client, its origins, and where the value lives in each stack. The new UI pattern is in `docs/design_system.md` under Third-party sign-in.
 
-Files: `app/imports/api/googleAuth.js` (new), `app/imports/api/playerAccounts.js`, `app/server/indexes.js`, `app/imports/ui/pages/Account.jsx`, `app/rspack.config.js`, `app/package.json`, `app/package-lock.json`, `app/tests/playerAccounts.test.js`, `docker-compose.yml`, `docker-compose.prod.yml`, `.env.production.example`, `docs/deployment-manual.md`, `docs/design_system.md`, `AGENTS.md`.
+Files: `app/imports/api/googleAuth.js` (new), `app/imports/api/playerAccounts.js`, `app/server/indexes.js`, `app/imports/ui/pages/Account.jsx`, `app/rspack.config.js`, `app/package.json`, `app/package-lock.json`, `app/tests/playerAccounts.test.js`, `infra/ecs/task-definition.dev.json`, `infra/ecs/task-definition.prod.json`, `docker-compose.yml`, `docker-compose.prod.yml`, `.env.production.example`, `docs/google-sign-in.md` (new), `docs/deployment-manual.md`, `docs/design_system.md`, `AGENTS.md`.
 
 ## 2026-09-22 - Account sessions persist instead of riding on router state
 

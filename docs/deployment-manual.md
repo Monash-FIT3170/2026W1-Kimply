@@ -460,7 +460,7 @@ stat -c '%a %U:%G' .env      # MUST print: 600 root:root
 ```
 
 Fill in `APP_IMAGE`, `DOMAIN`, `ROOT_URL`, `LETSENCRYPT_EMAIL`, `MONGO_URL`, `AWS_REGION`, `ECR_REGISTRY`, `ECR_REPOSITORY`.
-`GOOGLE_CLIENT_ID` is optional and can stay empty; see [9f](#9f-google-sign-in-optional).
+`GOOGLE_CLIENT_ID` is optional and can stay empty; see [google-sign-in.md](google-sign-in.md).
 
 `ROOT_URL` must be the **public HTTPS origin**.
 Meteor puts it in `__meteor_runtime_config__`, so a wrong value breaks the client's DDP endpoint.
@@ -502,40 +502,19 @@ Enabling HSTS before successful issuance locks browsers out of the site.
 
 ### 9f. Google sign-in (optional)
 
-Google sign-in is off until `GOOGLE_CLIENT_ID` is set.
-With it empty, the Account page shows only email and password, and `playerAccounts.googleSignIn` refuses every call.
+Google sign-in is off until `GOOGLE_CLIENT_ID` is set, and the setup is the same OAuth client for every environment.
+It is documented once, for the ECS stack that now serves traffic, in **[google-sign-in.md](google-sign-in.md)**.
 
-One OAuth client can serve every environment, since it lists each origin separately.
+On these instances the value is a line in `/opt/kimply/.env`, which `docker-compose.prod.yml` passes to the container:
 
-1. In [Google Cloud Console](https://console.cloud.google.com/), pick or create a project for Kimply.
-2. **Google Auth Platform → Branding**: set the app name to Kimply and add a support email.
-   Under **Audience**, choose **External**. While the app is in **Testing**, only listed test users can sign in, so publish it before real players use it.
-   Kimply asks only for the default `openid email profile` scopes, which need no Google verification review.
-3. **Google Auth Platform → Clients → Create client**, type **Web application**.
-4. Under **Authorised JavaScript origins**, add every origin that serves the app, with no path and no trailing slash:
-   - `https://kimply.online`
-   - `https://dev.kimply.online`
-   - `http://localhost:3000` (and `http://localhost` too, as Google requires for local development)
+```bash
+cd /opt/kimply
+grep GOOGLE_CLIENT_ID .env || echo 'GOOGLE_CLIENT_ID=<CLIENT_ID>' | sudo tee -a .env
+docker compose -f docker-compose.prod.yml --env-file .env up -d app
+docker compose -f docker-compose.prod.yml --env-file .env exec app printenv GOOGLE_CLIENT_ID
+```
 
-   Leave **Authorised redirect URIs** empty. The button uses a popup and posts the ID token straight back to the page.
-5. Copy the **Client ID** (it ends in `.apps.googleusercontent.com`). It is public and is not a secret; there is no client secret to store.
-6. Set it on each instance and recreate the app container:
-
-   ```bash
-   cd /opt/kimply
-   sudo sed -i 's|^GOOGLE_CLIENT_ID=.*|GOOGLE_CLIENT_ID=<CLIENT_ID>|' .env   # or add the line if it is missing
-   docker compose -f docker-compose.prod.yml --env-file .env up -d app
-   ```
-
-For local development, put `GOOGLE_CLIENT_ID=<CLIENT_ID>` in the repository-root `.env` (gitignored) and run `docker compose up -d backend`.
-
-**How it is verified.** The browser gets a signed ID token from Google and sends it to `playerAccounts.googleSignIn`.
-The server checks the signature against Google's published keys with `google-auth-library`, requires this client ID as the audience, and requires `email_verified`.
-A Google identity that matches an existing account's email is linked to that account, keeping its history.
-Linking removes that account's password and signs out its other sessions, because registration never proved who owned the email; from then on that player signs in with Google.
-
-**Content-Security-Policy.** There is no CSP today.
-If one is added, it must allow `https://accounts.google.com/gsi/client` in `script-src`, `https://accounts.google.com/gsi/` in `frame-src` and `connect-src`, and `https://accounts.google.com/gsi/style` in `style-src`.
+`sed -i` over a missing line silently does nothing, which is why the check above appends instead.
 
 ---
 
@@ -647,9 +626,6 @@ grep '^APP_IMAGE=' /opt/kimply/.env
 | Game feels sluggish at scale | WebSocket upgrade failing, long-polling fallback | Look for `101` in the nginx access log |
 | `docker pull` denied | Instance role lacks ECR pull, or wrong region | `aws sts get-caller-identity` on the instance |
 | Push rejected as existing tag | Tags are immutable and that SHA is already pushed | Commit a change; the SHA is the tag |
-| No Google button on `/account` | `GOOGLE_CLIENT_ID` empty or not passed to the container | `docker compose exec app printenv GOOGLE_CLIENT_ID` |
-| Google popup says `origin_mismatch` or "not allowed" | The site's origin is not in the OAuth client's Authorised JavaScript origins | Add the exact origin in Cloud Console (see 9f); changes take a few minutes |
-| Google sign-in fails with "Please try again" | ID token rejected by the server | `docker compose logs app \| grep googleSignIn` shows the reason |
 
 ### Useful commands on the instance
 

@@ -47,6 +47,7 @@ Everything below has a home of its own. Read the home file rather than expecting
 | [`docs/dev-environment.md`](docs/dev-environment.md) | How the development stack differs from production |
 | [`docs/operations.md`](docs/operations.md) | Monitoring, backups, incident runbook, cost |
 | [`docs/ecs-target-architecture.md`](docs/ecs-target-architecture.md) | Target production design on ECS Fargate: decisions, risks, migration order. In progress, not yet serving traffic |
+| [`docs/google-sign-in.md`](docs/google-sign-in.md) | Google sign-in: the OAuth client, its origins, and where `GOOGLE_CLIENT_ID` lives in each environment |
 | [`infra/terraform/README.md`](infra/terraform/README.md) | How to build and operate the ECS stack with Terraform |
 | [`infra/docs/architecture.md`](infra/docs/architecture.md) | Mermaid diagrams of the ECS stack: runtime traffic, which Terraform file builds what, a deploy |
 | [`README.md`](README.md) | WSL2 and Docker setup, and the full local command list |
@@ -495,7 +496,11 @@ Dev, from `docker-compose.yml`:
 - `ROOT_URL` - app root URL (`http://localhost:3000`)
 - `PORT` - 3000
 - `CHOKIDAR_USEPOLLING` / `CHOKIDAR_INTERVAL` - file watch polling, for Windows
-- `GOOGLE_CLIENT_ID` - optional, in both compose files. Empty turns Google sign-in off. Set up in [`docs/deployment-manual.md`](docs/deployment-manual.md) section 9f
+- `GOOGLE_CLIENT_ID` - optional. Empty turns Google sign-in off, which is the default everywhere until an OAuth client exists
+
+`GOOGLE_CLIENT_ID` is the only app-level setting with an environment-specific value, and each stack carries it differently:
+`docker-compose.yml` locally (from the root `.env`), plain `environment` in `infra/ecs/task-definition.{dev,prod}.json` on ECS, and `/opt/kimply/.env` on the legacy EC2 instances.
+It is a public value, not a secret, so it is not in Secrets Manager. Setup is [`docs/google-sign-in.md`](docs/google-sign-in.md).
 
 `METEOR_SETTINGS` is not passed by either compose file, and **`Meteor.settings` is never read anywhere in the codebase**.
 Apart from `GOOGLE_CLIENT_ID`, there is no configuration surface: starting lives (3), initial sequence length (4), PIN length (5), and minimum password length (8) are all hardcoded literals.
