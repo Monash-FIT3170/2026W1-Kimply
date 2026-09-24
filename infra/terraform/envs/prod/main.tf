@@ -64,7 +64,7 @@ module "kimply" {
   secret_name              = "kimply/prod/mongo-url"
 
   capacity_provider = "FARGATE"
-  min_tasks         = 2
+  min_tasks         = 1
   max_tasks         = 4
 
   alert_email         = var.alert_email
