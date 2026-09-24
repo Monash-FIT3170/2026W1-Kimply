@@ -58,10 +58,10 @@ module "kimply" {
   }
 
   # As in production: domain_name is served as ROOT_URL and must match the
-  # template, and ecs-dev.kimply.online stays as a second name. There is no apex
-  # here, so dev needs no forwarding and no apex check.
+  # template. There is no apex here, so dev needs no forwarding and no apex
+  # check. ecs-dev.kimply.online was the build-time name (D39) and is retired.
   domain_name       = "dev.kimply.online"
-  certificate_names = ["ecs-dev.kimply.online", "dev.kimply.online"]
+  certificate_names = ["dev.kimply.online"]
 
   task_definition_template = "${path.root}/../../../ecs/task-definition.dev.json"
   ecr_repository_name      = "kimply-dev"
@@ -77,6 +77,11 @@ module "kimply" {
   alert_email        = var.alert_email
   monthly_budget_usd = var.monthly_budget_usd
   canary_enabled     = var.canary_enabled
+
+  # Records live in the hosted zone production owns (D41).
+  manage_dns      = true
+  hosted_zone_id  = data.terraform_remote_state.prod.outputs.hosted_zone_id
+  dns_alias_names = ["dev.kimply.online"]
 
   github_subject_prefixes = [
     "repo:Monash-FIT3170/2026W1-Kimply",

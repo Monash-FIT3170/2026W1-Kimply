@@ -15,11 +15,15 @@ resource "aws_acm_certificate" "app" {
   }
 }
 
-# DNS lives at GoDaddy, so Terraform cannot create the validation record.
-# This resource simply waits until someone adds the CNAME from the
-# acm_validation_records output. See infra/terraform/README.md.
+# With manage_dns, Terraform writes the validation records itself and waits on
+# them. Without it, DNS lives elsewhere and this only waits for records someone
+# adds by hand from the acm_validation_records output.
 resource "aws_acm_certificate_validation" "app" {
   certificate_arn = aws_acm_certificate.app.arn
+
+  # Once DNS is ours, waiting on the records Terraform just wrote is exact.
+  # Before that, this resource only waits for records added by hand.
+  validation_record_fqdns = var.manage_dns ? [for r in aws_route53_record.certificate_validation : r.fqdn] : null
 
   timeouts {
     create = "2h"
