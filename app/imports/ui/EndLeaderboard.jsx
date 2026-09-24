@@ -2,7 +2,7 @@ import { Meteor } from 'meteor/meteor';
 import { useTracker } from 'meteor/react-meteor-data';
 import { PlayersCollection } from '../api/players';
 import { useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { BG, PRIMARY, FG2, TileLattice, Avatar, TopBar, ArrowIcon, avatarColor } from './components/design';
 
 export const MEDAL = [
@@ -23,8 +23,6 @@ function accuracyPercent(player) {
 
 export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
   const navigate = useNavigate();
-  const { state } = useLocation();
-  const playerAccount = state?.playerAccount;
 
   // Game is over: drop reconnect data so /play doesn't offer to rejoin it.
   useEffect(() => {
@@ -100,7 +98,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
       />
 
       <div className="relative z-10">
-        <TopBar onBack={() => navigate('/play', { state: { playerAccount } })} />
+        <TopBar onBack={() => navigate('/play')} />
       </div>
 
       <div className="relative z-10 flex flex-1 flex-col items-center px-6 pb-12">
@@ -323,10 +321,10 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
             if (gameId) {
               Meteor.call('game.resetSequences', gameId, (err) => {
                 if (err) console.error('Failed to reset sequences:', err);
-                navigate('/play', { state: { playerAccount } });
+                navigate('/play');
               });
             } else {
-              navigate('/play', { state: { playerAccount } });
+              navigate('/play');
             }
           }}
           className="mt-8 inline-flex items-center gap-2 rounded-full px-5 py-3 font-outfit text-[13px] font-extrabold uppercase tracking-[0.16em] transition-transform hover:scale-[1.02]"

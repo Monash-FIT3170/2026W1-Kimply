@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Meteor } from 'meteor/meteor';
 import { useSubscribe, useTracker } from 'meteor/react-meteor-data';
 import { GlobalLeaderboardCollection } from '/imports/api/globalLeaderboard';
 import { MEDAL } from '../EndLeaderboard';
+import { useSignedInAccount } from '../accountSession';
 import {
   PRIMARY,
   HAIRLINE,
@@ -108,8 +109,7 @@ function LeaderboardRow({ entry, rank, isYou }) {
 
 export function GlobalLeaderboard() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const myAccountId = location.state?.playerAccount?._id || null;
+  const myAccountId = useSignedInAccount()?._id || null;
 
   const isLoading = useSubscribe('globalLeaderboard')();
   const entries = useTracker(
