@@ -1,7 +1,8 @@
 export function getPlayerStatus(player) {
   if (player.winner) return 'Winner';
+  if (player.roundStatus) return player.roundStatus;
   if (player.eliminated) return 'Eliminated';
-  if (player.completeRound) return 'Completed';
+  if (player.completeRound) return 'Correct';
   return 'Playing';
 }
 
@@ -19,9 +20,10 @@ export function createLiveLeaderboardRows(players, currentRound) {
     .sort((a, b) => {
       const statusOrder = {
         Playing: 0,
-        Completed: 1,
-        Winner: 2,
-        Eliminated: 3,
+        Submitted: 1,
+        Correct: 2,
+        Winner: 3,
+        Eliminated: 4,
       };
 
       return (

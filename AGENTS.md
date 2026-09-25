@@ -10,7 +10,7 @@ Shared guidance for any coding agent working in this repository (Cursor, Claude 
 > If you change any of those things, update the matching table before you finish, and add an entry to [docs/decision-log.md](docs/decision-log.md) in the same change.
 > See [Maintaining this file](#maintaining-this-file) at the bottom.
 
-**Last verified against the codebase:** 2026-08-29
+**Last verified against the codebase:** 2026-09-21
 
 ---
 
@@ -228,6 +228,7 @@ React Router v7 ranks by specificity rather than declaration order, so `/account
 | `PlayersCollection` | `players` | `imports/api/players.js:6` |
 | `LeaderboardCollection` | `leaderboard` | `imports/api/leaderboard.js:6` |
 | `PlayerAccountsCollection` | `playerAccounts` | `imports/api/playerAccounts.js:8` |
+| `GameEventsCollection` | `gameEvents` | `imports/api/gameEvents.js:6` |
 
 Each definition is wrapped in a `global._<Name>Collection` guard so it survives double evaluation under `meteor test --full-app`.
 
@@ -250,8 +251,11 @@ Each definition is wrapped in a `global._<Name>Collection` guard so it survives 
 ```js
 { gameId, roundId, name, lives: 3, attemptedSequence: [], currentStreak: 0,
   longestStreak: 0, totalGuesses: 0, correctGuesses: 0, eliminatedRound: null,
-  eliminated: false, winner: false, completeRound: false, gameFinished: false }
+  eliminated: false, winner: false, completeRound: false,
+  roundStatus: 'Playing' | 'Correct' | 'Eliminated', gameFinished: false }
 ```
+`roundStatus` is public, summary-only state for the live round UI. It must never
+contain a sequence, attempted colour, or answer detail.
 
 **`leaderboard`** (written by `gameMethods.js:152-159`, append-only)
 ```js
@@ -295,9 +299,11 @@ All publications are **scoped to a single game**. `gameId` is the 5-character ro
 
 | Name | Defined at | Args | Selector | Projection |
 |---|---|---|---|---|
-| `rounds` | `server/publications.js:28` | `gameId` | `{ gameId, isCurrent: true }` | none |
-| `players` | `server/publications.js:35` | `gameId` | `{ gameId }` | excludes `attemptedSequence` |
-| `leaderboard` | `server/publications.js:40` | `gameId` | `{ gameId }` | none |
+| `rounds` | `server/publications.js:12` | `gameId` | `{ gameId, advanced: false }` | none |
+| `players` | `server/publications.js:17` | `gameId` | `{ gameId }` | excludes `attemptedSequence` |
+| `leaderboard` | `server/publications.js:22` | `gameId` | `{ gameId }` | none |
+| `eliminations` | `server/publications.js:27` | `gameId` | eliminated players in game | excludes `attemptedSequence`, newest 20 |
+| `gameEvents` | `server/publications.js:35` | `gameId` | `{ gameId }` | newest 20 |
 | `rooms.lobby` | `imports/api/rooms.js:20` | `pin` | `{ pin }` | `_id, pin, status, gameName, hostName, players.name, players.id` |
 
 Three properties are load-bearing and must not be undone:
@@ -316,15 +322,15 @@ The module carries a `global._publicationsInitialized` guard because under `--fu
 
 | File:line | Publication | Args |
 |---|---|---|
-| `ui/pages/GamePage.jsx:28` | `rounds` | `gameId` |
-| `ui/pages/GamePage.jsx:29` | `players` | `gameId` |
+| `ui/pages/GamePage.jsx` | `rounds`, `players`, `rooms.lobby`, `gameEvents` | `gameId` |
 | `ui/Leaderboard.jsx:12-13` | `players`, `rounds` | `gameId` |
 | `ui/EndLeaderboard.jsx:30` | `players` | `gameId` |
+| `ui/EliminationFeed.jsx` | `eliminations` | `gameId` |
 | `ui/pages/PlayerLobby.jsx:366` | `rooms.lobby` | `pin` |
 
 The `leaderboard` publication still exists and is tested, but the live UI no longer subscribes to it. `Leaderboard.jsx` builds rows from `players` + the current round via `leaderboardModels.js`. The `leaderboard` collection is still written by `players.submitSequence`.
 
-`GamePage` derives `gameId` from `location.state.pin` and renders a "no game selected" screen when it is absent.
+`GamePage` derives `gameId` from `location.state.pin` and renders a "no game selected" screen when it is absent. A player who has completed the current round or been eliminated enters a spectator view that renders only the live leaderboard; it does not render the active round's sequence or colour controls.
 There is deliberately no `'demo'` placeholder: with scoped publications it would subscribe to a game that does not exist and hang on LOADING forever.
 
 ---
@@ -356,6 +362,8 @@ PIN alphabet is `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (`rooms.js:12`), generated wi
 | `rounds.generate` | 88 | `length = 4, gameId = null` | Inserts a new `isCurrent` round |
 | `players.join` | 102 | `roundId, playerName, gameId = null` | Inserts a player with 3 lives |
 | `players.submitSequence` | 122 | `playerId, attemptedSequence` | Grades the attempt. 6-9 DB round-trips, plus 4 more if it triggers a round advance |
+| `players.timeoutTurn` | 415 | `playerId` | Deducts a life and updates the public round status |
+| `players.timeoutRound` | 461 | `playerId` | Eliminates a player whose standard-round timer expires |
 | `rounds.advance` | 218 | `currentRoundId` | Marks the round advanced, inserts the next one, moves active players onto it |
 
 Private helpers: `checkWinner(gameId)` at `:13`, `advanceRoundIfReady(round)` at `:67`.

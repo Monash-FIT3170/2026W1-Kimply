@@ -5,8 +5,14 @@ describe('live leaderboard model', function () {
   it('returns the correct status for each player', function () {
     assert.strictEqual(getPlayerStatus({ winner: true }), 'Winner');
     assert.strictEqual(getPlayerStatus({ eliminated: true }), 'Eliminated');
-    assert.strictEqual(getPlayerStatus({ completeRound: true }), 'Completed');
+    assert.strictEqual(getPlayerStatus({ completeRound: true }), 'Correct');
     assert.strictEqual(getPlayerStatus({}), 'Playing');
+  });
+
+  it('uses the public live round status when the server has supplied one', function () {
+    assert.strictEqual(getPlayerStatus({ roundStatus: 'Submitted' }), 'Submitted');
+    assert.strictEqual(getPlayerStatus({ roundStatus: 'Correct' }), 'Correct');
+    assert.strictEqual(getPlayerStatus({ roundStatus: 'Eliminated' }), 'Eliminated');
   });
 
   it('shows the current level for active players', function () {
@@ -62,7 +68,7 @@ describe('live leaderboard model', function () {
     assert.strictEqual(rows[0].status, 'Eliminated');
   });
 
-  it('sorts playing players before completed and eliminated players', function () {
+  it('sorts playing players before correct and eliminated players', function () {
     const rows = createLiveLeaderboardRows(
       [
         {

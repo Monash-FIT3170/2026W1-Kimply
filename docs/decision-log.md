@@ -83,6 +83,35 @@ Things that are not obvious from the diff:
 
 Files: `docs/ecs-target-architecture.md` (new), `infra/` (new), `deploy/ecs-deploy.sh` (new), `.github/workflows/deploy.yml`, `scripts/health-check.sh`, `AGENTS.md`, `.gitignore`.
 
+## 2026-09-21 - Finished players now remain in the live round as spectators
+
+`GamePage.jsx` no longer sends a player who has completed a round or been
+eliminated to a static result screen while the game is still active. Instead it
+shows the live leaderboard and continues to follow the current shared round as
+the remaining players progress.
+
+The spectator branch intentionally does not render `ColourSequence`, its tiles,
+or selected-colour progress. This keeps the spectator interface focused on
+public player status rather than visually revealing the round sequence or any
+other player's answer.
+
+Files: `app/imports/ui/pages/GamePage.jsx`, `AGENTS.md`.
+
+## 2026-09-21 - Players now expose a safe live round status
+
+`gameMethods.js` now maintains a public `roundStatus` on each player as they
+play, complete a sequence, are eliminated, or enter the next round. The
+leaderboard model and its tests use that status instead of treating a correct
+answer as a generic completion.
+
+The status is deliberately a short label only. `attemptedSequence` remains
+excluded from every player publication, so the multiplayer activity UI can
+describe progress without exposing anyone's answer.
+
+Files: `app/imports/api/gameMethods.js`, `app/imports/ui/leaderboardModels.js`,
+`app/tests/lifeDeduction.test.js`, `app/tests/roundAdvance.test.js`,
+`app/tests/leaderboardModel.test.js`, `AGENTS.md`.
+
 ## 2026-09-04 - The Quality Assurance Plan is now a document in the repo
 
 The QA plan existed only as a submission document, written before most of the machinery it described was built.
