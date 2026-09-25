@@ -1,0 +1,276 @@
+#!/usr/bin/env bash
+#
+# Deploy a specific Kimply image to an ECS service, or roll back to an older one.
+#
+#   ./deploy/ecs-deploy.sh <full-40-char-git-sha>
+#
+# Rollback is the same command with an older SHA, exactly like deploy/deploy.sh:
+# it goes through the same register-and-roll path as any deploy.
+#
+# Renders the environment's task definition template with the image for that SHA,
+# registers it as a new revision, points the service at it, and waits for ECS to
+# report the rollout COMPLETED. That wait includes the alarm bake period when the
+# canary is enabled. It then probes /health/ready on the public URL.
+#
+# ECS does its own rollback. If the circuit breaker or the canary alarm fails the
+# rollout, ECS returns the service to the previous revision and this script
+# reports the failure, with the service events and the task logs that explain it.
+#
+# Under GitHub Actions it also writes a summary table to the run page and groups
+# its noisier output, so a run can be understood without opening the full log.
+#
+# Configuration, all overridable from the environment:
+#   AWS_REGION         ap-southeast-2
+#   ECS_CLUSTER        kimply-prod
+#   ECS_SERVICE        kimply-prod
+#   ECR_REPOSITORY     kimply
+#   TASK_DEF_TEMPLATE  infra/ecs/task-definition.prod.json
+#   SERVICE_URL        https://www.kimply.online
+#   LOG_GROUP          /ecs/<ECS_CLUSTER>
+#   ROLLOUT_TIMEOUT    seconds to wait for the rollout, default 1800
+#
+# Exit codes:
+#   0  deployed, rollout COMPLETED, public readiness probe passed
+#   1  deploy failed. ECS rolled back or the probe failed; investigate
+#   2  usage or precondition error. Nothing was changed
+
+set -Eeuo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+AWS_REGION="${AWS_REGION:-ap-southeast-2}"
+ECS_CLUSTER="${ECS_CLUSTER:-kimply-prod}"
+ECS_SERVICE="${ECS_SERVICE:-kimply-prod}"
+ECR_REPOSITORY="${ECR_REPOSITORY:-kimply}"
+TASK_DEF_TEMPLATE="${TASK_DEF_TEMPLATE:-$REPO_ROOT/infra/ecs/task-definition.prod.json}"
+SERVICE_URL="${SERVICE_URL:-https://www.kimply.online}"
+LOG_GROUP="${LOG_GROUP:-/ecs/$ECS_CLUSTER}"
+ROLLOUT_TIMEOUT="${ROLLOUT_TIMEOUT:-1800}"
+# LOG_GROUP is exported so scripts/health-check.sh can name it when it fails.
+export AWS_REGION LOG_GROUP
+
+log() { printf '[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
+die() { log "ERROR: $*" >&2; exit 2; }
+
+# Collapsible sections in the Actions log, plain headings elsewhere.
+group()     { if [[ -n "${GITHUB_ACTIONS:-}" ]]; then echo "::group::$*"; else log "--- $*"; fi; }
+endgroup()  { [[ -n "${GITHUB_ACTIONS:-}" ]] && echo "::endgroup::" || true; }
+summary()   { [[ -n "${GITHUB_STEP_SUMMARY:-}" ]] && printf '%s\n' "$*" >> "$GITHUB_STEP_SUMMARY" || true; }
+
+# --- Preconditions -----------------------------------------------------------
+IMAGE_SHA="${1:-}"
+[[ -n "$IMAGE_SHA" ]] || die "usage: $0 <full-40-char-git-sha>"
+[[ "$IMAGE_SHA" =~ ^[0-9a-f]{40}$ ]] || die "not a 40-character git SHA: '$IMAGE_SHA'"
+[[ -f "$TASK_DEF_TEMPLATE" ]] || die "no task definition template at $TASK_DEF_TEMPLATE"
+
+placeholders="$(grep -o '\${IMAGE}' "$TASK_DEF_TEMPLATE" | wc -l | tr -d ' ')"
+[[ "$placeholders" == "1" ]] || die "template must contain \${IMAGE} exactly once, found $placeholders"
+
+ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+IMAGE="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_SHA"
+
+RENDERED="$(mktemp)"
+trap 'rm -f "$RENDERED"' EXIT
+
+# A literal substitution of the one placeholder. Terraform renders the same file
+# with templatefile(), so both produce the same task definition.
+sed "s|\${IMAGE}|$IMAGE|" "$TASK_DEF_TEMPLATE" > "$RENDERED"
+
+STARTED_AT=$(date +%s)
+
+# --- Register and roll ---------------------------------------------------------
+log "Registering a task definition revision for $IMAGE"
+TASK_DEF_ARN="$(aws ecs register-task-definition \
+  --cli-input-json "file://$RENDERED" \
+  --query 'taskDefinition.taskDefinitionArn' --output text)"
+REVISION="${TASK_DEF_ARN##*/}"
+log "Registered $TASK_DEF_ARN"
+
+log "Updating $ECS_CLUSTER/$ECS_SERVICE"
+DEPLOYMENT_ID="$(aws ecs update-service \
+  --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" \
+  --task-definition "$TASK_DEF_ARN" \
+  --query "service.deployments[?taskDefinition=='$TASK_DEF_ARN'] | [0].id" --output text)"
+[[ -n "$DEPLOYMENT_ID" && "$DEPLOYMENT_ID" != "None" ]] || { log "ERROR: no deployment started for $TASK_DEF_ARN"; exit 1; }
+log "Deployment $DEPLOYMENT_ID started"
+
+TARGET_GROUP_ARN="$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" \
+  --query 'services[0].loadBalancers[0].targetGroupArn' --output text 2>/dev/null || true)"
+
+# Everything known before the outcome, so the summary is useful even on failure.
+summary "## Deploy to \`$ECS_CLUSTER\`"
+summary ""
+summary "| | |"
+summary "|---|---|"
+summary "| Revision | \`$REVISION\` |"
+summary "| Image | \`$ECR_REPOSITORY:${IMAGE_SHA:0:12}\` |"
+summary "| Deployment | \`$DEPLOYMENT_ID\` |"
+summary "| Smoke test | $SERVICE_URL/health/ready |"
+
+finish() {
+  local outcome="$1" detail="${2:-}"
+  summary "| Rollout | $outcome |"
+  summary "| Duration | $(( $(date +%s) - STARTED_AT ))s |"
+  [[ -n "$detail" ]] && summary "| Detail | $detail |"
+  summary ""
+}
+
+# Everything the app itself said, which is usually the real reason for a failure.
+dump_diagnostics() {
+  # Diagnostics only. Never let a failed lookup mask the failure being reported.
+  set +e +o pipefail
+
+  group "Service events"
+  aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" \
+    --query 'services[0].events[0:10].message' --output text | tr '\t' '\n' | sed 's/^/  /'
+  endgroup
+
+  group "Task logs ($LOG_GROUP, last 15 minutes)"
+  aws logs filter-log-events --log-group-name "$LOG_GROUP" \
+    --start-time "$(( (STARTED_AT - 900) * 1000 ))" \
+    --query 'events[-50:].message' --output text 2>/dev/null | sed 's/^/  /' \
+    || echo "  (could not read $LOG_GROUP)"
+  endgroup
+
+  set -e -o pipefail
+  return 0
+}
+
+# --- Wait for this deployment's own outcome -------------------------------------
+# Not `aws ecs wait services-stable`: after a circuit-breaker rollback the service
+# is stable again on the OLD revision, and that waiter would report success.
+deadline=$(( STARTED_AT + ROLLOUT_TIMEOUT ))
+
+# Every deployment on the service, not just the new one: during a rollout the old
+# revision is still serving, and that is what you actually want to see.
+#   PRIMARY = the one being rolled out, ACTIVE = the previous one still draining.
+#
+# This is reporting, not control flow. It runs without -e and -o pipefail and
+# always returns 0: a missing read-only permission or a throttled call must never
+# fail a deployment that ECS itself reports as healthy.
+print_state() {
+  set +e +o pipefail
+  aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" \
+    --query "services[0].deployments[].[status, taskDefinition, runningCount, desiredCount, pendingCount, failedTasks, rolloutState]" \
+    --output text |
+  while IFS=$'\t' read -r dstatus dtaskdef drunning ddesired dpending dfailed drollout; do
+    printf '    %-8s %-18s running %s/%s  pending %s  failed %s  %s\n' \
+      "$dstatus" "${dtaskdef##*/}" "$drunning" "$ddesired" "$dpending" "$dfailed" "$drollout"
+  done
+
+  # The load balancer's own view: which task IPs are actually taking traffic.
+  if [[ -n "$TARGET_GROUP_ARN" && "$TARGET_GROUP_ARN" != "None" ]]; then
+    local targets
+    targets="$(aws elbv2 describe-target-health --target-group-arn "$TARGET_GROUP_ARN" \
+      --query 'TargetHealthDescriptions[].[Target.Id, TargetHealth.State]' --output text 2>/dev/null |
+      awk '{printf "%s:%s ", $1, $2}')"
+    if [[ -n "$targets" ]]; then
+      printf '    targets  %s\n' "$targets"
+    else
+      printf '    targets  (not readable: needs elasticloadbalancing:DescribeTargetHealth)\n'
+    fi
+  fi
+
+  set -e -o pipefail
+  return 0
+}
+
+group "Rollout"
+previous_block=""
+last_heartbeat=0
+baking_noted=false
+while :; do
+  read -r state reason < <(aws ecs describe-services \
+    --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" \
+    --query "services[0].deployments[?id=='$DEPLOYMENT_ID'] | [0].[rolloutState, rolloutStateReason]" \
+    --output text)
+
+  # Print the full picture only when something changes. A steady rollout would
+  # otherwise repeat the same block every 15s and read like a stuck loop.
+  block="$(print_state)"
+  now=$(date +%s)
+  if [[ "$block" != "$previous_block" ]]; then
+    log "rollout $state"
+    printf '%s\n' "$block"
+    previous_block="$block"
+    last_heartbeat=$now
+
+    # Tasks healthy but ECS still IN_PROGRESS means it is watching the alarm
+    # before declaring success (D31). Say so once, so the wait is expected.
+    if [[ "$state" == "IN_PROGRESS" && "$baking_noted" == false ]] \
+       && awk '/^ *PRIMARY /{split($4, c, "/"); if (c[1] == c[2] && c[1] + 0 > 0) ok = 1} END{exit !ok}' <<< "$block"; then
+      log "new revision is running; ECS is now baking the deployment against the canary alarm"
+      baking_noted=true
+    fi
+  elif (( now - last_heartbeat >= 60 )); then
+    log "rollout $state, unchanged, $(( now - STARTED_AT ))s elapsed"
+    last_heartbeat=$now
+  fi
+
+  case "$state" in
+    COMPLETED) endgroup; break ;;
+    FAILED)
+      endgroup
+      log "Deploy FAILED: $reason"
+      log "ECS rolls the service back to the previous revision on its own."
+      dump_diagnostics
+      finish "❌ FAILED" "$reason"
+      exit 1
+      ;;
+    None | "")
+      endgroup
+      log "Deploy FAILED: deployment $DEPLOYMENT_ID is no longer on the service (replaced or rolled back)"
+      dump_diagnostics
+      finish "❌ FAILED" "deployment replaced or rolled back"
+      exit 1
+      ;;
+  esac
+
+  if (( $(date +%s) > deadline )); then
+    endgroup
+    log "Deploy FAILED: rollout still $state after ${ROLLOUT_TIMEOUT}s"
+    dump_diagnostics
+    finish "❌ TIMED OUT" "still $state after ${ROLLOUT_TIMEOUT}s"
+    exit 1
+  fi
+  sleep 15
+done
+
+# --- What is actually running now -------------------------------------------------
+group "Running tasks"
+set +e +o pipefail
+TASK_ARNS="$(aws ecs list-tasks --cluster "$ECS_CLUSTER" --service-name "$ECS_SERVICE" \
+  --desired-status RUNNING --query 'taskArns' --output text 2>/dev/null || true)"
+TASK_ROWS=""
+if [[ -n "$TASK_ARNS" && "$TASK_ARNS" != "None" ]]; then
+  # shellcheck disable=SC2086
+  TASK_ROWS="$(aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks $TASK_ARNS \
+    --query 'tasks[].[taskArn, availabilityZone, lastStatus, healthStatus, taskDefinitionArn, containers[0].image]' \
+    --output text 2>/dev/null || true)"
+  while IFS=$'\t' read -r tarn taz tstatus thealth ttaskdef timage; do
+    [[ -z "$tarn" ]] && continue
+    printf '  %s  %s  %s/%s  %s  %s\n' "${tarn##*/}" "$taz" "$tstatus" "$thealth" "${ttaskdef##*/}" "${timage##*:}"
+  done <<< "$TASK_ROWS"
+fi
+set -e -o pipefail
+print_state
+endgroup
+
+# --- Public probe ----------------------------------------------------------------
+# Proves DNS, the ALB, a task and MongoDB Atlas together, which ECS itself cannot see.
+log "Probing $SERVICE_URL"
+if ! "$REPO_ROOT/scripts/health-check.sh" "$SERVICE_URL"; then
+  log "Deploy FAILED: the rollout completed but $SERVICE_URL/health/ready did not pass"
+  log "If the canary is enabled, its alarm will roll this back. Otherwise redeploy a known-good SHA:"
+  log "  ./deploy/ecs-deploy.sh <known-good-sha>"
+  dump_diagnostics
+  finish "❌ FAILED" "rollout completed but the readiness probe failed"
+  exit 1
+fi
+
+TASK_COUNT="$(printf '%s' "${TASK_ROWS:-}" | grep -c . || true)"
+AZS="$(printf '%s' "${TASK_ROWS:-}" | awk -F'\t' '{print $2}' | sort -u | paste -sd', ' -)"
+finish "✅ COMPLETED"
+summary "**Now serving:** $TASK_COUNT task(s) on \`$REVISION\` in ${AZS:-unknown}, readiness probe passed."
+
+log "SUCCESS: $IMAGE is live on $ECS_CLUSTER/$ECS_SERVICE"
