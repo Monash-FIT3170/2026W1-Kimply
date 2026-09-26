@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState } from 'react';
 // Shared Kimply design system — tokens and shared components.
 // Raw color values are only used where Tailwind arbitrary values are unavoidable
 // (e.g. color-mix(), dynamic gradients, box-shadows with oklch).
@@ -9,15 +9,15 @@ export const TILE = {
   teal: 'oklch(0.78 0.13 195)',
   violet: 'oklch(0.66 0.19 295)',
 };
-export const PRIMARY  = 'oklch(0.86 0.19 130)';
-export const BG       = 'oklch(0.14 0.02 270)';
-export const SURFACE  = 'oklch(0.18 0.02 270)';
+export const PRIMARY = 'oklch(0.86 0.19 130)';
+export const BG = 'oklch(0.14 0.02 270)';
+export const SURFACE = 'oklch(0.18 0.02 270)';
 export const HAIRLINE = 'oklch(0.32 0.02 270)';
-export const FG       = "oklch(0.96 0.01 270)";
-export const FG2      = 'oklch(0.72 0.01 270)';
-export const FG3      = "oklch(0.50 0.01 270)";
-export const DANGER   = 'oklch(0.68 0.22 22)';
-export const ACCENT   = 'oklch(0.72 0.18 195)';
+export const FG = 'oklch(0.96 0.01 270)';
+export const FG2 = 'oklch(0.72 0.01 270)';
+export const FG3 = 'oklch(0.50 0.01 270)';
+export const DANGER = 'oklch(0.68 0.22 22)';
+export const ACCENT = 'oklch(0.72 0.18 195)';
 const TILE_COLORS = [TILE.pink, TILE.amber, TILE.teal, TILE.violet, PRIMARY];
 
 export function avatarColor(name = '') {
@@ -69,14 +69,15 @@ export function TileLattice({ opacity = 0.07 }) {
   );
 }
 
-export function RainbowBar({className = ""}){
-  return(
-    <div 
-      className= {className}
+export function RainbowBar({ className = '' }) {
+  return (
+    <div
+      className={className}
       style={{
-        background:`linear-gradient(90deg, ${TILE.pink}, ${TILE.amber}, ${TILE.teal}, ${TILE.violet})`, 
+        background: `linear-gradient(90deg, ${TILE.pink}, ${TILE.amber}, ${TILE.teal}, ${TILE.violet})`,
         flexShrink: 0,
-      }} />
+      }}
+    />
   );
 }
 
@@ -157,7 +158,7 @@ export function BackButton({ onClick }) {
   return (
     <button
       onClick={onClick}
-      className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-[10px] border border-hairline bg-surface text-fg2"
+      className="inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-[10px] border border-hairline bg-surface text-fg2 xs:h-9 xs:w-9"
     >
       <BackChevron size={14} stroke={FG2} />
     </button>
@@ -166,7 +167,7 @@ export function BackButton({ onClick }) {
 
 export function TopBar({ onBack, right }) {
   return (
-    <div className="relative flex shrink-0 items-center justify-between px-7 py-5">
+    <div className="relative flex shrink-0 items-center justify-between gap-3 px-6 py-4 xs:gap-4 xs:px-7 xs:py-5">
       <Wordmark />
       {onBack ? <BackButton onClick={onBack} /> : right}
     </div>
@@ -181,7 +182,6 @@ export function CloseIcon({ size = 14 }) {
   );
 }
 
-
 export function DangerButton({ children, onClick }) {
   const [hovered, setHovered] = useState(false);
   return (
@@ -191,24 +191,23 @@ export function DangerButton({ children, onClick }) {
       onMouseLeave={() => setHovered(false)}
       style={{
         flex: 1,
-        padding: "11px 16px",
+        minHeight: 44,
+        padding: '12px 16px',
         borderRadius: 10,
-        border: "none",
-        background: hovered
-          ? `color-mix(in oklab, ${DANGER} 90%, white 10%)`
-          : DANGER,
-        color: "oklch(0.12 0.02 270)",
+        border: 'none',
+        background: hovered ? `color-mix(in oklab, ${DANGER} 90%, white 10%)` : DANGER,
+        color: 'oklch(0.12 0.02 270)',
         fontFamily: "'Outfit', sans-serif",
         fontWeight: 800,
         fontSize: 11,
-        letterSpacing: "0.08em",
-        textTransform: "uppercase",
-        cursor: "pointer",
+        letterSpacing: '0.08em',
+        textTransform: 'uppercase',
+        cursor: 'pointer',
         boxShadow: hovered
           ? `0 6px 24px -4px color-mix(in oklab, ${DANGER} 55%, transparent)`
           : `0 4px 16px -4px color-mix(in oklab, ${DANGER} 40%, transparent)`,
-        transform: hovered ? "translateY(-1px)" : "none",
-        transition: "background 0.15s, box-shadow 0.15s, transform 0.12s",
+        transform: hovered ? 'translateY(-1px)' : 'none',
+        transition: 'background 0.15s, box-shadow 0.15s, transform 0.12s',
       }}
     >
       {children}
@@ -225,18 +224,19 @@ export function GhostButton({ children, onClick }) {
       onMouseLeave={() => setHovered(false)}
       style={{
         flex: 1,
-        padding: "11px 16px",
+        minHeight: 44,
+        padding: '12px 16px',
         borderRadius: 10,
-        border: `1px solid ${hovered ? "oklch(0.40 0.02 270)" : HAIRLINE}`,
-        background: hovered ? "oklch(0.22 0.02 270)" : SURFACE,
+        border: `1px solid ${hovered ? 'oklch(0.40 0.02 270)' : HAIRLINE}`,
+        background: hovered ? 'oklch(0.22 0.02 270)' : SURFACE,
         color: hovered ? FG : FG3,
         fontFamily: "'Outfit', sans-serif",
         fontWeight: 700,
         fontSize: 11,
-        letterSpacing: "0.08em",
-        textTransform: "uppercase",
-        cursor: "pointer",
-        transition: "background 0.15s, border-color 0.15s, color 0.15s",
+        letterSpacing: '0.08em',
+        textTransform: 'uppercase',
+        cursor: 'pointer',
+        transition: 'background 0.15s, border-color 0.15s, color 0.15s',
       }}
     >
       {children}
@@ -244,12 +244,13 @@ export function GhostButton({ children, onClick }) {
   );
 }
 
-export function IconChip({ children, color }){
+export function IconChip({ children, color }) {
   return (
     <div
       className="mb-[18px] flex shrink-0 items-center justify-center rounded-[14px]"
       style={{
-        width: 52, height: 52,
+        width: 52,
+        height: 52,
         background: `color-mix(in oklab, ${color} 12%, transparent)`,
         border: `1px solid color-mix(in oklab, ${color} 28%, transparent)`,
       }}

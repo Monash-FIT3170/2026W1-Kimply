@@ -40,3 +40,7 @@ export const GLOBAL_LEADERBOARD_SIZE = 50;
 // --- UI durations (ms) ---
 export const ELIMINATION_FEED_MS = 4000;
 export const LEVEL_UP_TOAST_MS = 4000;
+
+// A full lobby (~100 players) fires level-ups and eliminations faster than the
+// toasts expire, so both live feeds are capped: oldest drops when a new one lands.
+export const MAX_LIVE_FEED_ITEMS = 3;

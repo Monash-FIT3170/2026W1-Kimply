@@ -56,12 +56,12 @@ export function CustomGameSettings() {
       <TileLattice opacity={0.05} />
 
       {/* top bar */}
-      <div className="relative flex shrink-0 items-center justify-between px-7 py-5">
+      <div className="relative flex shrink-0 items-center justify-between gap-3 px-6 py-4 xs:gap-4 xs:px-7 xs:py-5">
         <Wordmark />
-        <span className="font-mono text-[11px] uppercase tracking-widest text-fg3">v1.0.0</span>
+        <span className="hidden font-mono text-[11px] uppercase tracking-widest text-fg3 xs:inline">v1.0.0</span>
       </div>
 
-      <div className="relative flex flex-1 flex-col items-center justify-center gap-7 overflow-y-auto px-7 pb-14">
+      <div className="relative flex flex-1 flex-col items-center justify-center gap-6 overflow-y-auto px-6 pb-10 pt-6 xs:gap-7 xs:px-7 xs:pb-14 xs:pt-0">
         {/* title */}
         <div className="w-full max-w-md text-center">
           <h1 className="font-outfit text-3xl font-extrabold leading-tight tracking-tight">Custom Settings</h1>
@@ -69,12 +69,16 @@ export function CustomGameSettings() {
         </div>
 
         {/* settings panel */}
-        <div className="w-full max-w-md rounded-[18px] border border-hairline bg-surface p-6">
+        <div className="w-full max-w-md rounded-[18px] border border-hairline bg-surface p-4 xs:p-6">
           {/* Flash Speed */}
           <div className="mb-7">
             <div className="flex items-center justify-between">
-              <label className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-white">Flash Speed</label>
-              <span className="font-outfit text-lg font-bold text-fg">{flashSpeeds.find((speed) => speed.value === flashSpeed)?.label}</span>
+              <label className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-white">
+                Flash Speed
+              </label>
+              <span className="font-outfit text-lg font-bold text-fg">
+                {flashSpeeds.find((speed) => speed.value === flashSpeed)?.label}
+              </span>
             </div>
             <p className="mt-1 font-manrope text-[12px] text-fg3">Choose how quickly tiles flash</p>
             <div className="mt-3 grid grid-cols-3 gap-2" role="group" aria-label="Flash speed">
@@ -103,7 +107,9 @@ export function CustomGameSettings() {
           {/* Number of Lives */}
           <div className="mb-7">
             <div className="flex items-center justify-between">
-              <label className="font-mono text-[11px] uppercase tracking-[0.16em] text-white font-bold">Number of Lives</label>
+              <label className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-white">
+                Number of Lives
+              </label>
               <span className="font-outfit text-lg font-bold text-fg">{numLives}</span>
             </div>
             <p className="mt-1 font-manrope text-[12px] text-fg3">Lives before elimination (1-10)</p>
@@ -123,7 +129,9 @@ export function CustomGameSettings() {
           {/* Starting Sequence Length */}
           <div className="mb-7">
             <div className="flex items-center justify-between">
-              <label className="font-mono text-[11px] uppercase tracking-[0.16em] text-white font-bold">Starting Sequence Length</label>
+              <label className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-white">
+                Starting Sequence Length
+              </label>
               <span className="font-outfit text-lg font-bold text-fg">{startingSequenceLength}</span>
             </div>
             <p className="mt-1 font-manrope text-[12px] text-fg3">Initial sequence length (2-10)</p>
@@ -143,7 +151,7 @@ export function CustomGameSettings() {
           {/* Sequence Growth */}
           <div className="mb-7">
             <div className="flex items-center justify-between">
-              <label className="font-mono text-[11px] uppercase tracking-[0.16em] text-white font-bold">Growth</label>
+              <label className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-white">Growth</label>
               <span className="font-outfit text-lg font-bold text-fg">+{sequenceGrowth}</span>
             </div>
             <p className="mt-1 font-manrope text-[12px] text-fg3">Extra colours added each round (1-3)</p>
