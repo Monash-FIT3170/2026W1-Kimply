@@ -11,7 +11,12 @@ import { EndLeaderboard } from '../EndLeaderboard.jsx';
 import { EliminationFeed } from '../EliminationFeed.jsx';
 import { useLocation } from 'react-router-dom';
 import { TileLattice } from '../components/design';
-import { ROUND_TIMER_SECONDS as ROUND_SECONDS, LEVEL_UP_TOAST_MS, DEFAULT_STARTING_LIVES } from '../../constants';
+import {
+  ROUND_TIMER_SECONDS as ROUND_SECONDS,
+  LEVEL_UP_TOAST_MS,
+  DEFAULT_STARTING_LIVES,
+  MAX_LIVE_FEED_ITEMS,
+} from '../../constants';
 
 const seqSeenKey = (gameId, roundId) => `seqSeen:${gameId}:${roundId}`;
 
@@ -155,7 +160,8 @@ export const GamePage = () => {
 
   const seenLevelUpIds = useRef(new Set());
   useEffect(() => {
-    levelUpEvents.forEach((event) => {
+    // The cursor is newest-first; replay oldest-first so the cap below keeps the newest.
+    [...levelUpEvents].reverse().forEach((event) => {
       if (seenLevelUpIds.current.has(event._id)) return;
       seenLevelUpIds.current.add(event._id);
       const notice = {
@@ -165,7 +171,7 @@ export const GamePage = () => {
             ? `You have leveled up to level ${event.level}`
             : `${event.playerName} has reached level ${event.level}`,
       };
-      setLevelUpNotices((prev) => [...prev, notice]);
+      setLevelUpNotices((prev) => [...prev, notice].slice(-MAX_LIVE_FEED_ITEMS));
       // auto-dismiss like the elimination feed
       setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), LEVEL_UP_TOAST_MS);
     });
@@ -475,13 +481,16 @@ export const GamePage = () => {
           Powerup Gained: Slow Motion for one round!
         </div>
       )}
+      {/* Level-up announcements are hidden under sm: in a full lobby (~100 players) they
+          fire constantly, and on a phone the stack buries the header and the game itself.
+          Phone players still get the same information on demand from the leaderboard. */}
       <div
+        className="hidden sm:flex"
         style={{
           position: 'fixed',
           top: '18px',
           left: '18px',
           zIndex: 40,
-          display: 'flex',
           flexDirection: 'column',
           gap: '10px',
           pointerEvents: 'none',
