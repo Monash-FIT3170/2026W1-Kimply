@@ -139,6 +139,7 @@ export const GamePage = () => {
     setMessage('');
     setSecondsLeft(30);
     setCompletedRoundId(null);
+    submittedRoundRef.current = false;
     if (gameId && localStorage.getItem(seqSeenKey(gameId, player.roundId))) {
       // already watched this round (e.g. refresh): skip the replay
       setPlayerCanInput(true);
@@ -154,6 +155,7 @@ export const GamePage = () => {
   }, [player?.slowMotionActive]);
 
   const seenLevelUpIds = useRef(new Set());
+  const submittedRoundRef = useRef(false);
   useEffect(() => {
     levelUpEvents.forEach((event) => {
       if (seenLevelUpIds.current.has(event._id)) return;
@@ -182,16 +184,22 @@ export const GamePage = () => {
     if (isBattleRoyale) return undefined; // battle royale is a free-for-all: no timer
     if (!round?._id || !playerId) return undefined;
     if (player?.eliminated || player?.gameFinished) return undefined;
-    if (completedRoundId === round._id) return undefined; // already finished this round
 
     // One timer for the whole round; wrong guesses and lost lives do not reset it.
-    // If it runs out the player is eliminated so the game can continue.
     setSecondsLeft(ROUND_SECONDS);
 
     const timeoutId = window.setTimeout(() => {
+      if (
+        player?.roundId !== round?._id ||
+        submittedRoundRef.current
+      ) {
+        return;
+      }
+
       setMessage('Time is up! You have been eliminated.');
       setPlayerCanInput(false);
-      Meteor.call('players.timeoutRound', playerId, (error) => {
+
+      Meteor.call('players.timeoutRound', playerId, round._id, (error) => {
         if (error) console.error(error);
       });
     }, ROUND_SECONDS * 1000);
@@ -204,7 +212,7 @@ export const GamePage = () => {
       window.clearTimeout(timeoutId);
       window.clearInterval(intervalId);
     };
-  }, [round?._id, playerId, isBattleRoyale, player?.eliminated, player?.gameFinished, completedRoundId]);
+  }, [round?._id, playerId, isBattleRoyale, player?.eliminated, player?.gameFinished]);
 
   const handleSubmit = () => {
     if (!playerId) {
@@ -222,6 +230,8 @@ export const GamePage = () => {
         return;
       }
       if (result.success) {
+        submittedRoundRef.current = true;
+        
         if (isBattleRoyale) {
           setMessage('Correct! Moving to next round...');
         } else {
@@ -279,32 +289,6 @@ export const GamePage = () => {
         <a href="/play" style={{ color: '#7CFFB2', fontSize: '0.9rem' }}>
           Join or create a room
         </a>
-      </div>
-    );
-  }
-
-  if (!round) {
-    return (
-      <div
-        style={{
-          minHeight: '100vh',
-          background: 'linear-gradient(135deg, #1a0533 0%, #0d1b4b 100%)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <p
-          style={{
-            color: 'white',
-            letterSpacing: '4px',
-            fontSize: '0.8rem',
-            fontWeight: 'bold',
-            opacity: 0.5,
-          }}
-        >
-          LOADING...
-        </p>
       </div>
     );
   }
@@ -435,6 +419,32 @@ export const GamePage = () => {
           New Game
         </a>
         <EliminationFeed gameId={gameId} />
+      </div>
+    );
+  }
+
+  if (!round) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          background: 'linear-gradient(135deg, #1a0533 0%, #0d1b4b 100%)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <p
+          style={{
+            color: 'white',
+            letterSpacing: '4px',
+            fontSize: '0.8rem',
+            fontWeight: 'bold',
+            opacity: 0.5,
+          }}
+        >
+          LOADING...
+        </p>
       </div>
     );
   }
@@ -672,7 +682,7 @@ export const GamePage = () => {
                 letterSpacing: '1px',
               }}
             >
-              {playerCanInput ? `Time left: ${secondsLeft}s` : ''}
+              {`Time left: ${secondsLeft}s`}
             </p>
           )}
           <div
