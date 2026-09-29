@@ -332,6 +332,15 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
           },
         });
 
+        await GameEventsCollection.insertAsync({
+          gameId: player.gameId,
+          type: 'correct-submission',
+          playerId: player._id,
+          playerName: player.name,
+          roundId: player.roundId,
+          createdAt: new Date(),
+        });
+
         await checkWinner(player.gameId, isBattleRoyale);
 
         // add successful completion to leaderboard
