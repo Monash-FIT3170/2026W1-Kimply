@@ -28,6 +28,7 @@ export const GamePage = () => {
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [showPowerupPopup, setShowPowerupPopup] = useState(false);
   const [completedRoundId, setCompletedRoundId] = useState(null);
+  const [submissionNotices, setSubmissionNotices] = useState([]);
 
   const location = useLocation();
   const playerNameFromLobby = location.state?.playerName || 'Demo Player';
@@ -110,6 +111,14 @@ export const GamePage = () => {
     if (!gameId) return [];
     return GameEventsCollection.find({ gameId, type: 'level-up' }, { sort: { createdAt: -1 } }).fetch();
   }, [gameId]);
+  
+  const submissionEvents = useTracker(() => {
+    if (!gameId) return [];
+    return GameEventsCollection.find(
+      { gameId, type: 'correct-submission' },
+      { sort: { createdAt: -1 } }
+    ).fetch();
+  }, [gameId]);
 
   useEffect(() => {
     if (!round?._id || playerId) return;
@@ -172,6 +181,30 @@ export const GamePage = () => {
       setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), LEVEL_UP_TOAST_MS);
     });
   }, [levelUpEvents]);
+
+  const seenSubmissionIds = useRef(new Set());
+
+  useEffect(() => {
+    submissionEvents.forEach((event) => {
+      if (event.playerId === playerId) return;
+      if (seenSubmissionIds.current.has(event._id)) return;
+
+      seenSubmissionIds.current.add(event._id);
+
+      const notice = {
+        key: event._id,
+        text: `${event.playerName} has submitted the correct sequence!`,
+      };
+
+      setSubmissionNotices((prev) => [...prev, notice]);
+
+      setTimeout(() => {
+        setSubmissionNotices((prev) =>
+          prev.filter((n) => n.key !== notice.key)
+        );
+      }, 3000);
+    });
+  }, [submissionEvents, playerId]);
 
   const handleColourClick = (colour) => {
     if (!playerCanInput) return;
@@ -467,6 +500,27 @@ export const GamePage = () => {
       }}
     >
       <TileLattice opacity={0.06} />
+      {submissionNotices.map((notice) => (
+        <div
+          key={notice.key}
+          style={{
+            position: 'fixed',
+            bottom: '16px',
+            left: '16px',
+            padding: '8px 12px',
+            borderRadius: '8px',
+            background: 'rgba(255,255,255,0.12)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            color: 'white',
+            fontWeight: 'bold',
+            fontSize: '12px',
+            zIndex: 1000,
+            backdropFilter: 'blur(8px)',
+          }}
+        >
+          {notice.text}
+        </div>
+      ))}
       {showPowerupPopup && (
         <div
           style={{
