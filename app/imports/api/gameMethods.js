@@ -458,8 +458,13 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
     },
 
     // Round timer ran out: eliminate the player so the round can advance.
-    async 'players.timeoutRound'(playerId) {
+    async 'players.timeoutRound'(playerId, timeoutRoundId) {
       const player = await PlayersCollection.findOneAsync(playerId);
+
+      if (!player || player.roundId !== timeoutRoundId) {
+        return { ignored: true };
+      }
+
       if (!player || player.eliminated || player.winner || player.gameFinished || player.completeRound) {
         return { ignored: true };
       }
