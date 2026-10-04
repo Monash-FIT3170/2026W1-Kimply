@@ -7,6 +7,11 @@ output "hosted_zone_nameservers" {
   value       = module.kimply.hosted_zone_nameservers
 }
 
+output "shared_alb" {
+  description = "Read by envs/dev through remote state: development serves from this load balancer."
+  value       = module.kimply.shared_alb
+}
+
 output "hosted_zone_id" {
   value = module.kimply.hosted_zone_id
 }

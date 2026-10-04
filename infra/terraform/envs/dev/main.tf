@@ -78,6 +78,17 @@ module "kimply" {
   monthly_budget_usd = var.monthly_budget_usd
   canary_enabled     = var.canary_enabled
 
+  # Development has no load balancer of its own: an ALB plus its public IPv4
+  # addresses costs more than development's compute. It serves from production's,
+  # selected by host header (D42). Production's security group therefore has to
+  # reach these tasks, which is why it is passed in here.
+  create_load_balancer   = false
+  shared_alb             = data.terraform_remote_state.prod.outputs.shared_alb
+  host_headers           = ["dev.kimply.online"]
+  listener_rule_priority = 100
+
+  canary_rate_minutes = 15
+
   # Records live in the hosted zone production owns (D41).
   manage_dns      = true
   hosted_zone_id  = data.terraform_remote_state.prod.outputs.hosted_zone_id

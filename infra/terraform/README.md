@@ -197,6 +197,25 @@ The retired `ecs` and `ecs-dev` names (D39) are not carried into Route 53, so th
 
 Then apply, with `check_apex_redirect = false`: the apex is the canonical name now, so there is no redirect left to watch.
 
+## Sharing production's load balancer (D42)
+
+Development has no load balancer of its own. It registers its target group on production's HTTPS listener with a host-header rule, attaches its own certificate for SNI, and its DNS alias points at production's ALB.
+
+Deleting development's existing load balancer needs its deletion protection turned off first, because Terraform cannot destroy a protected one:
+
+```bash
+aws elbv2 modify-load-balancer-attributes --region ap-southeast-2 \
+  --load-balancer-arn "$(terraform -chdir=envs/dev state show module.kimply.aws_lb.app 2>/dev/null | awk '/^ *arn /{print $3}' | tr -d '"')" \
+  --attributes Key=deletion_protection.enabled,Value=false
+
+terraform -chdir=envs/prod apply    # publishes the shared_alb output first
+terraform -chdir=envs/dev  apply    # rule, certificate, DNS alias, then its own ALB goes
+```
+
+Production must be applied first: development reads `shared_alb` from its state, as it already reads the NAT gateway id.
+
+Expect a short interruption on `dev.kimply.online` while DNS moves from one load balancer to the other. Production is untouched.
+
 ## Cutover
 
 The app's `ROOT_URL` is what the browser opens its DDP socket against, so **DNS moves first**.

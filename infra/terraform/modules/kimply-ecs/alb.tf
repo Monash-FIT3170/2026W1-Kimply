@@ -30,11 +30,16 @@ resource "aws_acm_certificate_validation" "app" {
   }
 }
 
+# An ALB costs about US$18/month plus one public IPv4 address per subnet, which
+# is more than development's compute. Development therefore shares production's
+# and is selected by host header (D42).
 resource "aws_lb" "app" {
+  count = var.create_load_balancer ? 1 : 0
+
   name               = var.name
   load_balancer_type = "application"
   internal           = false
-  security_groups    = [aws_security_group.alb.id]
+  security_groups    = [aws_security_group.alb[0].id]
   subnets            = var.public_subnet_ids
 
   # nginx held DDP connections for an hour. The ALB default of 60s would drop
@@ -75,7 +80,9 @@ resource "aws_lb_target_group" "app" {
 }
 
 resource "aws_lb_listener" "http" {
-  load_balancer_arn = aws_lb.app.arn
+  count = var.create_load_balancer ? 1 : 0
+
+  load_balancer_arn = aws_lb.app[0].arn
   port              = 80
   protocol          = "HTTP"
 
@@ -91,7 +98,9 @@ resource "aws_lb_listener" "http" {
 }
 
 resource "aws_lb_listener" "https" {
-  load_balancer_arn = aws_lb.app.arn
+  count = var.create_load_balancer ? 1 : 0
+
+  load_balancer_arn = aws_lb.app[0].arn
   port              = 443
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
@@ -105,5 +114,49 @@ resource "aws_lb_listener" "https" {
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.app.arn
+  }
+}
+
+locals {
+  # Whether this environment owns the load balancer or borrows one, everything
+  # downstream refers to these.
+  https_listener_arn    = var.create_load_balancer ? one(aws_lb_listener.https[*].arn) : var.shared_alb.https_listener_arn
+  alb_dns_name          = var.create_load_balancer ? one(aws_lb.app[*].dns_name) : var.shared_alb.dns_name
+  alb_zone_id           = var.create_load_balancer ? one(aws_lb.app[*].zone_id) : var.shared_alb.zone_id
+  alb_security_group_id = var.create_load_balancer ? aws_security_group.alb[0].id : var.shared_alb.security_group_id
+}
+
+# A shared listener serves several certificates; SNI picks the right one by the
+# hostname the browser asked for.
+resource "aws_lb_listener_certificate" "shared" {
+  count = var.create_load_balancer ? 0 : 1
+
+  listener_arn    = var.shared_alb.https_listener_arn
+  certificate_arn = aws_acm_certificate_validation.app.certificate_arn
+}
+
+# Which hostnames reach this environment's tasks on the shared listener.
+resource "aws_lb_listener_rule" "shared_host" {
+  count = var.create_load_balancer ? 0 : 1
+
+  listener_arn = var.shared_alb.https_listener_arn
+  priority     = var.listener_rule_priority
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app.arn
+  }
+
+  condition {
+    host_header {
+      values = var.host_headers
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = length(var.host_headers) > 0
+      error_message = "host_headers is required when sharing a load balancer, or nothing routes here."
+    }
   }
 }

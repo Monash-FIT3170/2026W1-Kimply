@@ -242,6 +242,38 @@ variable "github_ecr_push_role_name" {
   type        = string
 }
 
+variable "create_load_balancer" {
+  description = "Create a load balancer for this environment. False means share another environment's (D42)."
+  type        = bool
+  default     = true
+}
+
+variable "shared_alb" {
+  description = <<-EOT
+    The load balancer to share when create_load_balancer is false: its HTTPS listener ARN,
+    DNS name and zone id for ALIAS records, and the security group its tasks must accept from.
+  EOT
+  type = object({
+    https_listener_arn = string
+    dns_name           = string
+    zone_id            = string
+    security_group_id  = string
+  })
+  default = null
+}
+
+variable "host_headers" {
+  description = "Host headers routed to this environment on a shared listener. Required when create_load_balancer is false."
+  type        = list(string)
+  default     = []
+}
+
+variable "listener_rule_priority" {
+  description = "Priority of this environment's rule on the shared listener. Lower wins; must be unique."
+  type        = number
+  default     = 100
+}
+
 variable "alb_deletion_protection" {
   type    = bool
   default = true

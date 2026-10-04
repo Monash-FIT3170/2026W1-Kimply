@@ -80,6 +80,9 @@ module "kimply" {
   # Phase 1 creates the zone and every record while GoDaddy is still answering,
   # so the nameserver switch is a cutover with nothing left to set up.
   # redirect_hosts stays empty until the canonical name moves to the apex.
+  # Development borrows this load balancer (D42), as it borrows the NAT (D40).
+  canary_rate_minutes = 15
+
   manage_dns         = true
   create_hosted_zone = true
   dns_zone_name      = "kimply.online"

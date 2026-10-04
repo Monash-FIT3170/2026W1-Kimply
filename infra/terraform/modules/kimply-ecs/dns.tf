@@ -52,8 +52,8 @@ resource "aws_route53_record" "alias" {
   type    = "A"
 
   alias {
-    name                   = aws_lb.app.dns_name
-    zone_id                = aws_lb.app.zone_id
+    name                   = local.alb_dns_name
+    zone_id                = local.alb_zone_id
     evaluate_target_health = false
   }
 }
@@ -63,7 +63,7 @@ resource "aws_route53_record" "alias" {
 resource "aws_lb_listener_rule" "redirect_to_canonical" {
   for_each = toset(var.redirect_hosts)
 
-  listener_arn = aws_lb_listener.https.arn
+  listener_arn = local.https_listener_arn
 
   action {
     type = "redirect"

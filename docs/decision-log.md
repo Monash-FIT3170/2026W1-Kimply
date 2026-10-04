@@ -52,6 +52,11 @@ Things that are not obvious from the diff:
   `envs/dev` differs from `envs/prod` only in values: `FARGATE_SPOT`, 1-2 tasks, its own cluster, ECR repository, secret, log group and domain (`ecs-dev.kimply.online`).
   A second NAT gateway would have cost more than the whole dev environment, so dev routes through production's and reads its ID from production's Terraform state.
   That is the one resource the environments share, and the cost is a real coupling: replacing production's NAT cuts dev off from its database until dev is re-applied.
+- **Development shares production's load balancer, and both canaries slow to 15 minutes (D42).**
+  The bill was about US$160/month once credits run out, and the application itself was only about an eighth of it: the rest was a NAT gateway, two load balancers, nine public IPv4 addresses and two canaries.
+  Development's own ALB cost more than its compute, so it now serves from production's by host header and runs 0.25 vCPU / 0.5 GB, against measured usage of about 105 MB at ~1% CPU.
+  Production stays at 0.5 vCPU: its peak is idle-dominated, autoscaling needs four to five minutes to add a task, and DDP connections stick to the task they landed on, so a burst has to be absorbed by the tasks already running rather than by scaling out.
+  The cost is coupling: development now depends on production's listener and security group as well as its NAT gateway, and ECS waits longer on a slower canary before completing a deployment.
 - **DNS moves to Route 53, because GoDaddy forwarding broke deep links (D41).**
   `https://kimply.online/play` reached a GoDaddy 404: forwarding keeps the domain but drops the path, which A3 recorded as a known limitation and which turned out to matter as soon as anyone shared a link.
   No record type at GoDaddy can point a bare domain at a load balancer; Route 53's ALIAS can, so the registrar stays and only the nameservers move.

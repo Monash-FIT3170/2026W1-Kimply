@@ -116,6 +116,7 @@ CloudWatch: task logs · canary on /health/ready → alarm → ECS rollback + SN
 | D35 | Separate GitHub OIDC roles for ECR push and ECS deploy | Least privilege per step. Both trust `main` on the upstream repo and, until it is deleted, this fork |
 | D36 | Terraform owns infrastructure and the initial task definition; the pipeline owns revisions; the Terraform service ignores task definition changes | Stops `terraform apply` and the pipeline fighting over the running revision |
 | D37 | Cutover by parallel run | Verify on the ALB hostname, switch GoDaddy, then retire the instance, its Elastic IP and its Atlas entry |
+| D42 | Development serves from production's load balancer, selected by host header, and runs 0.25 vCPU / 0.5 GB. Both canaries probe every 15 minutes | An ALB plus its three public IPv4 addresses costs about US$29/month, more than development's compute, and development's measured usage is about 105 MB at ~1% CPU. The canaries were about US$21/month at 5-minute intervals. Together roughly a third of the monthly bill |
 | D41 | DNS moves to a Route 53 hosted zone. GoDaddy stays the registrar, and only the nameservers change | GoDaddy forwarding drops the path, so `https://kimply.online/play` reached a GoDaddy 404 (A3). An ALIAS record points the apex straight at the load balancer, which no GoDaddy record type can do. Terraform then owns DNS and certificate validation, removing the hand-pasted records |
 | D40 | Development borrows production's NAT gateway instead of paying for a second one | A NAT gateway is about US$43/month, more than the rest of dev. It is the single deliberate exception to "prod and dev share nothing", and it keeps one IP on both Atlas allowlists |
 | D39 | The stack was built serving `ecs.kimply.online` beside the EC2 stack, against the same Atlas database, before taking `www`. The certificate covered both from the start | A real hostname with a real certificate to play on before any production DNS changes. Same database because that is exactly what cutover will run against |
@@ -147,6 +148,8 @@ CloudWatch: task logs · canary on /health/ready → alarm → ECS rollback + SN
 | R8 | After credits run out, the NAT, ALB, tasks and canary cost several times one `t4g.small` |
 | R9 | I1-I4 below are unfixed |
 | R13 | The pipeline no longer deploys to the EC2 instances, so `kimply.online` and `dev.kimply.online` drift behind `main` and `dev` until each cutover. A deploy to one of them is a manual `deploy/deploy.sh` on the box |
+| R14 | Development and production now share a load balancer as well as a NAT gateway, so a listener or security group mistake reaches both. Production's listener rules decide what development receives |
+| R15 | A 15-minute canary means slower detection, and ECS waits on the alarm before completing a deployment, so deploys take longer |
 | R12 | Dev egresses through prod's NAT gateway, so replacing that NAT cuts dev off from its database until dev is re-applied. Dev's Terraform also reads prod's state |
 | R11 | Until the EC2 instance is retired, EC2 and ECS are separate app processes on the same database, so the cross-process issues (I1-I4) apply between them, and a bug in an ECS build writes to live data |
 | R10 | `iam:PassRole` and `ecs:ExecuteCommand` are where IAM is most likely to become too broad |
