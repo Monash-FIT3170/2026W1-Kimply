@@ -216,6 +216,25 @@ Production must be applied first: development reads `shared_alb` from its state,
 
 Expect a short interruption on `dev.kimply.online` while DNS moves from one load balancer to the other. Production is untouched.
 
+**If the apply hangs on "Still destroying" the old ALB security group**, it is waiting on a reference it cannot see: AWS refuses to delete a security group while another group's rule points at it, and the task group's ingress rule is updated by a separate resource in the same apply.
+Repoint it by hand, to exactly what Terraform wants, and the pending delete succeeds on its next retry:
+
+```bash
+aws ec2 modify-security-group-rules --region ap-southeast-2 \
+  --group-id <task security group> \
+  --security-group-rules 'SecurityGroupRuleId=<rule id>,SecurityGroupRule={IpProtocol=tcp,FromPort=3000,ToPort=3000,ReferencedGroupId=<the shared ALB security group>,Description="App traffic from the ALB only"}'
+```
+
+Find the rule with:
+
+```bash
+aws ec2 describe-security-group-rules --region ap-southeast-2 \
+  --filters Name=group-id,Values=<task security group> \
+  --query 'SecurityGroupRules[?!IsEgress].[SecurityGroupRuleId,ReferencedGroupInfo.GroupId]' --output text
+```
+
+A stale `dev.kimply.online` lookup afterwards is usually negative caching from while the record was broken, not a real failure. Check against the zone's own nameservers before chasing it.
+
 ## Cutover
 
 The app's `ROOT_URL` is what the browser opens its DDP socket against, so **DNS moves first**.
