@@ -18,13 +18,14 @@ const seqSeenKey = (gameId, roundId) => `seqSeen:${gameId}:${roundId}`;
 export const GamePage = () => {
   const [playerId, setPlayerId] = useState(null);
   const [playerCanInput, setPlayerCanInput] = useState(false);
+  const [replaysRemaining, setReplaysRemaining] = useState(1);
   const [attemptedSequence, setAttemptedSequence] = useState([]);
   const [message, setMessage] = useState('');
   const [levelUpNotices, setLevelUpNotices] = useState([]);
   const [secondsLeft, setSecondsLeft] = useState(ROUND_SECONDS);
   const [shake, setShake] = useState(false);
   const [correctGlow, setCorrectGlow] = useState(false);
-  const [replayKey, setReplayKey] = useState(0);
+  const [replayKey, setReplayKey] = useState(1);
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [showPowerupPopup, setShowPowerupPopup] = useState(false);
   const [completedRoundId, setCompletedRoundId] = useState(null);
@@ -93,6 +94,7 @@ export const GamePage = () => {
   }, [gameId]);
   const gameMode = room?.gameMode || routeGameMode || 'default';
   const isBattleRoyale = gameMode === 'battle_royale';
+  const canReplay = !isBattleRoyale && replaysRemaining > 0 && playerCanInput;
 
   const round = useTracker(() => {
     if (!gameId) return null;
@@ -142,16 +144,44 @@ export const GamePage = () => {
     if (gameId && localStorage.getItem(seqSeenKey(gameId, player.roundId))) {
       // already watched this round (e.g. refresh): skip the replay
       setPlayerCanInput(true);
+      setReplayKey((prev) => prev + 1);
     } else {
       setPlayerCanInput(false);
       setReplayKey((prev) => prev + 1);
     }
   }, [player?.roundId, gameId]);
 
+  //replay bonus
+  const prevStreakRef = useRef(0);
+  useEffect(() => {
+    const streak = player?.currentStreak ?? 0;
+    const prev = prevStreakRef.current;
+    prevStreakRef.current = streak;
+
+    if (streak > 0 && streak % 3 === 0 && streak !== prev) {
+      setReplaysRemaining((r) => r + 1);
+      const notice = {
+        key: `replay-bonus-${Date.now()}`,
+        text: '3 correct in a row🎉 extra replay earned!',
+      };
+      setLevelUpNotices((prev) => [...prev, notice]);
+      //setTimeout(() => setMessage(''), 2500);
+      setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), 5000);
+    }
+  }, [player?.currentStreak]);
+
   // Show the slow-motion powerup popup whenever the player picks it up
   useEffect(() => {
     setShowPowerupPopup(!!player?.slowMotionActive);
   }, [player?.slowMotionActive]);
+
+  const handleReplay = () => {
+    if (!canReplay) return;
+    setReplaysRemaining((prev) => prev - 1);
+    setPlayerCanInput(false);
+    setAttemptedSequence([]);
+    setReplayKey((prev) => prev + 1);
+  };
 
   const seenLevelUpIds = useRef(new Set());
   useEffect(() => {
@@ -441,7 +471,7 @@ export const GamePage = () => {
 
   return (
     <div
-      className='relative'
+      className="relative"
       style={{
         height: '100dvh',
         position: 'relative',
@@ -634,8 +664,8 @@ export const GamePage = () => {
               player?.slowMotionActive
                 ? 'slow'
                 : room?.gameMode === 'custom'
-                ? room.customSettings?.flashingSpeed
-                : 'medium'
+                  ? room.customSettings?.flashingSpeed
+                  : 'medium'
             }
           />
           <p
@@ -701,6 +731,34 @@ export const GamePage = () => {
             >
               CLEAR
             </button>
+            {!isBattleRoyale && (
+              <button
+                onClick={handleReplay}
+                disabled={!canReplay}
+                style={{
+                  width: 'clamp(100px, 8vw, 300px)',
+                  height: 'clamp(34px, 5.5dvh, 60px)',
+                  padding: '1vw',
+                  backgroundColor: canReplay ? '#1a3a5c' : '#222',
+                  color: canReplay ? '#7CFFB2' : '#555',
+                  fontWeight: 'bold',
+                  fontSize: '0.9vw',
+                  border: canReplay ? '1px solid #7CFFB2' : '1px solid #333',
+                  borderRadius: '8px',
+                  cursor: canReplay ? 'pointer' : 'not-allowed',
+                  letterSpacing: '1px',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  lineHeight: 1.2,
+                }}
+              >
+                <span>REPLAY</span>
+                <span style={{ fontSize: 'clamp(8px, 0.8vw, 16px)', opacity: 0.8 }}>({replaysRemaining} left)</span>
+              </button>
+            )}
             <button
               onClick={handleSubmit}
               disabled={!playerCanInput || attemptedSequence.length !== round.sequence.length}
