@@ -188,7 +188,7 @@ export function PlayRoute() {
             />
           ) : (
             <div
-              onDoubleClick={() => setEditing(true)}
+              onClick={() => setEditing(true)}
               className="flex items-center gap-3 rounded-[14px] border border-hairline bg-surface px-4 py-3.5"
             >
               <Avatar letter={trimmedName[0]?.toUpperCase()} color={avatarColor(trimmedName)} size={36} />
