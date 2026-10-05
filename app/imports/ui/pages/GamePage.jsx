@@ -25,7 +25,7 @@ export const GamePage = () => {
   const [secondsLeft, setSecondsLeft] = useState(ROUND_SECONDS);
   const [shake, setShake] = useState(false);
   const [correctGlow, setCorrectGlow] = useState(false);
-  const [replayKey, setReplayKey] = useState(1);
+  const [replayKey, setReplayKey] = useState(0);
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [showPowerupPopup, setShowPowerupPopup] = useState(false);
   const [completedRoundId, setCompletedRoundId] = useState(null);
