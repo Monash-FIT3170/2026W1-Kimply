@@ -3,6 +3,7 @@ import { Meteor } from 'meteor/meteor';
 import { useNavigate } from 'react-router-dom';
 import { BG, HAIRLINE, PRIMARY, TILE, TileLattice, TopBar } from '../components/design';
 import { submitOnEnter } from '../keyboard';
+import { setSession } from '../accountSession';
 
 export function Account() {
   const navigate = useNavigate();
@@ -37,7 +38,8 @@ export function Account() {
         return;
       }
 
-      navigate('/play', { state: { playerAccount: account } });
+      setSession(account);
+      navigate('/play');
     });
   };
 
@@ -53,7 +55,8 @@ export function Account() {
         return;
       }
 
-      navigate('/play', { state: { playerAccount: account } });
+      setSession(account);
+      navigate('/play');
     });
   };
 

@@ -11,6 +11,7 @@ import { EndLeaderboard } from '../EndLeaderboard.jsx';
 import { EliminationFeed } from '../EliminationFeed.jsx';
 import { useLocation } from 'react-router-dom';
 import { TileLattice } from '../components/design';
+import { useSessionResuming, useSignedInAccount } from '../accountSession';
 import {
   ROUND_TIMER_SECONDS as ROUND_SECONDS,
   LEVEL_UP_TOAST_MS,
@@ -39,7 +40,8 @@ export const GamePage = () => {
   const routeGameMode = location.state?.gameMode;
   const roomPin = location.state?.pin;
   const lobbyPlayerId = location.state?.playerId;
-  const accountId = location.state?.playerAccount?._id || null;
+  const accountId = useSignedInAccount()?._id || null;
+  const sessionResuming = useSessionResuming();
   // No 'demo' fallback: the publications are scoped by gameId, so a placeholder
   // would subscribe to a game that does not exist and hang on LOADING forever.
   const gameId = roomPin || null;
@@ -117,7 +119,8 @@ export const GamePage = () => {
   }, [gameId]);
 
   useEffect(() => {
-    if (!round?._id || playerId) return;
+    // Wait for a stored session to resume, or the player would join without their account.
+    if (!round?._id || playerId || sessionResuming) return;
     Meteor.call(
       'players.join',
       round._id,
@@ -136,7 +139,7 @@ export const GamePage = () => {
         localStorage.setItem(`gamePlayerId:${gameId}`, result);
       }
     );
-  }, [round?._id, playerId, gameId, playerNameFromLobby, lobbyPlayerId, isBattleRoyale, accountId]);
+  }, [round?._id, playerId, gameId, playerNameFromLobby, lobbyPlayerId, isBattleRoyale, accountId, sessionResuming]);
 
   useEffect(() => {
     if (!player?.roundId) return;

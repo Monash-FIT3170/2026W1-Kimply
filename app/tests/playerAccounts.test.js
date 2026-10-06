@@ -1,6 +1,6 @@
 import { Meteor } from 'meteor/meteor';
 import assert from 'assert';
-import { PlayerAccountsCollection } from '/imports/api/playerAccounts';
+import { PlayerAccountsCollection, SESSION_LIFETIME_MS, hashSessionToken } from '/imports/api/playerAccounts';
 
 if (Meteor.isServer) {
   describe('player accounts API', function () {
@@ -51,11 +51,13 @@ if (Meteor.isServer) {
 
         const account = await PlayerAccountsCollection.findOneAsync({ email: 'alice@example.com' });
 
-        assert.deepStrictEqual(result, {
+        const { sessionToken, ...publicFields } = result;
+        assert.deepStrictEqual(publicFields, {
           _id: account._id,
           displayName: 'Alice',
           email: 'alice@example.com',
         });
+        assert.strictEqual(typeof sessionToken, 'string');
 
         assert.ok(account);
         assert.strictEqual(account.displayName, 'Alice');
@@ -143,11 +145,106 @@ if (Meteor.isServer) {
 
         const account = await PlayerAccountsCollection.findOneAsync({ email: 'alice@example.com' });
 
-        assert.deepStrictEqual(result, {
+        const { sessionToken, ...publicFields } = result;
+        assert.deepStrictEqual(publicFields, {
           _id: account._id,
           displayName: 'Alice',
           email: 'alice@example.com',
         });
+        assert.strictEqual(typeof sessionToken, 'string');
+      });
+    });
+
+    describe('sessions', function () {
+      async function registerAlice() {
+        return Meteor.callAsync('playerAccounts.register', {
+          displayName: 'Alice',
+          email: 'alice@example.com',
+          password: 'password123',
+        });
+      }
+
+      it('stores only the hash of an issued session token', async function () {
+        const { _id, sessionToken } = await registerAlice();
+        const account = await PlayerAccountsCollection.findOneAsync(_id);
+
+        assert.strictEqual(account.sessions.length, 1);
+        assert.strictEqual(account.sessions[0].hash, hashSessionToken(sessionToken));
+        assert.ok(!JSON.stringify(account).includes(sessionToken));
+        assert.strictEqual(
+          account.sessions[0].expiresAt.getTime() - account.sessions[0].createdAt.getTime(),
+          SESSION_LIFETIME_MS
+        );
+      });
+
+      it('resumes the account from a valid token', async function () {
+        const { _id, sessionToken } = await registerAlice();
+
+        const resumed = await Meteor.callAsync('playerAccounts.resume', sessionToken);
+
+        assert.deepStrictEqual(resumed, { _id, displayName: 'Alice', email: 'alice@example.com' });
+      });
+
+      it('gives each sign-in its own session, so signing in elsewhere keeps the first', async function () {
+        const first = await registerAlice();
+        const second = await Meteor.callAsync('playerAccounts.signIn', {
+          email: 'alice@example.com',
+          password: 'password123',
+        });
+
+        assert.notStrictEqual(first.sessionToken, second.sessionToken);
+        assert.strictEqual((await Meteor.callAsync('playerAccounts.resume', first.sessionToken))._id, first._id);
+        assert.strictEqual((await Meteor.callAsync('playerAccounts.resume', second.sessionToken))._id, first._id);
+      });
+
+      it('rejects a missing or unknown token', async function () {
+        await registerAlice();
+
+        for (const token of [undefined, '', 42, 'not-a-real-token']) {
+          await assert.rejects(
+            Meteor.callAsync('playerAccounts.resume', token),
+            (err) => err.error === 'invalid-session'
+          );
+        }
+      });
+
+      it('rejects an expired token and prunes it on the next sign-in', async function () {
+        const { _id, sessionToken } = await registerAlice();
+        await PlayerAccountsCollection.updateAsync(_id, {
+          $set: { 'sessions.0.expiresAt': new Date(Date.now() - 1000) },
+        });
+
+        await assert.rejects(
+          Meteor.callAsync('playerAccounts.resume', sessionToken),
+          (err) => err.error === 'invalid-session'
+        );
+
+        await Meteor.callAsync('playerAccounts.signIn', { email: 'alice@example.com', password: 'password123' });
+        const account = await PlayerAccountsCollection.findOneAsync(_id);
+        assert.strictEqual(account.sessions.length, 1);
+        assert.notStrictEqual(account.sessions[0].hash, hashSessionToken(sessionToken));
+      });
+
+      it('signs out only the session whose token is given', async function () {
+        const first = await registerAlice();
+        const second = await Meteor.callAsync('playerAccounts.signIn', {
+          email: 'alice@example.com',
+          password: 'password123',
+        });
+
+        await Meteor.callAsync('playerAccounts.signOut', first.sessionToken);
+
+        await assert.rejects(
+          Meteor.callAsync('playerAccounts.resume', first.sessionToken),
+          (err) => err.error === 'invalid-session'
+        );
+        assert.strictEqual((await Meteor.callAsync('playerAccounts.resume', second.sessionToken))._id, first._id);
+      });
+
+      it('treats signing out with an unknown token as a no-op', async function () {
+        await registerAlice();
+        await Meteor.callAsync('playerAccounts.signOut', 'not-a-real-token');
+        await Meteor.callAsync('playerAccounts.signOut', undefined);
       });
     });
   });
