@@ -17,14 +17,16 @@ export const EliminationFeed = ({ gameId }) => {
 
   const [visible, setVisible] = useState([]);
   const seenIds = useRef(new Set());
+  const mountedAt = useRef(Date.now());
   const timers = useRef({});
 
   useEffect(() => {
     eliminations.forEach((entry) => {
       if (seenIds.current.has(entry._id)) return;
+      if (entry.eliminatedAt && new Date(entry.eliminatedAt).getTime() < mountedAt.current) return;
       seenIds.current.add(entry._id);
 
-      setVisible((prev) => [...prev, entry]);
+      setVisible((prev) => [...prev, entry].slice(-3));
 
       timers.current[entry._id] = setTimeout(() => {
         setVisible((prev) => prev.filter((e) => e._id !== entry._id));

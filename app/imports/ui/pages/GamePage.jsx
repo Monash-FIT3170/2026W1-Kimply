@@ -150,26 +150,25 @@ export const GamePage = () => {
 
   // Show the slow-motion powerup popup whenever the player picks it up
   useEffect(() => {
-    setShowPowerupPopup(!!player?.slowMotionActive);
+    if (!player?.slowMotionActive) { setShowPowerupPopup(false); return; }
+    setShowPowerupPopup(true);
+    const t = setTimeout(() => setShowPowerupPopup(false), 3000);
+    return () => clearTimeout(t);
   }, [player?.slowMotionActive]);
 
   const seenLevelUpIds = useRef(new Set());
-  useEffect(() => {
+  const mountedAt = useRef(Date.now());
+  useEffect(()=>{
     levelUpEvents.forEach((event) => {
       if (seenLevelUpIds.current.has(event._id)) return;
       seenLevelUpIds.current.add(event._id);
-      const notice = {
-        key: event._id,
-        text:
-          event.playerId === playerId
-            ? `You have leveled up to level ${event.level}`
-            : `${event.playerName} has reached level ${event.level}`,
-      };
-      setLevelUpNotices((prev) => [...prev, notice]);
-      // auto-dismiss like the elimination feed
-      setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), LEVEL_UP_TOAST_MS);
+      if (!event.player_id !== playerId) return; // Only show level up notifications for current player 
+      if (Date.now() - mountedAt.current < 2000) return;
+      const notice = {key: event._id, text: `You have levelled up to level ${event.level}!`};
+      setLevelUpNotices((prev) => [...prev.slice(-1), notice]);
+      setTimeout(() => setLevelUpNoties((prev) => prev.filter((n) => n.key !== notice.key)), LEVEL_UP_TOAST_MS);
     });
-  }, [levelUpEvents]);
+  }, [levelUpEvents, playerId]);
 
   const handleColourClick = (colour) => {
     if (!playerCanInput) return;

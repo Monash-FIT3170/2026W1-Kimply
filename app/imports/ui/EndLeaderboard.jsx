@@ -80,7 +80,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
 
   if (players.length === 0) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-bg text-fg">
+      <div className="flex h-full items-center justify-center bg-bg text-fg">
         <p className="font-mono text-sm uppercase tracking-widest">No leaderboard results yet</p>
       </div>
     );
@@ -88,7 +88,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
 
   return (
     <div
-      className="relative flex min-h-screen w-full flex-col"
+      className="relative flex h-full w-full flex-col overflow-hidden"
       style={{ background: BG, color: 'oklch(0.93 0.01 270)' }}
     >
       <div className="pointer-events-none fixed inset-0" style={{ zIndex: 0 }}>
@@ -103,7 +103,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
         <TopBar onBack={() => navigate('/play', { state: { playerAccount } })} />
       </div>
 
-      <div className="relative z-10 flex flex-1 flex-col items-center px-6 pb-12">
+      <div className="relative z-10 flex flex-1 flex-col items-center overflow-y-auto px-6 pb-12">
         <div
           className="mb-7 flex flex-col items-center text-center"
           style={{ animation: 'leaderboardTitleIn 0.7s ease both' }}
@@ -224,20 +224,21 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
 
         <div className="flex w-full max-w-md flex-col gap-2">
           {/* header */}
-          <div className="mb-1 flex px-3" style={{ animation: 'rowSlideIn 0.45s ease 3.5s both' }}>
-            <span className="w-12 font-mono text-[11px] uppercase tracking-widest" style={{ color: FG2 }}>
+          <div className="mb-1 flex items-center gap-2 border border-transparent px-2 sm:gap-3 sm:px-3" style={{ animation: 'rowSlideIn 0.45s ease 3.5s both' }}>
+            <span className="w-8 shrink-0 sm:w-12 font-mono text-[10px] uppercase tracking-wider sm:text-[11px] sm:tracking-widest" style={{ color: FG2 }}>
               Rank
             </span>
-            <span className="flex-1 font-mono text-[11px] uppercase tracking-widest" style={{ color: FG2 }}>
+            <span className="hidden w-8 shrink-0 sm:block" />
+            <span className="min-w-0 flex-1 font-mono text-[10px] uppercase tracking-wider sm:text-[11px] sm:tracking-widest" style={{ color: FG2 }}>
               Player
             </span>
-            <span className="w-24 text-right font-mono text-[11px] uppercase tracking-widest" style={{ color: FG2 }}>
+            <span className="w-[4.5rem] shrink-0 whitespace-nowrap text-right sm:w-24 font-mono text-[10px] uppercase tracking-wider sm:text-[11px] sm:tracking-widest" style={{ color: FG2 }}>
               Score
             </span>
-            <span className="w-24 text-right font-mono text-[11px] uppercase tracking-widest" style={{ color: FG2 }}>
+            <span className="w-12 shrink-0 text-right sm:w-24 font-mono text-[10px] uppercase tracking-wider sm:text-[11px] sm:tracking-widest" style={{ color: FG2 }}>
               Streak
             </span>
-            <span className="w-20 text-right font-mono text-[11px] uppercase tracking-widest" style={{ color: FG2 }}>
+            <span className="w-12 shrink-0 text-right sm:w-20 font-mono text-[10px] uppercase tracking-wider sm:text-[11px] sm:tracking-widest" style={{ color: FG2 }}>
               Acc
             </span>
           </div>
@@ -253,7 +254,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
             return (
               <div
                 key={player.name}
-                className="flex items-center gap-3 rounded-xl px-3 py-3"
+                className="flex items-center gap-2 rounded-xl px-2 py-3 sm:gap-3 sm:px-3"
                 style={{
                   animation: `scoreboardRowIn 0.55s cubic-bezier(0.22,1,0.36,1) ${rowDelay}s both`,
                   background: medal
@@ -265,29 +266,23 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
                     isCurrentPlayer
                       ? `color-mix(in oklab, ${PRIMARY} 48%, transparent)`
                       : medal
-                        ? `color-mix(in oklab, ${medal.color} 30%, transparent)`
+                        ? `color-mix(in oklab, ${medal.color} ${rank === 0 ? 60 : 30}%, transparent)`
                         : `color-mix(in oklab, white 8%, transparent)`
                   }`,
                   boxShadow: isCurrentPlayer ? `0 0 22px color-mix(in oklab, ${PRIMARY} 18%, transparent)` : 'none',
                 }}
               >
-                <span className="w-12 shrink-0 font-outfit text-sm font-extrabold" style={{ color: rowColor }}>
+                <span className="w-8 shrink-0 sm:w-12 font-outfit text-sm font-extrabold" style={{ color: rowColor }}>
                   {tied ? '=' : ''}
                   {rank + 1}
                 </span>
+                
+                <div className="hidden sm:block">
+                    <Avatar letter={player.name[0]} color={avatarColor(player.name)} size={32} />
+                </div>
 
-                <Avatar letter={player.name[0]} color={avatarColor(player.name)} size={32} />
-
-                <span className="flex-1 font-outfit text-[15px] font-semibold" style={{ color: rowColor }}>
+                <span className="flex-1 min-w-0 font-outfit text-[15px] font-semibold" style={{ color: rowColor }}>
                   {player.name}
-                  {rank === 0 && (
-                    <span
-                      className="ml-2 font-mono text-[10px] uppercase tracking-widest"
-                      style={{ color: PRIMARY, animation: 'winnerPulse 1.5s ease-in-out infinite' }}
-                    >
-                      Winner
-                    </span>
-                  )}
                   {isCurrentPlayer && (
                     <span
                       className="ml-2 rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest"
@@ -302,15 +297,15 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
                   )}
                 </span>
 
-                <span className="w-24 text-right font-mono text-sm" style={{ color: FG2 }}>
+                <span className="w-[4.5rem] shrink-0 whitespace-nowrap text-right font-mono text-xs sm:w-24 sm:text-sm" style={{ color: FG2 }}>
                   {player.isWinner ? `Won Rd ${playerScore(player)}` : `Rd ${playerScore(player)}`}
                 </span>
 
-                <span className="w-24 text-right font-mono text-sm" style={{ color: FG2 }}>
+                <span className="w-12 shrink-0 text-right font-mono text-sm sm:w-24" style={{ color: FG2 }}>
                   {player.longestStreak}
                 </span>
 
-                <span className="w-20 text-right font-mono text-sm" style={{ color: FG2 }}>
+                <span className="w-12 shrink-0 text-right font-mono text-sm sm:w-20" style={{ color: FG2 }}>
                   {accuracyPercent(player)}%
                 </span>
               </div>

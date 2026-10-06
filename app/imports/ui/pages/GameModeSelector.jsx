@@ -107,9 +107,9 @@ export function GameModeSelector() {
         <span className="font-mono text-[11px] uppercase tracking-widest text-fg3">v1.0.0</span>
       </div>
 
-      <div className="relative flex flex-1 flex-col items-center justify-center gap-7 overflow-y-auto px-7 pb-14">
+      <div className="relative flex flex-1 flex-col items-center gap-7 overflow-y-auto px-7 pb-14">
         {/* title */}
-        <div className="w-full max-w-4xl text-center">
+        <div className="mt-auto w-full max-w-4xl text-center">
           <h1 className="font-outfit text-4xl font-extrabold leading-tight tracking-tight">Select Game Mode</h1>
           <p className="mt-3 font-manrope text-[15px] text-fg3">Choose how you want to play</p>
         </div>
@@ -132,7 +132,7 @@ export function GameModeSelector() {
 
         <button
           onClick={handleBack}
-          className="rounded-full border border-hairline px-5 py-3 font-outfit text-[13px] font-bold uppercase tracking-[0.16em] text-fg2 transition-colors hover:text-fg"
+          className="mb-auto rounded-full border border-hairline px-5 py-3 font-outfit text-[13px] font-bold uppercase tracking-[0.16em] text-fg2 transition-colors hover:text-fg"
           style={{ background: 'color-mix(in oklab, oklch(0.20 0.02 270) 72%, transparent)' }}
         >
           Back

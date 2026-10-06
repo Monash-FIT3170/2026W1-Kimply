@@ -25,7 +25,7 @@ export const Leaderboard = ({ gameId, currentPlayerId }) => {
   }, [gameId]);
 
   return (
-    <section className="w-full max-h-[80vh] rounded-2xl border border-hairline bg-[color:oklch(0.20_0.02_270_/_0.68)] p-5 text-fg shadow-xl backdrop-blur-md flex flex-col">
+    <section className="w-full max-h-[calc(100dvh-6rem)] rounded-2xl border border-hairline bg-[color:oklch(0.20_0.02_270_/_0.68)] p-5 text-fg shadow-xl backdrop-blur-md flex flex-col">
       <h2 className="mb-1 text-center font-outfit text-xl font-extrabold">Live Leaderboard</h2>
       <p className="mb-4 text-center font-mono text-[10px] uppercase tracking-widest text-fg3">
         Updates live during the game

@@ -9,6 +9,8 @@
     @apply m-0 h-full bg-bg p-0;
     font-family: 'Manrope', system-ui, sans-serif;
   }
+  body { -webkit-user-select: none; user-select: none; }
+  input, textarea { -webkit-user-select: text; user-select: text; }
 }
 
 @keyframes kimplyPulse {

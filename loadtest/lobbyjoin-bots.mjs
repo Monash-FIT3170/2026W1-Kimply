@@ -1,17 +1,6 @@
 #!/usr/bin/env node
-// Kimply bot simulator: joins a room with N fake players via Meteor DDP.
-//
 // Usage:
-//   node kimply-bots.mjs <PIN> [count] [--url ws://localhost:3000] [--delay 600] [--prefix Bot]
-//   node kimply-bots.mjs <PIN> --kick        # remove all bots from the lobby
-//
-// Examples:
-//   node kimply-bots.mjs AB3XK 15
-//   node kimply-bots.mjs AB3XK 20 --delay 250
-//   node kimply-bots.mjs AB3XK --kick
-//
-// Node 22+: nothing to install.
-// Node 16-21: run `npm install ws` in the same folder as this script first.
+//   node lobbyjoin-bots.mjs <PIN> [count] [--url ws://localhost:3000] [--delay 600] [--prefix Bot]
 
 const args = process.argv.slice(2);
 const flag = (name, fallback) => {

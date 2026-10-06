@@ -104,11 +104,11 @@ export function JoinRoom() {
         spellCheck={false}
       />
 
-      <div className="relative flex flex-1 flex-col items-center justify-center gap-9 px-6">
-        <p className="font-mono text-[12px] uppercase tracking-[0.18em] text-fg3">Enter Room Code</p>
+      <div className="relative flex flex-1 flex-col items-center  overflow-y-auto py-4 gap-9 px-6">
+        <p className="mt-auto font-mono text-[12px] uppercase tracking-[0.18em] text-fg3">Enter Room Code</p>
 
         {/* Code slots */}
-        <div className="flex cursor-text gap-3" onClick={() => inputRef.current?.focus()}>
+        <div className="flex cursor-text gap-2 sm:gap-3" onClick={() => inputRef.current?.focus()}>
           {Array.from({ length: SLOTS }).map((_, i) => {
             const ch = code[i];
             const filled = ch !== undefined;
@@ -118,9 +118,9 @@ export function JoinRoom() {
                 key={i}
                 className="relative flex items-center justify-center rounded-2xl font-mono font-bold"
                 style={{
-                  width: 76,
-                  height: 96,
-                  fontSize: 52,
+                  width: 'clamp(44px, 14vw, 76px)',
+                  aspectRatio: '76/96',
+                  fontSize: 'clamp(30px, 9vw, 52px)',
                   background: filled ? 'oklch(0.24 0.02 270)' : 'oklch(0.20 0.02 270)',
                   border: `2px solid ${active ? PRIMARY : filled ? HAIRLINE : 'transparent'}`,
                   color: filled ? 'oklch(0.97 0.006 80)' : 'oklch(0.55 0.015 270)',
@@ -130,7 +130,7 @@ export function JoinRoom() {
                 {filled ? (
                   ch
                 ) : active ? (
-                  <span className="inline-block h-11 w-[3px] animate-kimply-caret" style={{ background: PRIMARY }} />
+                  <span className="inline-block h-[45%] w-[3px] animate-kimply-caret" style={{ background: PRIMARY }} />
                 ) : null}
                 <div
                   className="absolute bottom-2 rounded-sm"
@@ -170,7 +170,7 @@ export function JoinRoom() {
         <button
           onClick={handleJoin}
           disabled={!canJoin}
-          className="inline-flex items-center gap-2.5 rounded-xl px-7 py-3.5 font-outfit text-sm font-extrabold uppercase tracking-[0.14em] transition-all"
+          className="mb-auto inline-flex items-center gap-2.5 rounded-xl px-7 py-3.5 font-outfit text-sm font-extrabold uppercase tracking-[0.14em] transition-all"
           style={{
             background: canJoin ? PRIMARY : `color-mix(in oklab, ${PRIMARY} 30%, oklch(0.14 0.02 270))`,
             color: 'oklch(0.14 0.02 270)',
