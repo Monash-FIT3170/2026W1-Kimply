@@ -54,6 +54,42 @@ variable "certificate_names" {
   type        = list(string)
 }
 
+variable "manage_dns" {
+  description = "Create this environment's DNS records in Route 53. False while the domain is still hosted elsewhere (D41)."
+  type        = bool
+  default     = false
+}
+
+variable "create_hosted_zone" {
+  description = "Create the hosted zone for the whole domain. True in exactly one environment; the others take hosted_zone_id."
+  type        = bool
+  default     = false
+}
+
+variable "dns_zone_name" {
+  description = "The domain the hosted zone serves, e.g. kimply.online. Required when create_hosted_zone is true."
+  type        = string
+  default     = ""
+}
+
+variable "hosted_zone_id" {
+  description = "An existing hosted zone to create records in, when this environment does not own it."
+  type        = string
+  default     = null
+}
+
+variable "dns_alias_names" {
+  description = "Hostnames pointed at this environment's load balancer with ALIAS records."
+  type        = list(string)
+  default     = []
+}
+
+variable "redirect_hosts" {
+  description = "Hostnames the load balancer should 301 to domain_name, keeping the path and query."
+  type        = list(string)
+  default     = []
+}
+
 variable "apex_domain" {
   description = "Bare domain that GoDaddy forwards to domain_name (D17). Only needed where check_apex_redirect is true."
   type        = string
@@ -204,6 +240,38 @@ variable "github_branch" {
 variable "github_ecr_push_role_name" {
   description = "Existing ECR push role, imported so its trust policy can list every repository (D35)."
   type        = string
+}
+
+variable "create_load_balancer" {
+  description = "Create a load balancer for this environment. False means share another environment's (D42)."
+  type        = bool
+  default     = true
+}
+
+variable "shared_alb" {
+  description = <<-EOT
+    The load balancer to share when create_load_balancer is false: its HTTPS listener ARN,
+    DNS name and zone id for ALIAS records, and the security group its tasks must accept from.
+  EOT
+  type = object({
+    https_listener_arn = string
+    dns_name           = string
+    zone_id            = string
+    security_group_id  = string
+  })
+  default = null
+}
+
+variable "host_headers" {
+  description = "Host headers routed to this environment on a shared listener. Required when create_load_balancer is false."
+  type        = list(string)
+  default     = []
+}
+
+variable "listener_rule_priority" {
+  description = "Priority of this environment's rule on the shared listener. Lower wins; must be unique."
+  type        = number
+  default     = 100
 }
 
 variable "alb_deletion_protection" {
