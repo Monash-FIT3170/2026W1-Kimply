@@ -61,7 +61,7 @@ if (Meteor.isServer) {
       const spectator = await PlayersCollection.findOneAsync(spectatorId);
       assert.equal(spectator.eliminated, true);
       assert.equal(spectator.roundStatus, 'Eliminated');
-      assert.equal(await LeaderboardCollection.countAsync({ playerId: spectatorId }), 1);
+      assert.equal(await LeaderboardCollection.find({ playerId: spectatorId }).countAsync(), 1);
       const room = await RoomsCollection.findOneAsync({ pin: gameId });
       assert.equal(room.players.some((player) => player.id === 'spectator-lobby-id'), true);
       const remainingPlayer = await PlayersCollection.findOneAsync(remainingPlayerId);
