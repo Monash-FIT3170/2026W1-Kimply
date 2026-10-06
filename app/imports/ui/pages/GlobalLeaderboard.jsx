@@ -4,15 +4,7 @@ import { Meteor } from 'meteor/meteor';
 import { useSubscribe, useTracker } from 'meteor/react-meteor-data';
 import { GlobalLeaderboardCollection } from '/imports/api/globalLeaderboard';
 import { MEDAL } from '../EndLeaderboard';
-import {
-  PRIMARY,
-  HAIRLINE,
-  TileLattice,
-  Avatar,
-  avatarColor,
-  TopBar,
-  RainbowBar,
-} from '../components/design';
+import { PRIMARY, HAIRLINE, TileLattice, Avatar, avatarColor, TopBar, RainbowBar } from '../components/design';
 
 const RANK_ACCENT = {
   1: MEDAL[0].color,
@@ -139,11 +131,13 @@ export function GlobalLeaderboard() {
 
       <TopBar onBack={() => navigate(-1)} />
 
-      <div className="relative flex flex-1 flex-col items-center overflow-y-auto px-7 pb-14">
+      <div className="relative flex flex-1 flex-col items-center overflow-y-auto px-6 pb-10 xs:px-7 xs:pb-14">
         <div className="w-full max-w-xl">
           <div className="mb-7 text-center">
-            <h1 className="font-outfit text-5xl font-extrabold tracking-tight text-fg">Global Leaderboard</h1>
-            <p className="mt-2 font-manrope text-2sm text-fg3">Top 50 players, ranked by highest round reached.</p>
+            <h1 className="font-outfit text-4xl font-extrabold tracking-tight text-fg xs:text-5xl">
+              Global Leaderboard
+            </h1>
+            <p className="text-2sm mt-2 font-manrope text-fg3">Top 50 players, ranked by highest round reached.</p>
 
             {announcement && (
               <div
