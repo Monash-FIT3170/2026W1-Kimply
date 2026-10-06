@@ -162,7 +162,7 @@ A refresh is therefore a way to reset your lives, and it leaves duplicate rows i
 
 ## D8 - Password hashing is a single unstretched SHA-256
 
-`playerAccounts.js:20-22`
+`playerAccounts.js:22-24`
 
 ```js
 return createHash('sha256').update(`${salt}:${password}`).digest('hex');
@@ -177,7 +177,7 @@ Also in this file:
 - **Account enumeration oracle**: `:83` throws `not-found` for an unknown email but `:88` throws `wrong-password` for a known one, so the method confirms whether an address is registered.
 - **No rate limiting**, so credential stuffing and enumeration are both unbounded.
 - **No maximum password length**, so a client can post a very large string and force unbounded hashing work.
-- `signIn` issues **no session token** (`:91-94` returns a plain object), so authentication has no effect on any authorization decision anywhere in the app.
+- `signIn` now issues a session token (#108), but **no method checks it**: `rooms.create`, `rooms.join`, and `players.join` still accept a client-supplied `accountId`, so authentication still has no effect on any authorization decision.
 
 This becomes materially riskier now that the app is on a public IP.
 

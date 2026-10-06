@@ -28,5 +28,10 @@ module.exports = defineConfig((Meteor) => {
     });
   }
 
-  return { module: { rules } };
+  // google-auth-library is Node-only and is loaded solely by the server-side Google
+  // sign-in verifier (imports/api/googleAuth.js). That module also reaches the client
+  // bundle through playerAccounts.js, so resolve the library to nothing there.
+  const resolve = Meteor.isClient ? { alias: { 'google-auth-library': false } } : {};
+
+  return { module: { rules }, resolve };
 });
