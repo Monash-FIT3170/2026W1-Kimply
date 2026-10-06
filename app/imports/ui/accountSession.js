@@ -68,6 +68,14 @@ export function signOut() {
   if (token) Meteor.call('playerAccounts.signOut', token, () => {});
 }
 
+// Renames the signed-in account. Resolves with the updated account, or rejects with
+// the method error (for example name-taken) for the caller to show.
+export async function updateDisplayName(name) {
+  const updated = await Meteor.callAsync('playerAccounts.updateDisplayName', readToken(), name);
+  account.set(publicAccount(updated));
+  return updated;
+}
+
 export function useSignedInAccount() {
   return useTracker(() => account.get(), []);
 }

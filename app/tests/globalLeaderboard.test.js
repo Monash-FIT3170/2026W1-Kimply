@@ -41,7 +41,8 @@ if (Meteor.isServer) {
       const aliceId = await PlayersCollection.insertAsync({
         gameId: 'lb-game-1',
         roundId,
-        name: 'Alice',
+        // A different in-game name: the leaderboard must still show the account's name.
+        name: 'xXAliceXx',
         accountId: alice._id,
         lives: 3,
         eliminated: false,
@@ -72,7 +73,7 @@ if (Meteor.isServer) {
 
       const entry = await GlobalLeaderboardCollection.findOneAsync({ accountId: alice._id });
       assert.ok(entry);
-      assert.strictEqual(entry.displayName, 'Alice');
+      assert.strictEqual(entry.displayName, 'Alice', 'records the account display name, not the in-game name');
       assert.strictEqual(entry.bestRound, 1);
       assert.strictEqual(entry.wins, 1);
       assert.strictEqual(entry.gamesPlayed, 1);
