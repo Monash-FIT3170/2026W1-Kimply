@@ -20,6 +20,28 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-09-21 - Phones get a 24px screen-edge gutter and 44px touch targets
+
+Phone screens were cramped in two different ways and the fix is different for each.
+The game screen had no horizontal gutter at all and sized its gaps in `vw`, so the hearts, the progress dots and the Clear / Submit buttons all collapsed towards each other as the viewport narrowed.
+The room-code slots were the opposite problem: fixed at 76px and 56px, five of them plus gaps overflowed every phone width and flexbox squeezed them back down to something narrower than the design system allows.
+
+`docs/design_system.md` only ever named a *desktop* screen-edge value, so the phone gutter was whatever each screen happened to use. It is now `--s-5` (24px), recorded in the spacing table and the breakpoint table, and applied on every route. That is the value `Splash.jsx` already used, so this standardises on existing precedent rather than inventing a number.
+
+Three things that are not obvious from the diff:
+
+- **The 480px boundary is a real Tailwind screen now, not an arbitrary variant.**
+  `tailwind.config.js` declares the full `screens` object with `xs: '481px'` ahead of Tailwind's untouched defaults. The explicit object is there for ordering: `theme.extend.screens` would have appended `xs` after `2xl`, and the resulting CSS would let `xs:` beat `sm:` on the same property. Phone styles are the unprefixed base and `xs:` is everything above, so `sm:` (640px) must not be used to mean "not a phone" - that would leave 481-639px on the phone treatment.
+- **`ColourSequence`'s `--tile-grid` still hard-codes the page gutter, and has to.**
+  It is `min(360px, calc(100vw - 48px), 38dvh)`, where 48px is GamePage's 24px gutter doubled, so the two have to be changed together. The obvious cleanup - swapping the viewport term for `100%` so the grid just tracks its container - does not work and was reverted after it shipped flat tiles to the phone layout. The same variable is consumed on both axes (`width` and `height` on every tile), and in the height context a percentage resolves against the grid's own indefinite height, so the whole `min()` collapses to `auto` and each tile falls back to its content height. Any replacement has to stay percentage-free; `100cqw` with `container-type: inline-size` would work, but was not taken because it is untested here.
+- **The live leaderboard is a bottom sheet on phones and a side rail above 480px.**
+  It is one `<aside>`, not two: the closed state translates on a different axis per band (`translate-y-[120%]` under 481px, `xs:translate-x-[120%]` above), which works because Tailwind composes transforms through separate `--tw-translate-x` / `--tw-translate-y` variables. `Leaderboard` also takes its height cap from the caller now - the rail wants `max-h-[80vh]`, the sheet wants `max-h-[52vh]` so the tiles stay visible behind it - because two competing `max-h-*` classes on one element do not resolve by author order.
+- **Room-code entry and room-code display are held to different floors on purpose.**
+  Entry (`JoinRoom`) stays inside the documented 56-76 x 72-96 slot range at every common phone width. The lobby's display tiles are allowed down to 48px, because the Room code display pattern specifies no dimensions and the panel that holds them has its own padding; at 360px the documented 56px floor would not fit inside both.
+
+Files: `app/tailwind.config.js`, `docs/design_system.md`, `app/imports/ui/components/design.jsx`, `app/imports/ui/components/ConfirmationPopup.jsx`, `app/imports/ui/ColourSequence.jsx`, `app/imports/ui/Leaderboard.jsx`, `app/imports/ui/EndLeaderboard.jsx`, and `Splash.jsx`, `PlayRoute.jsx`, `JoinRoom.jsx`, `PlayerLobby.jsx`, `GameModeSelector.jsx`, `CustomGameSettings.jsx`, `GamePage.jsx`, `GlobalLeaderboard.jsx`, `Account.jsx` under `app/imports/ui/pages/`.
+
+---
 ## 2026-09-22 - Production target moves to ECS on Fargate, with Terraform for the infrastructure
 
 The production design for replacing the single EC2 instance was worked out and recorded in `docs/ecs-target-architecture.md` (decisions D1-D39), and the Terraform to build it now exists under `infra/terraform/`.
@@ -52,6 +74,17 @@ Things that are not obvious from the diff:
   `envs/dev` differs from `envs/prod` only in values: `FARGATE_SPOT`, 1-2 tasks, its own cluster, ECR repository, secret, log group and domain (`ecs-dev.kimply.online`).
   A second NAT gateway would have cost more than the whole dev environment, so dev routes through production's and reads its ID from production's Terraform state.
   That is the one resource the environments share, and the cost is a real coupling: replacing production's NAT cuts dev off from its database until dev is re-applied.
+- **Development shares production's load balancer, and both canaries slow to 15 minutes (D42).**
+  The bill was about US$160/month once credits run out, and the application itself was only about an eighth of it: the rest was a NAT gateway, two load balancers, nine public IPv4 addresses and two canaries.
+  Development's own ALB cost more than its compute, so it now serves from production's by host header and runs 0.25 vCPU / 0.5 GB, against measured usage of about 105 MB at ~1% CPU.
+  Production stays at 0.5 vCPU: its peak is idle-dominated, autoscaling needs four to five minutes to add a task, and DDP connections stick to the task they landed on, so a burst has to be absorbed by the tasks already running rather than by scaling out.
+  The cost is coupling: development now depends on production's listener and security group as well as its NAT gateway, and ECS waits longer on a slower canary before completing a deployment.
+  The migration has one trap, now in the runbook: deleting the old ALB's security group stalls until the task group's ingress rule stops referencing it, and Terraform does not order those two against each other.
+- **DNS moves to Route 53, because GoDaddy forwarding broke deep links (D41).**
+  `https://kimply.online/play` reached a GoDaddy 404: forwarding keeps the domain but drops the path, which A3 recorded as a known limitation and which turned out to matter as soon as anyone shared a link.
+  No record type at GoDaddy can point a bare domain at a load balancer; Route 53's ALIAS can, so the registrar stays and only the nameservers move.
+  Terraform now writes the certificate validation records too, so a renewal can no longer fail because someone deleted a hand-pasted CNAME.
+  The zone is created and fully populated before the nameservers change, so the switch is a cutover rather than a build.
 - **`www.kimply.online` and `dev.kimply.online` now point at the load balancers.**
   `ROOT_URL`, the Terraform `domain_name` and the workflow's `service_url` moved together, because the app tells the browser where to open its DDP socket and a Terraform precondition keeps the first two in step.
   DNS moves before the deploy: a `ROOT_URL` the DNS does not yet serve gives a page that loads and a game that cannot connect, and it fails the canary, which now rolls deploys back.

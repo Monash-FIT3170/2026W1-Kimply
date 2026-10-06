@@ -14,10 +14,10 @@ const SHAPE_ICONS = {
 };
 
 const COLOURS = {
-  red:    { active: '#ff2d55', dim: '#c0203e' },
+  red: { active: '#ff2d55', dim: '#c0203e' },
   yellow: { active: '#ffd60a', dim: '#b89800' },
-  green:  { active: '#30d158', dim: '#1e8a3a' },
-  blue:   { active: '#0a84ff', dim: '#0a5ab5' },
+  green: { active: '#30d158', dim: '#1e8a3a' },
+  blue: { active: '#0a84ff', dim: '#0a5ab5' },
 };
 
 const TILE_ORDER = ['red', 'yellow', 'green', 'blue'];
@@ -119,7 +119,7 @@ export const ColourSequence = ({
     onColourClick(colourId);
   };
   return (
-    <div style={{ '--tile-grid': 'min(360px, 90vw, 38dvh)' }}>
+    <div style={{ '--tile-grid': 'min(360px, calc(100vw - 48px), 38dvh)' }}>
       <p
         style={{
           color: 'white',
@@ -140,7 +140,7 @@ export const ColourSequence = ({
         style={{
           display: 'grid',
           gridTemplateColumns: '1fr 1fr',
-          gap: '6px',
+          gap: '8px',
           width: 'var(--tile-grid)',
           margin: '0 auto',
         }}
@@ -157,8 +157,8 @@ export const ColourSequence = ({
               disabled={!playerCanInput}
               onClick={() => handleTileClick(colourId)}
               style={{
-                width: 'calc(var(--tile-grid) / 2 - 3px)',
-                height: 'calc(var(--tile-grid) / 2 - 3px)',
+                width: 'calc(var(--tile-grid) / 2 - 4px)',
+                height: 'calc(var(--tile-grid) / 2 - 4px)',
                 backgroundColor: bg,
                 display: 'flex',
                 alignItems: 'center',

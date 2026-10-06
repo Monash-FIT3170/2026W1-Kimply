@@ -143,6 +143,98 @@ Work from `infra/terraform/envs/dev`.
 6. In the **development** Atlas cluster, allowlist the shared NAT IP (`terraform output -raw nat_gateway_id` egresses through production's Elastic IP, `terraform -chdir=../prod output -raw nat_public_ip`).
 7. Start the tasks, add the `ecs-dev` CNAME, then set `canary_enabled = true`, as in production steps 7-9.
 
+## Moving DNS to Route 53 (D41)
+
+GoDaddy remains the registrar. Only the nameservers change.
+Each phase is safe to stop at.
+
+**Phase 1: build the zone while GoDaddy is still answering.**
+`manage_dns` is already set in both environments.
+
+The production certificate gains the apex, so it is reissued, and ACM validates against whichever nameservers are live: still GoDaddy's.
+Terraform writes the records into Route 53, which nobody is asking yet, so request the certificate first and publish its record by hand one last time:
+
+```bash
+terraform -chdir=envs/prod apply -target=module.kimply.aws_acm_certificate.app
+terraform -chdir=envs/prod output acm_validation_records
+```
+
+Add the record for `kimply.online` as a CNAME at GoDaddy.
+`www` keeps the record it already has, because ACM reuses one validation token per domain per account.
+Then build the rest:
+
+```bash
+terraform -chdir=envs/prod apply     # hosted zone, ALIAS records, validation records, DMARC
+terraform -chdir=envs/dev  apply     # dev records in the same zone
+terraform -chdir=envs/prod output hosted_zone_nameservers
+```
+
+Dev's certificate is reissued too, dropping its retired build-time name, and it validates against the record already at GoDaddy.
+
+Nothing changes yet: the zone is not authoritative until the registrar points at it.
+Check it answers correctly by querying it directly, where `ns-xxx` is one of those nameservers:
+
+```bash
+dig +short @ns-xxx.awsdns-xx.com kimply.online
+dig +short @ns-xxx.awsdns-xx.com www.kimply.online
+dig +short @ns-xxx.awsdns-xx.com dev.kimply.online
+dig +short @ns-xxx.awsdns-xx.com _dmarc.kimply.online TXT
+```
+
+The apex must return load balancer addresses, not GoDaddy's forwarding servers.
+
+**Phase 2: switch the nameservers** at GoDaddy (Domain settings, Nameservers, "I'll use my own") to the four from the output.
+Propagation takes up to a couple of hours, during which some resolvers still use GoDaddy. Both answer correctly, so nobody notices.
+Afterwards, delete GoDaddy's domain forwarding; the apex now resolves to the load balancer.
+Leave GoDaddy's other records in place for a while: pointing the nameservers back is an instant rollback, but only while they still exist.
+
+The retired `ecs` and `ecs-dev` names (D39) are not carried into Route 53, so their GoDaddy records and validation records can go at the same time.
+
+**Phase 3 (optional): make the apex canonical.** One PR:
+- `infra/ecs/task-definition.prod.json`: `ROOT_URL` to `https://kimply.online`
+- `envs/prod/main.tf`: `domain_name` to `"kimply.online"`, and `redirect_hosts = ["www.kimply.online"]`
+- `.github/workflows/deploy.yml`: that branch's `service_url`
+
+Then apply, with `check_apex_redirect = false`: the apex is the canonical name now, so there is no redirect left to watch.
+
+## Sharing production's load balancer (D42)
+
+Development has no load balancer of its own. It registers its target group on production's HTTPS listener with a host-header rule, attaches its own certificate for SNI, and its DNS alias points at production's ALB.
+
+Deleting development's existing load balancer needs its deletion protection turned off first, because Terraform cannot destroy a protected one:
+
+```bash
+aws elbv2 modify-load-balancer-attributes --region ap-southeast-2 \
+  --load-balancer-arn "$(terraform -chdir=envs/dev state show module.kimply.aws_lb.app 2>/dev/null | awk '/^ *arn /{print $3}' | tr -d '"')" \
+  --attributes Key=deletion_protection.enabled,Value=false
+
+terraform -chdir=envs/prod apply    # publishes the shared_alb output first
+terraform -chdir=envs/dev  apply    # rule, certificate, DNS alias, then its own ALB goes
+```
+
+Production must be applied first: development reads `shared_alb` from its state, as it already reads the NAT gateway id.
+
+Expect a short interruption on `dev.kimply.online` while DNS moves from one load balancer to the other. Production is untouched.
+
+**If the apply hangs on "Still destroying" the old ALB security group**, it is waiting on a reference it cannot see: AWS refuses to delete a security group while another group's rule points at it, and the task group's ingress rule is updated by a separate resource in the same apply.
+Repoint it by hand, to exactly what Terraform wants, and the pending delete succeeds on its next retry:
+
+```bash
+aws ec2 modify-security-group-rules --region ap-southeast-2 \
+  --group-id <task security group> \
+  --security-group-rules 'SecurityGroupRuleId=<rule id>,SecurityGroupRule={IpProtocol=tcp,FromPort=3000,ToPort=3000,ReferencedGroupId=<the shared ALB security group>,Description="App traffic from the ALB only"}'
+```
+
+Find the rule with:
+
+```bash
+aws ec2 describe-security-group-rules --region ap-southeast-2 \
+  --filters Name=group-id,Values=<task security group> \
+  --query 'SecurityGroupRules[?!IsEgress].[SecurityGroupRuleId,ReferencedGroupInfo.GroupId]' --output text
+```
+
+A stale `dev.kimply.online` lookup afterwards is usually negative caching from while the record was broken, not a real failure. Check against the zone's own nameservers before chasing it.
+
 ## Cutover
 
 The app's `ROOT_URL` is what the browser opens its DDP socket against, so **DNS moves first**.
