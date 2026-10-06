@@ -9,8 +9,9 @@ import { ColourSequence } from '../ColourSequence.jsx';
 import { Leaderboard } from '../Leaderboard.jsx';
 import { EndLeaderboard } from '../EndLeaderboard.jsx';
 import { EliminationFeed } from '../EliminationFeed.jsx';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { TileLattice } from '../components/design';
+import { ConfirmationPopup } from '../components/ConfirmationPopup.jsx';
 import { ROUND_TIMER_SECONDS as ROUND_SECONDS, LEVEL_UP_TOAST_MS, DEFAULT_STARTING_LIVES } from '../../constants';
 
 const seqSeenKey = (gameId, roundId) => `seqSeen:${gameId}:${roundId}`;
@@ -28,16 +29,33 @@ export const GamePage = () => {
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(true);
   const [showPowerupPopup, setShowPowerupPopup] = useState(false);
   const [completedRoundId, setCompletedRoundId] = useState(null);
+  const [showLeavePopup, setShowLeavePopup] = useState(false);
+  const [leaveError, setLeaveError] = useState('');
 
   const location = useLocation();
+  const navigate = useNavigate();
   const playerNameFromLobby = location.state?.playerName || 'Demo Player';
   const routeGameMode = location.state?.gameMode;
   const roomPin = location.state?.pin;
   const lobbyPlayerId = location.state?.playerId;
   const accountId = location.state?.playerAccount?._id || null;
+  const playerAccount = location.state?.playerAccount;
   // No 'demo' fallback: the publications are scoped by gameId, so a placeholder
   // would subscribe to a game that does not exist and hang on LOADING forever.
   const gameId = roomPin || null;
+
+  const handleLeaveGame = () => {
+    Meteor.call('players.leaveGame', playerId, (error) => {
+      if (error) {
+        setLeaveError('Could not leave the game. Please try again.');
+        return;
+      }
+
+      localStorage.removeItem(`gamePlayerId:${gameId}`);
+      localStorage.removeItem('reconnectData');
+      navigate('/play', { replace: true, state: playerAccount ? { playerAccount } : undefined });
+    });
+  };
 
   const playTurnStartSound = () => {
     const AudioCtor = window.AudioContext || window.webkitAudioContext;
@@ -329,22 +347,42 @@ export const GamePage = () => {
   if (player.eliminated || player.completeRound) {
     const isEliminated = player.eliminated;
     return (
-      <div className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-[#1a0533] to-[#0d1b4b] px-4 py-10 text-center">
-        <TileLattice opacity={0.06} />
-        <main className="relative z-10 flex w-full max-w-lg flex-col items-center gap-5">
-          <p className="font-mono text-xs font-bold uppercase tracking-[0.3em] text-fg3">Live round activity</p>
-          <h1 className="font-outfit text-3xl font-extrabold text-fg sm:text-4xl">
-            {isEliminated ? 'You are spectating' : 'Round complete'}
-          </h1>
-          <p className="max-w-md font-manrope text-sm leading-6 text-fg2">
-            {isEliminated
-              ? 'You are out of this game, but you can still follow the remaining players.'
-              : 'Nice work. Follow the remaining players until the next round begins.'}
-          </p>
-          <Leaderboard gameId={gameId} currentPlayerId={playerId} />
-        </main>
-        <EliminationFeed gameId={gameId} />
-      </div>
+      <>
+        <ConfirmationPopup
+          isOpen={showLeavePopup}
+          onConfirm={handleLeaveGame}
+          onCancel={() => setShowLeavePopup(false)}
+          title="Leave game?"
+          message="You will stop spectating and return to the play screen. The remaining players can continue their round."
+        />
+        <div className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-[#1a0533] to-[#0d1b4b] px-4 py-10 text-center">
+          <TileLattice opacity={0.06} />
+          <main className="relative z-10 flex w-full max-w-lg flex-col items-center gap-5">
+            <p className="font-mono text-xs font-bold uppercase tracking-[0.3em] text-fg3">Live round activity</p>
+            <h1 className="font-outfit text-3xl font-extrabold text-fg sm:text-4xl">
+              {isEliminated ? 'You are spectating' : 'Round complete'}
+            </h1>
+            <p className="max-w-md font-manrope text-sm leading-6 text-fg2">
+              {isEliminated
+                ? 'You are out of this game, but you can still follow the remaining players.'
+                : 'Nice work. Follow the remaining players until the next round begins.'}
+            </p>
+            <Leaderboard gameId={gameId} currentPlayerId={playerId} />
+            {leaveError && <p role="alert" className="font-manrope text-sm text-red-300">{leaveError}</p>}
+            <button
+              type="button"
+              onClick={() => {
+                setLeaveError('');
+                setShowLeavePopup(true);
+              }}
+              className="min-h-11 rounded-[10px] border border-hairline bg-surface px-5 py-3 font-outfit text-xs font-semibold uppercase tracking-[0.1em] text-fg2 transition-colors hover:bg-surface-2 hover:text-fg"
+            >
+              Leave game
+            </button>
+          </main>
+          <EliminationFeed gameId={gameId} />
+        </div>
+      </>
     );
   }
 

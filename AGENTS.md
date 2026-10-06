@@ -10,7 +10,7 @@ Shared guidance for any coding agent working in this repository (Cursor, Claude 
 > If you change any of those things, update the matching table before you finish, and add an entry to [docs/decision-log.md](docs/decision-log.md) in the same change.
 > See [Maintaining this file](#maintaining-this-file) at the bottom.
 
-**Last verified against the codebase:** 2026-09-21
+**Last verified against the codebase:** 2026-10-06
 
 ---
 
@@ -364,6 +364,7 @@ PIN alphabet is `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (`rooms.js:12`), generated wi
 | `players.submitSequence` | 122 | `playerId, attemptedSequence` | Grades the attempt. 6-9 DB round-trips, plus 4 more if it triggers a round advance |
 | `players.timeoutTurn` | 415 | `playerId` | Deducts a life and updates the public round status |
 | `players.timeoutRound` | 461 | `playerId` | Eliminates a player whose standard-round timer expires |
+| `players.leaveGame` | 495 | `playerId` | Marks a spectator eliminated while retaining their result, then rechecks the winner and round progress |
 | `rounds.advance` | 218 | `currentRoundId` | Marks the round advanced, inserts the next one, moves active players onto it |
 
 Private helpers: `checkWinner(gameId)` at `:13`, `advanceRoundIfReady(round)` at `:67`.
@@ -431,6 +432,7 @@ How to write and run them is the `test` skill. What exists today:
 | `sequence.test.js` | `imports/api/sequence.js` (the copy the game does not use) |
 | `publications.test.js` | scoped `rounds` / `players` / `leaderboard` pubs, no `attemptedSequence` |
 | `leaderboardModel.test.js` | live leaderboard row helpers in `leaderboardModels.js` |
+| `leaveGame.test.js` | spectator departure retains their result and allows the game to finish |
 
 **Not covered:** any authorization case, any concurrency or race scenario, `rooms.start`, `rooms.disconnect`, `rooms.updateGameName`, `rooms.reconnect`.
 

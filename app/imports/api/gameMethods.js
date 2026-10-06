@@ -492,6 +492,30 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       return { success: true, eliminated: true };
     },
 
+    // Let a spectator stop watching without keeping the remaining players waiting.
+    async 'players.leaveGame'(playerId) {
+      const player = await PlayersCollection.findOneAsync(playerId);
+      if (!player) throw new Meteor.Error('not-found', 'Player not found');
+
+      const round = await RoundsCollection.findOneAsync(player.roundId);
+
+      await PlayersCollection.updateAsync(player._id, {
+        $set: {
+          eliminated: true,
+          completeRound: false,
+          roundStatus: 'Eliminated',
+          currentLevel: round?.level ?? round?.lengthOfSequence ?? player.currentLevel,
+          eliminatedRound: player.eliminatedRound ?? (round?.roundNumber ?? round?.lengthOfSequence - 3),
+          eliminatedAt: new Date(),
+        },
+      });
+
+      await checkWinner(player.gameId, player.isBattleRoyale ?? false);
+      if (round) await advanceRoundIfReady(round);
+
+      return true;
+    },
+
     // advance game to next round
     async 'rounds.advance'(currentRoundId) {
       // get current round

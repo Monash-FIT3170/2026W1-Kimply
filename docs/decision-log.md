@@ -20,6 +20,21 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-06 - Spectators can leave a live game without blocking it
+
+The spectator view now offers a confirmed **Leave game** action. It marks the
+player eliminated, retains their game and leaderboard records, and then
+rechecks the winner and whether the current round can advance before returning
+them to the play screen.
+
+Navigating alone would have left an active player document behind because the
+DDP connection remains open; that could keep other players waiting
+indefinitely. Marking the player eliminated removes them from active-round
+calculations while preserving their final score for the end leaderboard.
+
+Files: `app/imports/ui/pages/GamePage.jsx`, `app/imports/api/gameMethods.js`,
+`app/tests/leaveGame.test.js`, `AGENTS.md`.
+
 ## 2026-09-22 - Production target moves to ECS on Fargate, with Terraform for the infrastructure
 
 The production design for replacing the single EC2 instance was worked out and recorded in `docs/ecs-target-architecture.md` (decisions D1-D39), and the Terraform to build it now exists under `infra/terraform/`.
