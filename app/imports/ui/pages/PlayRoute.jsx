@@ -201,7 +201,10 @@ export function PlayRoute() {
               style={{ caretColor: PRIMARY }}
             />
           ) : (
-            <div className="flex items-center gap-3 rounded-[14px] border border-hairline bg-surface px-4 py-3.5">
+            <div
+              onClick={() => setEditing(true)}
+              className="flex items-center gap-3 rounded-[14px] border border-hairline bg-surface px-4 py-3.5"
+            >
               <Avatar letter={trimmedName[0]?.toUpperCase()} color={avatarColor(trimmedName)} size={36} />
               <span className="flex-1 font-outfit text-lg font-semibold text-fg">{trimmedName}</span>
               <button
