@@ -103,12 +103,12 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
         <TopBar onBack={() => navigate('/play', { state: { playerAccount } })} />
       </div>
 
-      <div className="relative z-10 flex flex-1 flex-col items-center px-6 pb-12">
+      <div className="relative z-10 flex flex-1 flex-col items-center px-6 pb-10 xs:px-7 xs:pb-12">
         <div
           className="mb-7 flex flex-col items-center text-center"
           style={{ animation: 'leaderboardTitleIn 0.7s ease both' }}
         >
-          <h1 className="font-outfit text-5xl font-extrabold tracking-tight">Final Leaderboard</h1>
+          <h1 className="font-outfit text-4xl font-extrabold tracking-tight xs:text-5xl">Final Leaderboard</h1>
           {currentRank && (
             <div
               className="mt-4 flex flex-col items-center gap-2"
@@ -182,7 +182,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
                     : `${group[0].name}${group.length > 1 ? ` +${group.length - 1}` : ''}`}
                 </span>
                 <span
-                  className="rounded-full px-2 py-1 text-center font-mono font-bold text-[11px] uppercase tracking-widest"
+                  className="rounded-full px-2 py-1 text-center font-mono text-[11px] font-bold uppercase tracking-widest"
                   style={{
                     color: medal.color,
                     background: `color-mix(in oklab, ${medal.color} ${medalIndex === 0 ? 22 : medalIndex === 1 ? 14 : 18}%, transparent)`,
