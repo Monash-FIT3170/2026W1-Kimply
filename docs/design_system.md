@@ -2,7 +2,7 @@
 
 Multiplayer memory challenge. This document is the single source of truth for how Kimply looks, sounds, and behaves. Check here before designing or building anything new.
 
-**Status:** v0.1 · Active
+**Status:** v0.2 · Active
 **Owner:** Design
 
 ---
@@ -140,20 +140,28 @@ Mono uppercase tracked labels sit above titles — they are the game's HUD voice
 | `--s-2` | 8 | Icon-to-text gap, tight inline rows |
 | `--s-3` | 12 | Standard gap between siblings |
 | `--s-4` | 16 | Compact card padding, button vertical padding |
-| `--s-5` | 24 | Default card padding |
+| `--s-5` | 24 | Default card padding, phone screen-edge padding |
 | `--s-6` | 32 | Between major blocks |
 | `--s-7` | 48 | Desktop screen-edge padding |
 | `--s-8` | 64 | Hero breathing room |
 
 ### Breakpoints
 
-| Range | Layout |
-|---|---|
-| ≤ 480px | Single column. Route cards stack. Player list 1 col. CTAs full-width. |
-| 481–1024px | 2-col route cards. Player list 1–2 cols. |
-| ≥ 1025px | 2-col route cards. Player list `auto-fill, minmax(260px, 1fr)`. Max content 720–1080px. |
+| Range | Layout | Screen-edge padding |
+|---|---|---|
+| ≤ 480px | Single column. Route cards stack. Player list 1 col. CTAs full-width. | `--s-5` (24) |
+| 481–1024px | 2-col route cards. Player list 1–2 cols. | `--s-7` (48), or 28 where a screen predates this rule |
+| ≥ 1025px | 2-col route cards. Player list `auto-fill, minmax(260px, 1fr)`. Max content 720–1080px. | `--s-7` (48) |
 
 Use flex/grid with `gap`. Never margin-based spacing between siblings.
+
+**Auto-placed grids must collapse before they overflow.** Write the track floor as
+`minmax(min(100%, 280px), 1fr)`, never `minmax(280px, 1fr)` — a bare minimum forces
+horizontal scroll once the container is narrower than the floor.
+
+In Tailwind the 480px boundary is the `xs` screen (`481px`), so phone styles are the
+unprefixed base and `xs:` is everything above. Do not reach for `sm:` (640px) to mean
+"not a phone"; that leaves 481–639px on the phone treatment.
 
 ---
 
@@ -387,3 +395,4 @@ The system grows by addition, not by drift.
 | Version | Date | Change |
 |---|---|---|
 | v0.1 | 2026-08-29 | Initial system. Covers brand, tokens, components, and patterns for the room create / join flow. |
+| v0.2 | 2026-09-21 | Spacing scale gains a phone screen-edge value (`--s-5`, 24px); breakpoint table gains a screen-edge column, the `min(100%, ...)` grid-track rule, and the `xs` (481px) Tailwind boundary. |

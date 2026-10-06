@@ -13,7 +13,7 @@ export function createLiveLeaderboardRows(players, currentRound) {
       id: player._id,
       name: player.name,
       lives: player.lives ?? 0,
-      level: player.eliminated ? player.eliminatedRound ?? currentLevel : currentLevel,
+      level: player.eliminated ? (player.eliminatedRound ?? currentLevel) : currentLevel,
       status: getPlayerStatus(player),
     }))
     .sort((a, b) => {
