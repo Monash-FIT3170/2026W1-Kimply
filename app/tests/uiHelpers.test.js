@@ -6,6 +6,29 @@ import {
   roomCodeFromSearchParams,
 } from '/imports/ui/roomCode';
 import { combineKeyHandlers, removeOnBackspace, submitOnEnter } from '/imports/ui/keyboard';
+import { loadUsername, saveUsername, USERNAME_STORAGE_KEY } from '/imports/ui/savedUsername';
+
+function memoryStorage(initial = {}) {
+  const data = { ...initial };
+  return {
+    data,
+    getItem: (key) => (key in data ? data[key] : null),
+    setItem: (key, value) => {
+      data[key] = String(value);
+    },
+  };
+}
+
+function throwingStorage() {
+  return {
+    getItem() {
+      throw new Error('blocked');
+    },
+    setItem() {
+      throw new Error('blocked');
+    },
+  };
+}
 
 function keyEvent(key) {
   return {
@@ -122,6 +145,37 @@ describe('UI helpers', function () {
       )(event);
 
       assert.deepStrictEqual(calls, ['enter']);
+    });
+  });
+
+  describe('savedUsername', function () {
+    it('returns an empty name when nothing is saved', function () {
+      assert.strictEqual(loadUsername(memoryStorage()), '');
+    });
+
+    it('saves a trimmed name and loads it back', function () {
+      const storage = memoryStorage();
+      saveUsername('  Ian  ', storage);
+      assert.strictEqual(storage.data[USERNAME_STORAGE_KEY], 'Ian');
+      assert.strictEqual(loadUsername(storage), 'Ian');
+    });
+
+    it('does not overwrite a saved name with a blank one', function () {
+      const storage = memoryStorage({ [USERNAME_STORAGE_KEY]: 'Ian' });
+      saveUsername('   ', storage);
+      assert.strictEqual(loadUsername(storage), 'Ian');
+    });
+
+    it('caps a saved name at the username input length', function () {
+      const storage = memoryStorage();
+      saveUsername('x'.repeat(50), storage);
+      assert.strictEqual(loadUsername(storage).length, 30);
+    });
+
+    it('falls back to an empty name when storage is unavailable', function () {
+      assert.strictEqual(loadUsername(null), '');
+      assert.strictEqual(loadUsername(throwingStorage()), '');
+      assert.doesNotThrow(() => saveUsername('Ian', throwingStorage()));
     });
   });
 });
