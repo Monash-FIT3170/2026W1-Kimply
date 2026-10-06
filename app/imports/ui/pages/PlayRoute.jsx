@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Meteor } from 'meteor/meteor';
 import {
@@ -16,6 +16,8 @@ import {
 } from '../components/design';
 import { ReconnectPopup } from '../components/ReconnectPopup';
 import { submitOnEnter } from '../keyboard';
+import { signOut, useSessionResuming, useSignedInAccount } from '../accountSession';
+import { loadUsername, saveUsername, USERNAME_MAX_LENGTH } from '../savedUsername';
 
 function RouteCard({ kind, title, blurb, color, primary, onClick, disabled }) {
   return (
@@ -78,15 +80,26 @@ function RouteCard({ kind, title, blurb, color, primary, onClick, disabled }) {
 
 export function PlayRoute() {
   const { state } = useLocation();
-  const signedInAccount = state?.playerAccount;
+  const signedInAccount = useSignedInAccount();
+  const sessionResuming = useSessionResuming();
 
-  const [name, setName] = useState(signedInAccount?.displayName || '');
-  const [editing, setEditing] = useState(!signedInAccount?.displayName);
+  const [name, setName] = useState(() => signedInAccount?.displayName || loadUsername());
+  const [editing, setEditing] = useState(() => !name.trim());
+  // Set once the player types, so a session that resumes late never overwrites their name.
+  const nameTyped = useRef(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
   const wasKicked = state?.kicked === true;
+
+  // A stored session resumes after the first render, so fill the name in once it arrives.
+  // It replaces a prefilled name too: a signed-in account's display name wins.
+  useEffect(() => {
+    if (!signedInAccount?.displayName || nameTyped.current) return;
+    setName(signedInAccount.displayName);
+    setEditing(false);
+  }, [signedInAccount?.displayName]);
 
   const trimmedName = name.trim();
   const hasName = trimmedName.length > 0;
@@ -138,6 +151,7 @@ export function PlayRoute() {
     if (!hasName || loading) return;
     setLoading(true);
     setError('');
+    saveUsername(trimmedName);
 
     Meteor.call('rooms.create', trimmedName, signedInAccount?._id, (err, result) => {
       setLoading(false);
@@ -154,14 +168,15 @@ export function PlayRoute() {
 
       // localStorage.setItem('reconnectData', JSON.stringify(reconnectData));
       navigate(`/play/modes/${result.pin}`, {
-        state: { playerName: trimmedName, isHost: true, playerId: result.hostId, playerAccount: signedInAccount },
+        state: { playerName: trimmedName, isHost: true, playerId: result.hostId },
       });
     });
   };
 
   const handleJoin = () => {
     if (!hasName) return;
-    navigate('/play/join', { state: { playerName: trimmedName, playerAccount: signedInAccount } });
+    saveUsername(trimmedName);
+    navigate('/play/join', { state: { playerName: trimmedName } });
   };
 
   return (
@@ -174,7 +189,6 @@ export function PlayRoute() {
         <div className="flex min-w-0 items-center gap-2 xs:gap-3">
           <Link
             to="/leaderboard"
-            state={{ playerAccount: signedInAccount }}
             className="inline-flex min-h-11 items-center rounded-full border border-hairline px-3.5 py-2 font-outfit text-[11px] font-bold uppercase tracking-wider text-fg2 transition-colors hover:text-fg"
           >
             Leaderboard
@@ -192,11 +206,14 @@ export function PlayRoute() {
             <input
               autoFocus
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                nameTyped.current = true;
+                setName(e.target.value);
+              }}
               onBlur={() => hasName && setEditing(false)}
               onKeyDown={submitOnEnter(() => setEditing(false), { when: () => hasName })}
               placeholder="Enter your username"
-              maxLength={30}
+              maxLength={USERNAME_MAX_LENGTH}
               className="w-full rounded-[14px] border border-hairline bg-surface px-4 py-3.5 font-outfit text-lg font-semibold text-fg outline-none placeholder:text-fg3"
               style={{ caretColor: PRIMARY }}
             />
@@ -216,8 +233,20 @@ export function PlayRoute() {
             </div>
           )}
 
-          {signedInAccount ? (
-            <p className="mt-3 text-center font-manrope text-[13px] text-fg3">Signed in as {signedInAccount.email}</p>
+          {sessionResuming ? (
+            <p className="mt-3 text-center font-manrope text-[13px] text-fg3" aria-hidden="true">
+              &nbsp;
+            </p>
+          ) : signedInAccount ? (
+            <p className="mt-3 text-center font-manrope text-[13px] text-fg3">
+              Signed in as {signedInAccount.email} ·{' '}
+              <button
+                onClick={signOut}
+                className="cursor-pointer border-none bg-transparent p-0 font-outfit font-bold text-fg"
+              >
+                Sign out
+              </button>
+            </p>
           ) : (
             <p className="mt-3 text-center font-manrope text-[13px] text-fg3">
               Want to save your stats?{' '}

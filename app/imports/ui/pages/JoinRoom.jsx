@@ -4,6 +4,8 @@ import { Meteor } from 'meteor/meteor';
 import { PRIMARY, TILE, HAIRLINE, TileLattice, Wordmark, ArrowIcon, BackChevron, FG2 } from '../components/design';
 import { combineKeyHandlers, removeOnBackspace, submitOnEnter } from '../keyboard';
 import { appendRoomCodeInput, clearCapturedInput, roomCodeFromSearchParams } from '../roomCode';
+import { useSignedInAccount } from '../accountSession';
+import { loadUsername, saveUsername, USERNAME_MAX_LENGTH } from '../savedUsername';
 
 const SLOTS = 5;
 
@@ -16,8 +18,17 @@ export function JoinRoom() {
   const inputRef = useRef(null);
   const navigate = useNavigate();
   const { state } = useLocation();
-  const [playerName, setPlayerName] = useState(state?.playerName || '');
-  const playerAccount = state?.playerAccount;
+  const [playerName, setPlayerName] = useState(() => state?.playerName || loadUsername());
+  const playerAccount = useSignedInAccount();
+  // A name the player chose (passed from /play, or typed here) is never overwritten.
+  const nameChosen = useRef(Boolean(state?.playerName));
+
+  // Invite links arrive with no name. A signed-in player's display name fills it in,
+  // including when their session resumes after the first render. It replaces a prefilled
+  // name too, so a shared device does not show the previous player's name.
+  useEffect(() => {
+    if (playerAccount?.displayName && !nameChosen.current) setPlayerName(playerAccount.displayName);
+  }, [playerAccount?.displayName]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -39,7 +50,8 @@ export function JoinRoom() {
   };
 
   const handleJoin = () => {
-    if (code.length !== SLOTS || loading) return;
+    const trimmedName = playerName.trim();
+    if (code.length !== SLOTS || !trimmedName || loading) return;
     setLoading(true);
     setError('');
     Meteor.call('rooms.join', code, playerName, playerAccount?._id, (err, res) => {
@@ -61,12 +73,12 @@ export function JoinRoom() {
       };
 
       localStorage.setItem('reconnectData', JSON.stringify(reconnectData));
+      saveUsername(trimmedName);
       navigate(`/play/${code}`, {
         state: {
           playerName,
           isHost: false,
           playerId: res.playerId,
-          playerAccount,
           gameMode: res.gameMode,
           customSettings: res.customSettings,
         },
@@ -158,10 +170,13 @@ export function JoinRoom() {
             <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg3">Username</p>
             <input
               value={playerName}
-              onChange={(e) => setPlayerName(e.target.value)}
+              onChange={(e) => {
+                nameChosen.current = true;
+                setPlayerName(e.target.value);
+              }}
               onKeyDown={submitOnEnter(handleJoin)}
               placeholder="Enter your username"
-              maxLength={30}
+              maxLength={USERNAME_MAX_LENGTH}
               className="w-full rounded-[14px] border border-hairline bg-surface px-4 py-3 font-outfit text-base font-semibold text-fg outline-none placeholder:text-fg3"
               style={{ caretColor: PRIMARY }}
             />

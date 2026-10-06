@@ -2,7 +2,7 @@
 
 Multiplayer memory challenge. This document is the single source of truth for how Kimply looks, sounds, and behaves. Check here before designing or building anything new.
 
-**Status:** v0.2 · Active
+**Status:** v0.3 · Active
 **Owner:** Design
 
 ---
@@ -284,6 +284,13 @@ Player count always renders as `n/cap`, e.g. `PLAYERS (5/8)`. Unfilled seats use
 ### Room code display
 Panel with a 4px tile-gradient band across the top edge, mono uppercase label, 5 code tiles each with a tile-colored underline, then Copy / Share ghost buttons.
 
+### Third-party sign-in
+Sits below the form's primary CTA, never above it: email and password stays the primary path.
+A divider separates the two: 1px `--hairline` rules either side of a mono uppercase `OR` label in `--fg-3`, with 20px above and below.
+The provider button is the provider's own rendered button, not a restyled one, because brand rules forbid altering it.
+For Google that is the `filled_black` theme, `pill` shape, `large` size, full card width up to Google's 400px cap, with "Sign up with Google" in Register mode and "Sign in with Google" in Sign in mode.
+The divider and button are absent entirely when the provider is not configured, rather than disabled.
+
 ---
 
 ## Voice & copy
@@ -396,3 +403,4 @@ The system grows by addition, not by drift.
 |---|---|---|
 | v0.1 | 2026-08-29 | Initial system. Covers brand, tokens, components, and patterns for the room create / join flow. |
 | v0.2 | 2026-09-21 | Spacing scale gains a phone screen-edge value (`--s-5`, 24px); breakpoint table gains a screen-edge column, the `min(100%, ...)` grid-track rule, and the `xs` (481px) Tailwind boundary. |
+| v0.3 | 2026-09-22 | Adds the Third-party sign-in pattern for Google sign-in on the Account page. |

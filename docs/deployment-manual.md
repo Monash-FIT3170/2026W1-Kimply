@@ -460,6 +460,7 @@ stat -c '%a %U:%G' .env      # MUST print: 600 root:root
 ```
 
 Fill in `APP_IMAGE`, `DOMAIN`, `ROOT_URL`, `LETSENCRYPT_EMAIL`, `MONGO_URL`, `AWS_REGION`, `ECR_REGISTRY`, `ECR_REPOSITORY`.
+`GOOGLE_CLIENT_ID` is optional and can stay empty; see [google-sign-in.md](google-sign-in.md).
 
 `ROOT_URL` must be the **public HTTPS origin**.
 Meteor puts it in `__meteor_runtime_config__`, so a wrong value breaks the client's DDP endpoint.
@@ -498,6 +499,22 @@ docker compose -f docker-compose.prod.yml --env-file .env up -d --force-recreate
 ```
 
 Enabling HSTS before successful issuance locks browsers out of the site.
+
+### 9f. Google sign-in (optional)
+
+Google sign-in is off until `GOOGLE_CLIENT_ID` is set, and the setup is the same OAuth client for every environment.
+It is documented once, for the ECS stack that now serves traffic, in **[google-sign-in.md](google-sign-in.md)**.
+
+On these instances the value is a line in `/opt/kimply/.env`, which `docker-compose.prod.yml` passes to the container:
+
+```bash
+cd /opt/kimply
+grep GOOGLE_CLIENT_ID .env || echo 'GOOGLE_CLIENT_ID=<CLIENT_ID>' | sudo tee -a .env
+docker compose -f docker-compose.prod.yml --env-file .env up -d app
+docker compose -f docker-compose.prod.yml --env-file .env exec app printenv GOOGLE_CLIENT_ID
+```
+
+`sed -i` over a missing line silently does nothing, which is why the check above appends instead.
 
 ---
 

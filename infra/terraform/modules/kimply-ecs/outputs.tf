@@ -8,8 +8,8 @@ output "acm_validation_records" {
 }
 
 output "alb_dns_name" {
-  description = "Point each served hostname's CNAME here."
-  value       = aws_lb.app.dns_name
+  description = "The load balancer serving this environment, whether it owns it or borrows one."
+  value       = local.alb_dns_name
 }
 
 output "nat_public_ip" {
@@ -20,6 +20,16 @@ output "nat_public_ip" {
 output "nat_gateway_id" {
   description = "The NAT gateway these tasks egress through, whether created here or borrowed."
   value       = local.nat_gateway_id
+}
+
+output "hosted_zone_id" {
+  description = "The zone this environment's records live in, whether created here or shared."
+  value       = local.zone_id
+}
+
+output "hosted_zone_nameservers" {
+  description = "Set these as the domain's nameservers at the registrar. Null unless this environment created the zone."
+  value       = one(aws_route53_zone.this[*].name_servers)
 }
 
 output "cluster_name" {
@@ -40,4 +50,14 @@ output "github_deploy_role_arn" {
 
 output "github_ecr_push_role_arn" {
   value = aws_iam_role.github_ecr_push.arn
+}
+
+output "shared_alb" {
+  description = "Pass this to another environment's shared_alb so it can borrow this load balancer (D42)."
+  value = var.create_load_balancer ? {
+    https_listener_arn = one(aws_lb_listener.https[*].arn)
+    dns_name           = one(aws_lb.app[*].dns_name)
+    zone_id            = one(aws_lb.app[*].zone_id)
+    security_group_id  = one(aws_security_group.alb[*].id)
+  } : null
 }
