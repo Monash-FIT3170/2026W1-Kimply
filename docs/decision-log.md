@@ -20,6 +20,61 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-09-22 - Google sign-in
+
+Players can sign up and sign in with Google from `/account` (#105).
+It is off unless `GOOGLE_CLIENT_ID` is set, and when it is off the Account page looks exactly as it did before.
+
+Things that are not obvious from the diff:
+
+- **It plugs into the hand-rolled accounts rather than replacing them with `accounts-google`.**
+  Meteor's package would have meant `accounts-base`, `Meteor.userId()`, and a migration of every existing account for one button.
+  Instead the browser gets a signed ID token from Google Identity Services, `playerAccounts.googleSignIn` verifies it with `google-auth-library`, and the result is a normal session from #108.
+- **Linking by email is only done for a Google-verified email.**
+  A Google identity whose email matches an existing password account is linked to it, so the same player keeps one account and one history.
+  That is safe only because Google has proven the address; `email_verified: false` is refused outright.
+  An email already linked to a different Google subject is refused rather than silently re-linked.
+- **Linking removes the account's password and ends its sessions.**
+  Registration never proves who owns an email, so anyone can register a password account for someone else's address before they sign up.
+  If linking kept that password, whoever set it would share the real owner's account once the owner signed in with Google.
+  The cost is that a genuine owner who registered with a password signs in with Google from then on; `signIn` tells them so with `use-google`.
+- **The client ID comes from an environment variable, not `METEOR_SETTINGS`.**
+  `Meteor.settings` is read nowhere in the codebase, so `GOOGLE_CLIENT_ID` follows whatever path each stack already uses for configuration: plain `environment` in `infra/ecs/task-definition.{dev,prod}.json` on ECS, the root `.env` locally, and `/opt/kimply/.env` on the legacy instances.
+  It is public, unlike `MONGO_URL`, so it is not in Secrets Manager: it ships in the task definition and is visible in the page source anyway.
+  The browser reads it through `playerAccounts.googleClientId`, so a change is a task definition revision, not an image rebuild.
+- **`google-auth-library` is aliased away from the client build.**
+  `googleAuth.js` is imported by `playerAccounts.js`, which the client bundle includes through `globalLeaderboard.js`.
+  A dynamic import alone is not enough: Rspack still tries to bundle the Node-only library for the browser and fails with 14 errors, so `rspack.config.js` resolves it to nothing for the client.
+- **The verifier has a test seam**, `setGoogleVerifierForTests`, so the tests cover create, link, and refusal paths without a network call or a real Google token.
+  The override is stored on `global`, not in a module variable, because CI's `meteor test --full-app` evaluates the module twice and registers the methods from the other copy. A module variable passed locally under `npm test` and failed all six stubbed tests in CI.
+  The real verification path was exercised against the running dev server: a malformed token reaches `google-auth-library` and is rejected with its own error, which is logged server-side.
+
+Setup is in [`docs/google-sign-in.md`](google-sign-in.md): one OAuth client, its origins, and where the value lives in each stack. The new UI pattern is in `docs/design_system.md` under Third-party sign-in.
+
+Files: `app/imports/api/googleAuth.js` (new), `app/imports/api/playerAccounts.js`, `app/server/indexes.js`, `app/imports/ui/pages/Account.jsx`, `app/rspack.config.js`, `app/package.json`, `app/package-lock.json`, `app/tests/playerAccounts.test.js`, `infra/ecs/task-definition.dev.json`, `infra/ecs/task-definition.prod.json`, `docker-compose.yml`, `docker-compose.prod.yml`, `.env.production.example`, `docs/google-sign-in.md` (new), `docs/deployment-manual.md`, `docs/design_system.md`, `AGENTS.md`.
+
+## 2026-09-21 - Phones get a 24px screen-edge gutter and 44px touch targets
+
+Phone screens were cramped in two different ways and the fix is different for each.
+The game screen had no horizontal gutter at all and sized its gaps in `vw`, so the hearts, the progress dots and the Clear / Submit buttons all collapsed towards each other as the viewport narrowed.
+The room-code slots were the opposite problem: fixed at 76px and 56px, five of them plus gaps overflowed every phone width and flexbox squeezed them back down to something narrower than the design system allows.
+
+`docs/design_system.md` only ever named a *desktop* screen-edge value, so the phone gutter was whatever each screen happened to use. It is now `--s-5` (24px), recorded in the spacing table and the breakpoint table, and applied on every route. That is the value `Splash.jsx` already used, so this standardises on existing precedent rather than inventing a number.
+
+Three things that are not obvious from the diff:
+
+- **The 480px boundary is a real Tailwind screen now, not an arbitrary variant.**
+  `tailwind.config.js` declares the full `screens` object with `xs: '481px'` ahead of Tailwind's untouched defaults. The explicit object is there for ordering: `theme.extend.screens` would have appended `xs` after `2xl`, and the resulting CSS would let `xs:` beat `sm:` on the same property. Phone styles are the unprefixed base and `xs:` is everything above, so `sm:` (640px) must not be used to mean "not a phone" - that would leave 481-639px on the phone treatment.
+- **`ColourSequence`'s `--tile-grid` still hard-codes the page gutter, and has to.**
+  It is `min(360px, calc(100vw - 48px), 38dvh)`, where 48px is GamePage's 24px gutter doubled, so the two have to be changed together. The obvious cleanup - swapping the viewport term for `100%` so the grid just tracks its container - does not work and was reverted after it shipped flat tiles to the phone layout. The same variable is consumed on both axes (`width` and `height` on every tile), and in the height context a percentage resolves against the grid's own indefinite height, so the whole `min()` collapses to `auto` and each tile falls back to its content height. Any replacement has to stay percentage-free; `100cqw` with `container-type: inline-size` would work, but was not taken because it is untested here.
+- **The live leaderboard is a bottom sheet on phones and a side rail above 480px.**
+  It is one `<aside>`, not two: the closed state translates on a different axis per band (`translate-y-[120%]` under 481px, `xs:translate-x-[120%]` above), which works because Tailwind composes transforms through separate `--tw-translate-x` / `--tw-translate-y` variables. `Leaderboard` also takes its height cap from the caller now - the rail wants `max-h-[80vh]`, the sheet wants `max-h-[52vh]` so the tiles stay visible behind it - because two competing `max-h-*` classes on one element do not resolve by author order.
+- **Room-code entry and room-code display are held to different floors on purpose.**
+  Entry (`JoinRoom`) stays inside the documented 56-76 x 72-96 slot range at every common phone width. The lobby's display tiles are allowed down to 48px, because the Room code display pattern specifies no dimensions and the panel that holds them has its own padding; at 360px the documented 56px floor would not fit inside both.
+
+Files: `app/tailwind.config.js`, `docs/design_system.md`, `app/imports/ui/components/design.jsx`, `app/imports/ui/components/ConfirmationPopup.jsx`, `app/imports/ui/ColourSequence.jsx`, `app/imports/ui/Leaderboard.jsx`, `app/imports/ui/EndLeaderboard.jsx`, and `Splash.jsx`, `PlayRoute.jsx`, `JoinRoom.jsx`, `PlayerLobby.jsx`, `GameModeSelector.jsx`, `CustomGameSettings.jsx`, `GamePage.jsx`, `GlobalLeaderboard.jsx`, `Account.jsx` under `app/imports/ui/pages/`.
+
+---
 ## 2026-09-22 - Production target moves to ECS on Fargate, with Terraform for the infrastructure
 
 The production design for replacing the single EC2 instance was worked out and recorded in `docs/ecs-target-architecture.md` (decisions D1-D39), and the Terraform to build it now exists under `infra/terraform/`.
@@ -52,6 +107,17 @@ Things that are not obvious from the diff:
   `envs/dev` differs from `envs/prod` only in values: `FARGATE_SPOT`, 1-2 tasks, its own cluster, ECR repository, secret, log group and domain (`ecs-dev.kimply.online`).
   A second NAT gateway would have cost more than the whole dev environment, so dev routes through production's and reads its ID from production's Terraform state.
   That is the one resource the environments share, and the cost is a real coupling: replacing production's NAT cuts dev off from its database until dev is re-applied.
+- **Development shares production's load balancer, and both canaries slow to 15 minutes (D42).**
+  The bill was about US$160/month once credits run out, and the application itself was only about an eighth of it: the rest was a NAT gateway, two load balancers, nine public IPv4 addresses and two canaries.
+  Development's own ALB cost more than its compute, so it now serves from production's by host header and runs 0.25 vCPU / 0.5 GB, against measured usage of about 105 MB at ~1% CPU.
+  Production stays at 0.5 vCPU: its peak is idle-dominated, autoscaling needs four to five minutes to add a task, and DDP connections stick to the task they landed on, so a burst has to be absorbed by the tasks already running rather than by scaling out.
+  The cost is coupling: development now depends on production's listener and security group as well as its NAT gateway, and ECS waits longer on a slower canary before completing a deployment.
+  The migration has one trap, now in the runbook: deleting the old ALB's security group stalls until the task group's ingress rule stops referencing it, and Terraform does not order those two against each other.
+- **DNS moves to Route 53, because GoDaddy forwarding broke deep links (D41).**
+  `https://kimply.online/play` reached a GoDaddy 404: forwarding keeps the domain but drops the path, which A3 recorded as a known limitation and which turned out to matter as soon as anyone shared a link.
+  No record type at GoDaddy can point a bare domain at a load balancer; Route 53's ALIAS can, so the registrar stays and only the nameservers move.
+  Terraform now writes the certificate validation records too, so a renewal can no longer fail because someone deleted a hand-pasted CNAME.
+  The zone is created and fully populated before the nameservers change, so the switch is a cutover rather than a build.
 - **`www.kimply.online` and `dev.kimply.online` now point at the load balancers.**
   `ROOT_URL`, the Terraform `domain_name` and the workflow's `service_url` moved together, because the app tells the browser where to open its DDP socket and a Terraform precondition keeps the first two in step.
   DNS moves before the deploy: a `ROOT_URL` the DNS does not yet serve gives a page that loads and a game that cannot connect, and it fails the canary, which now rolls deploys back.
@@ -82,6 +148,59 @@ Things that are not obvious from the diff:
   `deploy/ecs-deploy.sh` waits on the outcome of its own deployment ID rather than `aws ecs wait services-stable`, because after a circuit-breaker rollback the service is stable again on the old revision and that waiter would report success.
 
 Files: `docs/ecs-target-architecture.md` (new), `infra/` (new), `deploy/ecs-deploy.sh` (new), `.github/workflows/deploy.yml`, `scripts/health-check.sh`, `AGENTS.md`, `.gitignore`.
+
+## 2026-09-22 - Account sessions persist instead of riding on router state
+
+Testers were signed out when a game ended and when they rejoined one (#108).
+The signed-in account lived only in `location.state.playerAccount`, handed from page to page by hand.
+Any navigation that did not forward it dropped it: the reconnect popup's Rejoin, the lobby's kicked and room-gone redirects, typing `/play` into the address bar, or opening an invite link in a new tab.
+Once dropped, the rest of that game ran without an `accountId`, so its result was not recorded against the account either.
+
+`register` and `signIn` now return a random session token.
+The client keeps it in `localStorage`, resumes it at startup through `playerAccounts.resume`, and every page reads the account from `useSignedInAccount()` in `imports/ui/accountSession.js`.
+`playerAccount` is gone from every `navigate(..., { state })` call.
+`/play` has a Sign out link.
+
+Things that are not obvious from the diff:
+
+- **Only the SHA-256 of a token is stored.**
+  A copy of the `playerAccounts` collection does not contain a usable session.
+  Plain SHA-256 is enough here, unlike for passwords, because the token is 43 random characters and there is nothing to brute-force.
+- **Each sign-in is its own session.**
+  Signing in on a phone does not sign out the laptop, and Sign out ends only the session it was pressed in.
+  Expired sessions are pruned whenever a new one is issued, so the array cannot grow without bound.
+- **A failed resume clears the token only on `invalid-session`.**
+  A dropped connection at startup keeps the token for the next load, rather than signing the player out because the network blinked.
+- **`GamePage` waits for a pending resume before calling `players.join`.**
+  Without that, a reload that lands on `/game` could join without the account, and the late resume would re-run the effect and join a second time.
+- **This is a session, not an authorization boundary.**
+  `rooms.create`, `rooms.join`, and `players.join` still take a client-supplied `accountId`, so a hostile client can still record results against someone else's account.
+  Moving those methods to accept the token and resolve the account server-side is the follow-up.
+- **The account's display name fills the username field when it arrives, unless the player has typed one.**
+  The session resumes after the first render, so `/play` and `/play/join` fill the name in late.
+  Checking for an empty field would let any prefilled name block it, including a remembered username from a previous player on a shared device (#119), so both pages track whether the player has typed instead.
+  `JoinRoom` also never replaces a name passed from `/play`.
+
+Files: `app/imports/api/playerAccounts.js`, `app/server/indexes.js`, `app/imports/ui/accountSession.js` (new), `app/client/main.jsx`, `app/imports/ui/pages/{Account,PlayRoute,JoinRoom,PlayerLobby,GamePage,GlobalLeaderboard}.jsx`, `app/imports/ui/EndLeaderboard.jsx`, `app/tests/playerAccounts.test.js`, `AGENTS.md`.
+
+## 2026-09-22 - The last username is remembered between visits
+
+Players had to type their username on every visit (#119).
+The last name used is now kept in `localStorage` under `kimply.username` and prefilled on `/play` and on `/play/join`, including when `/play/join` is opened from an invite link with no router state.
+
+Things that are not obvious from the diff:
+
+- **The name is saved when it is used, not while it is typed.**
+  It is written on Create Room, on Join Room from `/play`, and after a successful `rooms.join`, so a half-typed or abandoned name never replaces the last one that actually got someone into a game.
+- **A signed-in account's display name still wins over the saved name on `/play`.**
+  On a shared device, the saved name belongs to whoever played last, while a signed-in account is a stronger statement of who is at the keyboard.
+- **Storage failures are silent.**
+  Every read and write is wrapped, so private browsing or blocked site data just means the field starts empty, as it did before.
+- `JoinRoom.handleJoin` now refuses to submit with a blank name.
+  Before, pressing Enter in the code slots could call `rooms.join` with an empty name even though the button was disabled.
+
+Files: `app/imports/ui/savedUsername.js` (new), `app/imports/ui/pages/PlayRoute.jsx`, `app/imports/ui/pages/JoinRoom.jsx`, `app/tests/uiHelpers.test.js`, `AGENTS.md`.
+
 
 ## 2026-09-04 - The Quality Assurance Plan is now a document in the repo
 

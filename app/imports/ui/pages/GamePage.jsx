@@ -11,7 +11,13 @@ import { EndLeaderboard } from '../EndLeaderboard.jsx';
 import { EliminationFeed } from '../EliminationFeed.jsx';
 import { useLocation } from 'react-router-dom';
 import { TileLattice } from '../components/design';
-import { ROUND_TIMER_SECONDS as ROUND_SECONDS, LEVEL_UP_TOAST_MS, DEFAULT_STARTING_LIVES } from '../../constants';
+import { useSessionResuming, useSignedInAccount } from '../accountSession';
+import {
+  ROUND_TIMER_SECONDS as ROUND_SECONDS,
+  LEVEL_UP_TOAST_MS,
+  DEFAULT_STARTING_LIVES,
+  MAX_LIVE_FEED_ITEMS,
+} from '../../constants';
 
 const seqSeenKey = (gameId, roundId) => `seqSeen:${gameId}:${roundId}`;
 
@@ -35,7 +41,8 @@ export const GamePage = () => {
   const routeGameMode = location.state?.gameMode;
   const roomPin = location.state?.pin;
   const lobbyPlayerId = location.state?.playerId;
-  const accountId = location.state?.playerAccount?._id || null;
+  const accountId = useSignedInAccount()?._id || null;
+  const sessionResuming = useSessionResuming();
   // No 'demo' fallback: the publications are scoped by gameId, so a placeholder
   // would subscribe to a game that does not exist and hang on LOADING forever.
   const gameId = roomPin || null;
@@ -114,7 +121,8 @@ export const GamePage = () => {
   }, [gameId]);
 
   useEffect(() => {
-    if (!round?._id || playerId) return;
+    // Wait for a stored session to resume, or the player would join without their account.
+    if (!round?._id || playerId || sessionResuming) return;
     Meteor.call(
       'players.join',
       round._id,
@@ -133,7 +141,7 @@ export const GamePage = () => {
         localStorage.setItem(`gamePlayerId:${gameId}`, result);
       }
     );
-  }, [round?._id, playerId, gameId, playerNameFromLobby, lobbyPlayerId, isBattleRoyale, accountId]);
+  }, [round?._id, playerId, gameId, playerNameFromLobby, lobbyPlayerId, isBattleRoyale, accountId, sessionResuming]);
 
   useEffect(() => {
     if (!player?.roundId) return;
@@ -185,7 +193,8 @@ export const GamePage = () => {
 
   const seenLevelUpIds = useRef(new Set());
   useEffect(() => {
-    levelUpEvents.forEach((event) => {
+    // The cursor is newest-first; replay oldest-first so the cap below keeps the newest.
+    [...levelUpEvents].reverse().forEach((event) => {
       if (seenLevelUpIds.current.has(event._id)) return;
       seenLevelUpIds.current.add(event._id);
       const notice = {
@@ -195,7 +204,7 @@ export const GamePage = () => {
             ? `You have leveled up to level ${event.level}`
             : `${event.playerName} has reached level ${event.level}`,
       };
-      setLevelUpNotices((prev) => [...prev, notice]);
+      setLevelUpNotices((prev) => [...prev, notice].slice(-MAX_LIVE_FEED_ITEMS));
       // auto-dismiss like the elimination feed
       setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), LEVEL_UP_TOAST_MS);
     });
@@ -505,13 +514,16 @@ export const GamePage = () => {
           Powerup Gained: Slow Motion for one round!
         </div>
       )}
+      {/* Level-up announcements are hidden under sm: in a full lobby (~100 players) they
+          fire constantly, and on a phone the stack buries the header and the game itself.
+          Phone players still get the same information on demand from the leaderboard. */}
       <div
+        className="hidden sm:flex"
         style={{
           position: 'fixed',
           top: '18px',
           left: '18px',
           zIndex: 40,
-          display: 'flex',
           flexDirection: 'column',
           gap: '10px',
           pointerEvents: 'none',
@@ -542,7 +554,7 @@ export const GamePage = () => {
       </div>
       <div
         className="relative flex shrink-0 justify-between"
-        style={{ width: '100%', padding: 'clamp(6px, 1.5dvh, 20px) clamp(16px, 2vw, 28px)' }}
+        style={{ width: '100%', padding: 'clamp(12px, 2dvh, 20px) clamp(24px, 5vw, 28px)' }}
       >
         <span
           style={{
@@ -556,7 +568,7 @@ export const GamePage = () => {
           KIMPLY
         </span>
       </div>
-      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-start overflow-y-auto md:justify-center">
+      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-start overflow-y-auto px-6 pb-6 md:justify-center">
         {isBattleRoyale && (
           <div
             style={{
@@ -575,13 +587,20 @@ export const GamePage = () => {
             BATTLE ROYALE • 1 LIFE ONLY
           </div>
         )}
-        <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2dvh' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-start',
+            gap: 'clamp(8px, 2.5vw, 16px)',
+            marginBottom: 'clamp(16px, 2.5dvh, 24px)',
+          }}
+        >
           {Array.from({ length: totalLives }, (_, i) => i + 1).map((heart) => (
             <div
               key={heart}
               style={{
-                width: 'clamp(26px, 6dvh, 76px)',
-                height: 'clamp(26px, 6dvh, 76px)',
+                width: 'clamp(32px, 6dvh, 76px)',
+                height: 'clamp(32px, 6dvh, 76px)',
                 backgroundColor: heart <= (player?.lives ?? totalLives) ? '#e03030' : '#333',
                 borderRadius: '50%',
                 display: 'flex',
@@ -615,7 +634,7 @@ export const GamePage = () => {
             FINAL LIFE
           </div>
         )}
-        <div style={{ textAlign: 'center' }}>
+        <div style={{ width: '100%', maxWidth: 420, textAlign: 'center' }}>
           <p
             style={{
               color: 'white',
@@ -631,16 +650,16 @@ export const GamePage = () => {
             style={{
               display: 'flex',
               justifyContent: 'center',
-              gap: '0.5vw',
-              marginBottom: '2dvh',
+              gap: 'clamp(4px, 1.5vw, 10px)',
+              marginBottom: 'clamp(16px, 2dvh, 24px)',
             }}
           >
             {(round.sequence || []).map((_, i) => (
               <div
                 key={i}
                 style={{
-                  width: 'clamp(10px, 1vw, 50px)',
-                  height: 'clamp(10px, 1vw, 50px)',
+                  width: 'clamp(10px, 2.8vw, 50px)',
+                  height: 'clamp(10px, 2.8vw, 50px)',
                   borderRadius: '50%',
                   backgroundColor: i < attemptedSequence.length ? '#fff' : '#556',
                 }}
@@ -709,20 +728,21 @@ export const GamePage = () => {
             style={{
               display: 'flex',
               justifyContent: 'center',
-              gap: '1vw',
-              marginTop: '2dvh',
+              gap: 'clamp(12px, 4vw, 18px)',
+              marginTop: 'clamp(20px, 3dvh, 28px)',
             }}
           >
             <button
               onClick={handleClear}
               disabled={!playerCanInput || attemptedSequence.length === 0}
               style={{
-                width: 'clamp(100px, 8vw, 300px)',
-                height: 'clamp(34px, 5.5dvh, 60px)',
+                width: 'min(46%, 180px)',
+                minHeight: 44,
+                height: 'clamp(44px, 5.5dvh, 60px)',
                 backgroundColor: playerCanInput && attemptedSequence.length > 0 ? '#444' : '#222',
                 color: playerCanInput && attemptedSequence.length > 0 ? 'white' : '#555',
                 fontWeight: 'bold',
-                fontSize: 'clamp(10px, 1vw, 20px)',
+                fontSize: 'clamp(12px, 3vw, 20px)',
                 border: 'none',
                 borderRadius: '8px',
                 cursor: playerCanInput && attemptedSequence.length > 0 ? 'pointer' : 'not-allowed',
@@ -763,13 +783,14 @@ export const GamePage = () => {
               onClick={handleSubmit}
               disabled={!playerCanInput || attemptedSequence.length !== round.sequence.length}
               style={{
-                width: 'clamp(100px, 8vw, 300px)',
-                height: 'clamp(34px, 5.5dvh, 60px)',
+                width: 'min(46%, 180px)',
+                minHeight: 44,
+                height: 'clamp(44px, 5.5dvh, 60px)',
                 backgroundColor:
                   playerCanInput && attemptedSequence.length === round.sequence.length ? '#666' : '#2a2a3a',
                 color: playerCanInput && attemptedSequence.length === round.sequence.length ? 'white' : '#444',
                 fontWeight: 'bold',
-                fontSize: 'clamp(10px, 1vw, 20px)',
+                fontSize: 'clamp(12px, 3vw, 20px)',
                 border: 'none',
                 borderRadius: '8px',
                 cursor:
@@ -787,16 +808,16 @@ export const GamePage = () => {
         type="button"
         onClick={() => setIsLeaderboardOpen((open) => !open)}
         aria-expanded={isLeaderboardOpen}
-        className="fixed right-4 top-4 z-50 rounded-full border border-hairline bg-surface px-4 py-3 font-outfit text-xs font-bold text-fg shadow-lg sm:right-6 sm:top-6 sm:text-sm"
+        className="fixed right-6 top-5 z-50 min-h-11 rounded-full border border-hairline bg-surface px-4 py-3 font-outfit text-xs font-bold text-fg shadow-lg xs:top-6 xs:text-sm"
       >
         {isLeaderboardOpen ? 'Collapse leaderboard' : 'Leaderboard'}
       </button>
       <aside
-        className={`fixed right-4 top-20 z-30 w-[calc(100vw-2rem)] max-w-[28rem] transition-transform duration-300 ease-in-out ${
-          isLeaderboardOpen ? 'translate-x-0' : 'translate-x-[120%]'
+        className={`fixed bottom-6 left-6 right-6 z-30 transition-transform duration-300 ease-in-out xs:bottom-auto xs:left-auto xs:top-20 xs:w-[calc(100vw-3rem)] xs:max-w-[28rem] ${
+          isLeaderboardOpen ? 'translate-y-0' : 'translate-y-[120%] xs:translate-x-[120%] xs:translate-y-0'
         }`}
       >
-        <Leaderboard gameId={gameId} currentPlayerId={playerId} />
+        <Leaderboard gameId={gameId} currentPlayerId={playerId} className="max-h-[52vh] xs:max-h-[80vh]" />
       </aside>
     </div>
   );
