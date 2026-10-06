@@ -32,6 +32,11 @@ const INDEXES = [
   },
   { collection: PlayerAccountsCollection, keys: { email: 1 }, options: { unique: true, name: 'email_unique' } },
   { collection: PlayerAccountsCollection, keys: { 'sessions.hash': 1 }, options: { name: 'sessions_hash' } },
+  {
+    collection: PlayerAccountsCollection,
+    keys: { googleSub: 1 },
+    options: { unique: true, sparse: true, name: 'googleSub_unique' },
+  },
 ];
 
 export async function ensureIndexes() {
