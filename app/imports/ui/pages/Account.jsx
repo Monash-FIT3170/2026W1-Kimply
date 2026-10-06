@@ -163,7 +163,7 @@ function AccountDetails({ account }) {
       <button
         onClick={save}
         disabled={saving || unchanged || !trimmed}
-        className="w-full cursor-pointer rounded-xl border-none px-4 py-3 font-outfit font-extrabold disabled:cursor-not-allowed disabled:opacity-60"
+        className="min-h-11 w-full cursor-pointer rounded-xl border-none px-4 py-3 font-outfit font-extrabold disabled:cursor-not-allowed disabled:opacity-60"
         style={{ background: PRIMARY, color: BG }}
       >
         {saving ? 'Please wait...' : 'Save Display Name'}
@@ -171,7 +171,7 @@ function AccountDetails({ account }) {
 
       <button
         onClick={signOut}
-        className="mt-3 w-full cursor-pointer rounded-xl border border-hairline bg-transparent px-4 py-2.5 font-outfit text-[12px] font-semibold uppercase tracking-[0.1em] text-fg2"
+        className="mt-3 min-h-11 w-full cursor-pointer rounded-xl border border-hairline bg-transparent px-4 py-2.5 font-outfit text-[12px] font-semibold uppercase tracking-[0.1em] text-fg2"
       >
         Sign Out
       </button>
