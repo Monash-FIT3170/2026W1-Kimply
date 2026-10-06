@@ -143,7 +143,10 @@ Things that are not obvious from the diff:
 - **This is a session, not an authorization boundary.**
   `rooms.create`, `rooms.join`, and `players.join` still take a client-supplied `accountId`, so a hostile client can still record results against someone else's account.
   Moving those methods to accept the token and resolve the account server-side is the follow-up.
-- `JoinRoom` now prefills a signed-in player's display name when opened from an invite link.
+- **The account's display name fills the username field when it arrives, unless the player has typed one.**
+  The session resumes after the first render, so `/play` and `/play/join` fill the name in late.
+  Checking for an empty field would let any prefilled name block it, including a remembered username from a previous player on a shared device (#119), so both pages track whether the player has typed instead.
+  `JoinRoom` also never replaces a name passed from `/play`.
 
 Files: `app/imports/api/playerAccounts.js`, `app/server/indexes.js`, `app/imports/ui/accountSession.js` (new), `app/client/main.jsx`, `app/imports/ui/pages/{Account,PlayRoute,JoinRoom,PlayerLobby,GamePage,GlobalLeaderboard}.jsx`, `app/imports/ui/EndLeaderboard.jsx`, `app/tests/playerAccounts.test.js`, `AGENTS.md`.
 

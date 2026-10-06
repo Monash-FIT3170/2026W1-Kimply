@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Meteor } from 'meteor/meteor';
 import {
@@ -84,6 +84,8 @@ export function PlayRoute() {
 
   const [name, setName] = useState(signedInAccount?.displayName || '');
   const [editing, setEditing] = useState(!signedInAccount?.displayName);
+  // Set once the player types, so a session that resumes late never overwrites their name.
+  const nameTyped = useRef(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -91,8 +93,9 @@ export function PlayRoute() {
   const wasKicked = state?.kicked === true;
 
   // A stored session resumes after the first render, so fill the name in once it arrives.
+  // It replaces a prefilled name too: a signed-in account's display name wins.
   useEffect(() => {
-    if (!signedInAccount?.displayName || name.trim()) return;
+    if (!signedInAccount?.displayName || nameTyped.current) return;
     setName(signedInAccount.displayName);
     setEditing(false);
   }, [signedInAccount?.displayName]);
@@ -200,7 +203,10 @@ export function PlayRoute() {
             <input
               autoFocus
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                nameTyped.current = true;
+                setName(e.target.value);
+              }}
               onBlur={() => hasName && setEditing(false)}
               onKeyDown={submitOnEnter(() => setEditing(false), { when: () => hasName })}
               placeholder="Enter your username"
@@ -225,7 +231,9 @@ export function PlayRoute() {
           )}
 
           {sessionResuming ? (
-            <p className="mt-3 text-center font-manrope text-[13px] text-fg3" aria-hidden="true">&nbsp;</p>
+            <p className="mt-3 text-center font-manrope text-[13px] text-fg3" aria-hidden="true">
+              &nbsp;
+            </p>
           ) : signedInAccount ? (
             <p className="mt-3 text-center font-manrope text-[13px] text-fg3">
               Signed in as {signedInAccount.email} ·{' '}

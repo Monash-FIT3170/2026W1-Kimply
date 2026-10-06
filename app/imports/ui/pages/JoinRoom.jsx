@@ -19,11 +19,14 @@ export function JoinRoom() {
   const { state } = useLocation();
   const [playerName, setPlayerName] = useState(state?.playerName || '');
   const playerAccount = useSignedInAccount();
+  // A name the player chose (passed from /play, or typed here) is never overwritten.
+  const nameChosen = useRef(Boolean(state?.playerName));
 
   // Invite links arrive with no name. A signed-in player's display name fills it in,
-  // including when their session resumes after the first render.
+  // including when their session resumes after the first render. It replaces a prefilled
+  // name too, so a shared device does not show the previous player's name.
   useEffect(() => {
-    if (playerAccount?.displayName && !playerName.trim()) setPlayerName(playerAccount.displayName);
+    if (playerAccount?.displayName && !nameChosen.current) setPlayerName(playerAccount.displayName);
   }, [playerAccount?.displayName]);
 
   useEffect(() => {
@@ -164,7 +167,10 @@ export function JoinRoom() {
             <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg3">Username</p>
             <input
               value={playerName}
-              onChange={(e) => setPlayerName(e.target.value)}
+              onChange={(e) => {
+                nameChosen.current = true;
+                setPlayerName(e.target.value);
+              }}
               onKeyDown={submitOnEnter(handleJoin)}
               placeholder="Enter your username"
               maxLength={30}
