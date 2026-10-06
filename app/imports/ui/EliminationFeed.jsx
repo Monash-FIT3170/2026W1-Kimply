@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Meteor } from 'meteor/meteor';
 import { useTracker } from 'meteor/react-meteor-data';
 import { PlayersCollection } from '../api/players';
-import { ELIMINATION_FEED_MS as DISPLAY_MS } from '../constants';
+import { ELIMINATION_FEED_MS as DISPLAY_MS, MAX_LIVE_FEED_ITEMS } from '../constants';
 
 export const EliminationFeed = ({ gameId }) => {
   const eliminations = useTracker(() => {
@@ -20,11 +20,14 @@ export const EliminationFeed = ({ gameId }) => {
   const timers = useRef({});
 
   useEffect(() => {
-    eliminations.forEach((entry) => {
+    // The cursor is newest-first; replay oldest-first so the cap keeps the newest.
+    [...eliminations].reverse().forEach((entry) => {
       if (seenIds.current.has(entry._id)) return;
       seenIds.current.add(entry._id);
 
-      setVisible((prev) => [...prev, entry]);
+      // Cap the stack: a big lobby eliminates players faster than the toasts expire,
+      // and on a phone an uncapped column covers the whole board.
+      setVisible((prev) => [...prev, entry].slice(-MAX_LIVE_FEED_ITEMS));
 
       timers.current[entry._id] = setTimeout(() => {
         setVisible((prev) => prev.filter((e) => e._id !== entry._id));
@@ -44,9 +47,9 @@ export const EliminationFeed = ({ gameId }) => {
     <div
       style={{
         position: 'fixed',
-        bottom: '20px',
+        bottom: 'calc(20px + env(safe-area-inset-bottom, 0px))',
         left: '20px',
-        width: '260px',
+        width: 'min(260px, calc(100vw - 40px))',
         display: 'flex',
         flexDirection: 'column',
         gap: '6px',
