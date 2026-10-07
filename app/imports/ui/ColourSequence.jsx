@@ -22,6 +22,13 @@ const COLOURS = {
 
 const TILE_ORDER = ['red', 'yellow', 'green', 'blue'];
 
+const KEY_LABELS = {
+  red: 'W',
+  yellow: 'A',
+  green: 'S',
+  blue: 'D',
+};
+
 export const ColourSequence = ({
   roundId,
   sequence = [],
@@ -204,11 +211,26 @@ export const ColourSequence = ({
                 cursor: playerCanInput ? 'pointer' : 'not-allowed',
                 opacity: playerCanInput || isPlaying ? 1 : 0.7,
                 transform: isActive ? 'scale(0.95)' : 'scale(1)',
+                position: 'relative',
               }}
             >
               <svg width="36%" height="36%" viewBox="0 0 64 64">
                 <ShapeIcon />
               </svg>
+
+              <span
+                style={{
+                  position: 'absolute',
+                  bottom: '8px',
+                  left: '10px',
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                  color: 'rgba(255,255,255,0.8)',
+                  letterSpacing: '1px',
+                }}
+              >
+                {KEY_LABELS[colourId]}
+              </span>
             </button>
           );
         })}
