@@ -184,7 +184,7 @@ export const GamePage = () => {
     if (!playerCanInput) return;
     if (!round?.sequence) return;
     if (attemptedSequence.length >= round.sequence.length) return;
-    setAttemptedSequence([...attemptedSequence, colour]);
+    setAttemptedSequence(prev => [...prev, colour]);
   };
 
   useEffect(() => {

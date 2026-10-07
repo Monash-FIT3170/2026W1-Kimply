@@ -118,6 +118,38 @@ export const ColourSequence = ({
 
     onColourClick(colourId);
   };
+
+  useEffect(() => {
+    const keyMap = {
+      w: 'red',
+      a: 'yellow',
+      s: 'green',
+      d: 'blue',
+    };
+
+    const handleKeyDown = (event) => {
+      const colourId = keyMap[event.key.toLowerCase()];
+
+      if (!colourId || !playerCanInput) return;
+
+      setClickedColour(colourId);
+      playClickSound();
+
+      setTimeout(() => {
+        setClickedColour(null);
+      }, 200);
+
+      onColourClick(colourId);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [playerCanInput, onColourClick]);
+
+
   return (
     <div style={{ '--tile-grid': 'min(360px, calc(100vw - 48px), 38dvh)' }}>
       <p
