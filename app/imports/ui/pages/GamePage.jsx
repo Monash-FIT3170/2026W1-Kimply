@@ -274,6 +274,14 @@ export const GamePage = () => {
         }
       }
 
+      if (event.key === 'Backspace') {
+        event.preventDefault();
+
+        if (playerCanInput && attemptedSequence.length > 0) {
+          setAttemptedSequence(prev => prev.slice(0, -1));
+        }
+      }
+
       if (event.code === 'Space') {
         event.preventDefault();
 
