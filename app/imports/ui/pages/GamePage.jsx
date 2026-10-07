@@ -266,6 +266,25 @@ export const GamePage = () => {
     setMessage('Try again. Repeat the flashed sequence.');
   };
 
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Enter') {
+        handleSubmit();
+      }
+
+      if (event.code === 'Space') {
+        event.preventDefault();
+        handleClear();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [playerCanInput, attemptedSequence, round]);
+
   // Reached by loading /game directly, or after a refresh drops location.state.
   // Without a room PIN there is no game to subscribe to, so say so instead of
   // sitting on LOADING indefinitely.
