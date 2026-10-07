@@ -269,12 +269,17 @@ export const GamePage = () => {
   useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.key === 'Enter') {
-        handleSubmit();
+        if (playerCanInput && attemptedSequence.length === round.sequence.length) {
+          handleSubmit();
+        }
       }
 
       if (event.code === 'Space') {
         event.preventDefault();
-        handleClear();
+
+        if (playerCanInput && attemptedSequence.length > 0) {
+          handleClear();
+        }
       }
     };
 
