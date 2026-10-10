@@ -91,6 +91,7 @@ export const GamePage = () => {
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(leaderboardOpenByDefault);
   const [showPowerupPopup, setShowPowerupPopup] = useState(false);
   const [completedRoundId, setCompletedRoundId] = useState(null);
+  const [submissionNotices, setSubmissionNotices] = useState([]);
   const [showLeavePopup, setShowLeavePopup] = useState(false);
   const [leaveError, setLeaveError] = useState('');
 
@@ -199,6 +200,11 @@ export const GamePage = () => {
     return GameEventsCollection.find({ gameId, type: 'level-up' }, { sort: { createdAt: -1 } }).fetch();
   }, [gameId]);
 
+  const submissionEvents = useTracker(() => {
+    if (!gameId) return [];
+    return GameEventsCollection.find({ gameId, type: 'correct-submission' }, { sort: { createdAt: -1 } }).fetch();
+  }, [gameId]);
+
   useEffect(() => {
     // Wait for a stored session to resume, or the player would join without their account.
     if (!round?._id || playerId || sessionResuming) return;
@@ -228,6 +234,7 @@ export const GamePage = () => {
     setMessage('');
     setSecondsLeft(30);
     setCompletedRoundId(null);
+    submittedRoundRef.current = false;
     if (gameId && localStorage.getItem(seqSeenKey(gameId, player.roundId))) {
       // already watched this round (e.g. refresh): skip the replay
       setPlayerCanInput(true);
@@ -274,6 +281,7 @@ export const GamePage = () => {
   };
 
   const seenLevelUpIds = useRef(new Set());
+  const submittedRoundRef = useRef(false);
   useEffect(() => {
     // The cursor is newest-first; replay oldest-first so the cap below keeps the newest.
     [...levelUpEvents].reverse().forEach((event) => {
@@ -292,6 +300,28 @@ export const GamePage = () => {
     });
   }, [levelUpEvents]);
 
+  const seenSubmissionIds = useRef(new Set());
+
+  useEffect(() => {
+    submissionEvents.forEach((event) => {
+      if (event.playerId === playerId) return;
+      if (seenSubmissionIds.current.has(event._id)) return;
+
+      seenSubmissionIds.current.add(event._id);
+
+      const notice = {
+        key: event._id,
+        text: `${event.playerName} has submitted the correct sequence!`,
+      };
+
+      setSubmissionNotices((prev) => [...prev, notice]);
+
+      setTimeout(() => {
+        setSubmissionNotices((prev) => prev.filter((n) => n.key !== notice.key));
+      }, 3000);
+    });
+  }, [submissionEvents, playerId]);
+
   const handleColourClick = (colour) => {
     if (!playerCanInput) return;
     if (!round?.sequence) return;
@@ -303,16 +333,19 @@ export const GamePage = () => {
     if (isBattleRoyale) return undefined; // battle royale is a free-for-all: no timer
     if (!round?._id || !playerId) return undefined;
     if (player?.eliminated || player?.gameFinished) return undefined;
-    if (completedRoundId === round._id) return undefined; // already finished this round
 
     // One timer for the whole round; wrong guesses and lost lives do not reset it.
-    // If it runs out the player is eliminated so the game can continue.
     setSecondsLeft(ROUND_SECONDS);
 
     const timeoutId = window.setTimeout(() => {
+      if (player?.roundId !== round?._id || submittedRoundRef.current) {
+        return;
+      }
+
       setMessage('Time is up! You have been eliminated.');
       setPlayerCanInput(false);
-      Meteor.call('players.timeoutRound', playerId, (error) => {
+
+      Meteor.call('players.timeoutRound', playerId, round._id, (error) => {
         if (error) console.error(error);
       });
     }, ROUND_SECONDS * 1000);
@@ -325,7 +358,7 @@ export const GamePage = () => {
       window.clearTimeout(timeoutId);
       window.clearInterval(intervalId);
     };
-  }, [round?._id, playerId, isBattleRoyale, player?.eliminated, player?.gameFinished, completedRoundId]);
+  }, [round?._id, playerId, isBattleRoyale, player?.eliminated, player?.gameFinished]);
 
   const handleSubmit = () => {
     if (!playerId) {
@@ -343,6 +376,8 @@ export const GamePage = () => {
         return;
       }
       if (result.success) {
+        submittedRoundRef.current = true;
+
         if (isBattleRoyale) {
           setMessage('Correct! Moving to next round...');
         } else {
@@ -443,32 +478,6 @@ export const GamePage = () => {
     );
   }
 
-  if (!round) {
-    return (
-      <div
-        style={{
-          minHeight: '100vh',
-          background: 'linear-gradient(135deg, #1a0533 0%, #0d1b4b 100%)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <p
-          style={{
-            color: 'white',
-            letterSpacing: '4px',
-            fontSize: '0.8rem',
-            fontWeight: 'bold',
-            opacity: 0.5,
-          }}
-        >
-          LOADING...
-        </p>
-      </div>
-    );
-  }
-
   if (!player) return null;
 
   if (player.gameFinished) {
@@ -503,6 +512,16 @@ export const GamePage = () => {
                 ? 'You are out of this game, but you can still follow the remaining players.'
                 : 'Nice work. Follow the remaining players until the next round begins.'}
             </p>
+            {/* The round timer keeps running after a correct submit, so a finished player
+                can see how long the others still have. */}
+            {!isEliminated && !isBattleRoyale && (
+              <p
+                className="font-mono text-sm font-bold tracking-[0.1em]"
+                style={{ color: secondsLeft <= 5 ? '#ff7a7a' : '#9ce8ff' }}
+              >
+                Time left: {secondsLeft}s
+              </p>
+            )}
             <Leaderboard gameId={gameId} currentPlayerId={playerId} />
             {leaveError && (
               <p role="alert" className="font-manrope text-sm text-red-300">
@@ -526,6 +545,32 @@ export const GamePage = () => {
     );
   }
 
+  if (!round) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          background: 'linear-gradient(135deg, #1a0533 0%, #0d1b4b 100%)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <p
+          style={{
+            color: 'white',
+            letterSpacing: '4px',
+            fontSize: '0.8rem',
+            fontWeight: 'bold',
+            opacity: 0.5,
+          }}
+        >
+          LOADING...
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div
       className="relative"
@@ -544,6 +589,27 @@ export const GamePage = () => {
       }}
     >
       <TileLattice opacity={0.06} />
+      {submissionNotices.map((notice) => (
+        <div
+          key={notice.key}
+          style={{
+            position: 'fixed',
+            bottom: '16px',
+            left: '16px',
+            padding: '8px 12px',
+            borderRadius: '8px',
+            background: 'rgba(255,255,255,0.12)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            color: 'white',
+            fontWeight: 'bold',
+            fontSize: '12px',
+            zIndex: 1000,
+            backdropFilter: 'blur(8px)',
+          }}
+        >
+          {notice.text}
+        </div>
+      ))}
       {showPowerupPopup && (
         <div
           style={{
@@ -769,7 +835,7 @@ export const GamePage = () => {
                 letterSpacing: '1px',
               }}
             >
-              {playerCanInput ? `Time left: ${secondsLeft}s` : ''}
+              {`Time left: ${secondsLeft}s`}
             </p>
           )}
           <div
