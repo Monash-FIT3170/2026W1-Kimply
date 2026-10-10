@@ -17,6 +17,8 @@ import {
   LEVEL_UP_TOAST_MS,
   DEFAULT_STARTING_LIVES,
   MAX_LIVE_FEED_ITEMS,
+  STARTING_REPLAYS,
+  REPLAY_BONUS_STREAK,
 } from '../../constants';
 
 const seqSeenKey = (gameId, roundId) => `seqSeen:${gameId}:${roundId}`;
@@ -24,7 +26,7 @@ const seqSeenKey = (gameId, roundId) => `seqSeen:${gameId}:${roundId}`;
 export const GamePage = () => {
   const [playerId, setPlayerId] = useState(null);
   const [playerCanInput, setPlayerCanInput] = useState(false);
-  const [replaysRemaining, setReplaysRemaining] = useState(1);
+  const [replaysRemaining, setReplaysRemaining] = useState(STARTING_REPLAYS);
   const [attemptedSequence, setAttemptedSequence] = useState([]);
   const [message, setMessage] = useState('');
   const [levelUpNotices, setLevelUpNotices] = useState([]);
@@ -166,11 +168,14 @@ export const GamePage = () => {
     const prev = prevStreakRef.current;
     prevStreakRef.current = streak;
 
-    if (streak > 0 && streak % 3 === 0 && streak !== prev) {
+    if (streak > 0 && streak % REPLAY_BONUS_STREAK === 0 && streak !== prev) {
       setReplaysRemaining((r) => r + 1);
       const notice = {
         key: `replay-bonus-${Date.now()}`,
-        text: '3 correct in a row🎉 extra replay earned!',
+        text:
+          REPLAY_BONUS_STREAK === 1
+            ? 'Correct! Extra replay earned 🎉'
+            : `${REPLAY_BONUS_STREAK} correct in a row 🎉 extra replay earned!`,
       };
       setLevelUpNotices((prev) => [...prev, notice]);
       //setTimeout(() => setMessage(''), 2500);
