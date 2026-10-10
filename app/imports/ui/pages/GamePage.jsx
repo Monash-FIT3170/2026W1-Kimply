@@ -22,6 +22,10 @@ import {
 
 const seqSeenKey = (gameId, roundId) => `seqSeen:${gameId}:${roundId}`;
 
+// Below Tailwind's `xs` breakpoint (481px) the leaderboard is a bottom sheet that
+// covers the tiles and buttons, so it starts closed on phones and open elsewhere.
+const leaderboardOpenByDefault = () => typeof window !== 'undefined' && window.matchMedia('(min-width: 481px)').matches;
+
 export const GamePage = () => {
   const [playerId, setPlayerId] = useState(null);
   const [playerCanInput, setPlayerCanInput] = useState(false);
@@ -32,7 +36,7 @@ export const GamePage = () => {
   const [shake, setShake] = useState(false);
   const [correctGlow, setCorrectGlow] = useState(false);
   const [replayKey, setReplayKey] = useState(0);
-  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(true);
+  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(leaderboardOpenByDefault);
   const [showPowerupPopup, setShowPowerupPopup] = useState(false);
   const [completedRoundId, setCompletedRoundId] = useState(null);
   const [showLeavePopup, setShowLeavePopup] = useState(false);
@@ -377,14 +381,18 @@ export const GamePage = () => {
                 : 'Nice work. Follow the remaining players until the next round begins.'}
             </p>
             <Leaderboard gameId={gameId} currentPlayerId={playerId} />
-            {leaveError && <p role="alert" className="font-manrope text-sm text-red-300">{leaveError}</p>}
+            {leaveError && (
+              <p role="alert" className="font-manrope text-sm text-red-300">
+                {leaveError}
+              </p>
+            )}
             <button
               type="button"
               onClick={() => {
                 setLeaveError('');
                 setShowLeavePopup(true);
               }}
-              className="min-h-11 rounded-[10px] border border-hairline bg-surface px-5 py-3 font-outfit text-xs font-semibold uppercase tracking-[0.1em] text-fg2 transition-colors hover:bg-surface-2 hover:text-fg"
+              className="min-h-11 rounded-[10px] border border-hairline bg-surface px-5 py-3 font-outfit text-xs font-semibold uppercase tracking-[0.1em] text-fg2 transition-colors hover:bg-surface2 hover:text-fg"
             >
               Leave game
             </button>
