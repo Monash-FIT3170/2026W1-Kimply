@@ -20,6 +20,19 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-09 - Keyboard hints on the game controls, and an Undo button
+
+The game screen now has three controls, each showing the key that triggers it: CLEAR (Space), UNDO (Backspace), and SUBMIT (Enter), matching the W/A/S/D letters on the tiles (#115).
+UNDO is new as a button; Backspace already removed the last tile, so mouse and touch players now get the same action.
+All three share one `ControlButton` in `app/imports/ui/pages/GamePage.jsx`, and the keyboard and the button both call `handleUndo`.
+
+Things that are not obvious from the diff:
+
+- **The window-level Enter handler calls `preventDefault()`.**
+  After a mouse click, that button keeps focus, and the browser turns Enter into a click on it.
+  Without this, pressing Enter after clicking UNDO would remove a second tile, and after a full sequence it would submit and then undo.
+- **Each button has an `aria-label`**, so screen readers announce "UNDO" rather than "UNDOBACKSPACE". The key is announced through `aria-keyshortcuts` instead.
+
 ## 2026-09-22 - Google sign-in
 
 Players can sign up and sign in with Google from `/account` (#105).
