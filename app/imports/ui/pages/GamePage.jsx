@@ -21,6 +21,42 @@ import {
 
 const seqSeenKey = (gameId, roundId) => `seqSeen:${gameId}:${roundId}`;
 
+// A game control with the keyboard key that triggers it shown underneath the label,
+// matching the key letters on the colour tiles.
+const ControlButton = ({ label, keyHint, onClick, enabled, enabledBackground, disabledBackground, disabledColour }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={!enabled}
+    aria-label={label}
+    aria-keyshortcuts={keyHint}
+    style={{
+      flex: '1 1 0',
+      maxWidth: 160,
+      minHeight: 44,
+      height: 'clamp(48px, 6.5dvh, 68px)',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 2,
+      backgroundColor: enabled ? enabledBackground : disabledBackground,
+      color: enabled ? 'white' : disabledColour,
+      fontWeight: 'bold',
+      fontSize: 'clamp(12px, 3vw, 20px)',
+      border: 'none',
+      borderRadius: '8px',
+      cursor: enabled ? 'pointer' : 'not-allowed',
+      letterSpacing: '1px',
+    }}
+  >
+    <span>{label}</span>
+    <span className="font-mono" style={{ fontSize: 'clamp(9px, 2.2vw, 11px)', letterSpacing: '1px', opacity: 0.7 }}>
+      {keyHint.toUpperCase()}
+    </span>
+  </button>
+);
+
 export const GamePage = () => {
   const [playerId, setPlayerId] = useState(null);
   const [playerCanInput, setPlayerCanInput] = useState(false);
@@ -184,7 +220,7 @@ export const GamePage = () => {
     if (!playerCanInput) return;
     if (!round?.sequence) return;
     if (attemptedSequence.length >= round.sequence.length) return;
-    setAttemptedSequence(prev => [...prev, colour]);
+    setAttemptedSequence((prev) => [...prev, colour]);
   };
 
   useEffect(() => {
@@ -266,9 +302,16 @@ export const GamePage = () => {
     setMessage('Try again. Repeat the flashed sequence.');
   };
 
+  const handleUndo = () => {
+    setAttemptedSequence((prev) => prev.slice(0, -1));
+  };
+
   useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.key === 'Enter') {
+        // Without this, Enter also "clicks" whichever control button last had focus.
+        event.preventDefault();
+
         if (playerCanInput && attemptedSequence.length === round.sequence.length) {
           handleSubmit();
         }
@@ -278,7 +321,7 @@ export const GamePage = () => {
         event.preventDefault();
 
         if (playerCanInput && attemptedSequence.length > 0) {
-          setAttemptedSequence(prev => prev.slice(0, -1));
+          handleUndo();
         }
       }
 
@@ -730,50 +773,39 @@ export const GamePage = () => {
             style={{
               display: 'flex',
               justifyContent: 'center',
-              gap: 'clamp(12px, 4vw, 18px)',
+              width: 'min(100%, 520px)',
+              marginInline: 'auto',
+              gap: 'clamp(8px, 3vw, 16px)',
               marginTop: 'clamp(20px, 3dvh, 28px)',
             }}
           >
-            <button
+            <ControlButton
+              label="CLEAR"
+              keyHint="Space"
               onClick={handleClear}
-              disabled={!playerCanInput || attemptedSequence.length === 0}
-              style={{
-                width: 'min(46%, 180px)',
-                minHeight: 44,
-                height: 'clamp(44px, 5.5dvh, 60px)',
-                backgroundColor: playerCanInput && attemptedSequence.length > 0 ? '#444' : '#222',
-                color: playerCanInput && attemptedSequence.length > 0 ? 'white' : '#555',
-                fontWeight: 'bold',
-                fontSize: 'clamp(12px, 3vw, 20px)',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: playerCanInput && attemptedSequence.length > 0 ? 'pointer' : 'not-allowed',
-                letterSpacing: '1px',
-              }}
-            >
-              CLEAR
-            </button>
-            <button
+              enabled={playerCanInput && attemptedSequence.length > 0}
+              enabledBackground="#444"
+              disabledBackground="#222"
+              disabledColour="#555"
+            />
+            <ControlButton
+              label="UNDO"
+              keyHint="Backspace"
+              onClick={handleUndo}
+              enabled={playerCanInput && attemptedSequence.length > 0}
+              enabledBackground="#444"
+              disabledBackground="#222"
+              disabledColour="#555"
+            />
+            <ControlButton
+              label="SUBMIT"
+              keyHint="Enter"
               onClick={handleSubmit}
-              disabled={!playerCanInput || attemptedSequence.length !== round.sequence.length}
-              style={{
-                width: 'min(46%, 180px)',
-                minHeight: 44,
-                height: 'clamp(44px, 5.5dvh, 60px)',
-                backgroundColor:
-                  playerCanInput && attemptedSequence.length === round.sequence.length ? '#666' : '#2a2a3a',
-                color: playerCanInput && attemptedSequence.length === round.sequence.length ? 'white' : '#444',
-                fontWeight: 'bold',
-                fontSize: 'clamp(12px, 3vw, 20px)',
-                border: 'none',
-                borderRadius: '8px',
-                cursor:
-                  playerCanInput && attemptedSequence.length === round.sequence.length ? 'pointer' : 'not-allowed',
-                letterSpacing: '1px',
-              }}
-            >
-              SUBMIT
-            </button>
+              enabled={playerCanInput && attemptedSequence.length === round.sequence.length}
+              enabledBackground="#666"
+              disabledBackground="#2a2a3a"
+              disabledColour="#444"
+            />
           </div>
         </div>
         <EliminationFeed gameId={gameId} />

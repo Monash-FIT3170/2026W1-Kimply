@@ -156,7 +156,6 @@ export const ColourSequence = ({
     };
   }, [playerCanInput, onColourClick]);
 
-
   return (
     <div style={{ '--tile-grid': 'min(360px, calc(100vw - 48px), 38dvh)' }}>
       <p
