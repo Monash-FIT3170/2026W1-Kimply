@@ -4,58 +4,75 @@ import { useTracker } from 'meteor/react-meteor-data';
 import { PlayersCollection } from '../api/players';
 import { ELIMINATION_FEED_MS as DISPLAY_MS } from '../constants';
 
+const MAX_VISIBLE = 3;
+
 export const EliminationFeed = ({ gameId }) => {
-  const eliminations = useTracker(() => {
+  const { ready, eliminations } = useTracker(() => {
+    if (!gameId) return { ready: false, eliminations: [] };
     const sub = Meteor.subscribe('eliminations', gameId);
-
-    if (!sub.ready() || !gameId) {
-      return [];
-    }
-
-    return PlayersCollection.find({ gameId, eliminated: true }, { sort: { eliminatedAt: -1 } }).fetch();
+    if (!sub.ready()) return { ready: false, eliminations: [] };
+    return {
+      ready: true,
+      eliminations: PlayersCollection.find({ gameId, eliminated: true }, { sort: { eliminatedAt: 1 } }).fetch(),
+    };
   }, [gameId]);
 
   const [visible, setVisible] = useState([]);
+  const [overflow, setOverflow] = useState(0);
+  const visibleRef = useRef([]);
   const seenIds = useRef(new Set());
-  const mountedAt = useRef(Date.now());
+  const baselined = useRef(false);
   const timers = useRef({});
+  const overflowTimer = useRef(null);
 
   useEffect(() => {
-    eliminations.forEach((entry) => {
-      if (seenIds.current.has(entry._id)) return;
-      if (entry.eliminatedAt && new Date(entry.eliminatedAt).getTime() < mountedAt.current) return;
-      seenIds.current.add(entry._id);
+    if (!ready) return;
 
-      setVisible((prev) => [...prev, entry].slice(-3));
+    if (!baselined.current) {
+      eliminations.forEach((e) => seenIds.current.add(e._id));
+      baselined.current = true;
+      return;
+    }
 
+    const fresh = eliminations.filter((e) => !seenIds.current.has(e._id));
+    if (fresh.length === 0) return;
+    fresh.forEach((e) => seenIds.current.add(e._id));
+
+    // Show the most recent few; count the rest.
+    const shown = fresh.slice(-MAX_VISIBLE);
+    let hidden = fresh.length - shown.length;
+
+    const combined = [...visibleRef.current, ...shown];
+    const evicted = Math.max(0, combined.length - MAX_VISIBLE);
+    hidden += evicted;
+    visibleRef.current = combined.slice(-MAX_VISIBLE);
+    setVisible(visibleRef.current);
+
+    shown.forEach((entry) => {
       timers.current[entry._id] = setTimeout(() => {
-        setVisible((prev) => prev.filter((e) => e._id !== entry._id));
+        visibleRef.current = visibleRef.current.filter((e) => e._id !== entry._id);
+        setVisible(visibleRef.current);
         delete timers.current[entry._id];
       }, DISPLAY_MS);
     });
-  }, [eliminations]);
+
+    if (hidden > 0) {
+      setOverflow((n) => n + hidden);
+      clearTimeout(overflowTimer.current);
+      overflowTimer.current = setTimeout(() => setOverflow(0), DISPLAY_MS);
+    }
+  }, [ready, eliminations]);
 
   useEffect(() => {
     const activeTimers = timers.current;
     return () => {
       Object.values(activeTimers).forEach(clearTimeout);
+      clearTimeout(overflowTimer.current);
     };
   }, []);
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        bottom: '20px',
-        left: '20px',
-        width: '260px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '6px',
-        pointerEvents: 'none',
-        zIndex: 50,
-      }}
-    >
+    <div className="kill-feed" aria-live="polite">
       {visible.map((entry) => (
         <div
           key={entry._id}
@@ -63,6 +80,7 @@ export const EliminationFeed = ({ gameId }) => {
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
+            gap: '8px',
             padding: '8px 12px',
             borderRadius: '6px',
             backgroundColor: 'rgba(0, 0, 0, 0.55)',
@@ -73,7 +91,7 @@ export const EliminationFeed = ({ gameId }) => {
             animation: `killFeedPop ${DISPLAY_MS}ms ease forwards`,
           }}
         >
-          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
             <span
               style={{
                 width: '6px',
@@ -84,11 +102,28 @@ export const EliminationFeed = ({ gameId }) => {
                 flexShrink: 0,
               }}
             />
-            <strong>{entry.name}</strong>
+            <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.name}</strong>
           </span>
-          <span style={{ color: '#ff9c9c', fontSize: '0.75rem' }}>eliminated · Lv {entry.eliminatedRound}</span>
+          <span style={{ color: '#ff9c9c', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+            eliminated · Lv {entry.eliminatedRound}
+          </span>
         </div>
       ))}
+      {overflow > 0 && (
+        <div
+          style={{
+            padding: '6px 12px',
+            borderRadius: '6px',
+            backgroundColor: 'rgba(0, 0, 0, 0.55)',
+            border: '1px solid rgba(224, 48, 48, 0.25)',
+            color: '#ff9c9c',
+            fontSize: '0.75rem',
+            textAlign: 'center',
+          }}
+        >
+          +{overflow} more eliminated
+        </div>
+      )}
     </div>
   );
 };

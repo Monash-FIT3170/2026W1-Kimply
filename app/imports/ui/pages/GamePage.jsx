@@ -162,11 +162,11 @@ export const GamePage = () => {
     levelUpEvents.forEach((event) => {
       if (seenLevelUpIds.current.has(event._id)) return;
       seenLevelUpIds.current.add(event._id);
-      if (!event.player_id !== playerId) return; // Only show level up notifications for current player 
+      if (event.playerId !== playerId) return; 
       if (Date.now() - mountedAt.current < 2000) return;
       const notice = {key: event._id, text: `You have levelled up to level ${event.level}!`};
       setLevelUpNotices((prev) => [...prev.slice(-1), notice]);
-      setTimeout(() => setLevelUpNoties((prev) => prev.filter((n) => n.key !== notice.key)), LEVEL_UP_TOAST_MS);
+      setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), LEVEL_UP_TOAST_MS);
     });
   }, [levelUpEvents, playerId]);
 
@@ -525,7 +525,7 @@ export const GamePage = () => {
           KIMPLY
         </span>
       </div>
-      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-start overflow-y-auto md:justify-center">
+      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-start overflow-y-auto pt-[5dvh] md:justify-center md:pt-0">
         {isBattleRoyale && (
           <div
             style={{
