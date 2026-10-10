@@ -22,6 +22,13 @@ const COLOURS = {
 
 const TILE_ORDER = ['red', 'yellow', 'green', 'blue'];
 
+const KEY_LABELS = {
+  red: 'W',
+  yellow: 'A',
+  green: 'S',
+  blue: 'D',
+};
+
 export const ColourSequence = ({
   roundId,
   sequence = [],
@@ -118,6 +125,37 @@ export const ColourSequence = ({
 
     onColourClick(colourId);
   };
+
+  useEffect(() => {
+    const keyMap = {
+      w: 'red',
+      a: 'yellow',
+      s: 'green',
+      d: 'blue',
+    };
+
+    const handleKeyDown = (event) => {
+      const colourId = keyMap[event.key.toLowerCase()];
+
+      if (!colourId || !playerCanInput) return;
+
+      setClickedColour(colourId);
+      playClickSound();
+
+      setTimeout(() => {
+        setClickedColour(null);
+      }, 200);
+
+      onColourClick(colourId);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [playerCanInput, onColourClick]);
+
   return (
     <div style={{ '--tile-grid': 'min(360px, calc(100vw - 48px), 38dvh)' }}>
       <p
@@ -172,11 +210,26 @@ export const ColourSequence = ({
                 cursor: playerCanInput ? 'pointer' : 'not-allowed',
                 opacity: playerCanInput || isPlaying ? 1 : 0.7,
                 transform: isActive ? 'scale(0.95)' : 'scale(1)',
+                position: 'relative',
               }}
             >
               <svg width="36%" height="36%" viewBox="0 0 64 64">
                 <ShapeIcon />
               </svg>
+
+              <span
+                style={{
+                  position: 'absolute',
+                  bottom: '8px',
+                  left: '10px',
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                  color: 'rgba(255,255,255,0.8)',
+                  letterSpacing: '1px',
+                }}
+              >
+                {KEY_LABELS[colourId]}
+              </span>
             </button>
           );
         })}

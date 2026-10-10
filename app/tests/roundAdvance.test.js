@@ -81,6 +81,7 @@ if (Meteor.isServer) {
         lives: 3,
         eliminated: false,
         completeRound: true,
+        roundStatus: 'Correct',
         attemptedSequence: ['red'],
         winner: false,
       });
@@ -90,6 +91,7 @@ if (Meteor.isServer) {
       const player = await PlayersCollection.findOneAsync({ name: 'Player 1' });
       assert.equal(player.roundId, nextRoundId);
       assert.strictEqual(player.completeRound, false);
+      assert.strictEqual(player.roundStatus, 'Playing');
       assert.deepEqual(player.attemptedSequence, []);
     });
 
