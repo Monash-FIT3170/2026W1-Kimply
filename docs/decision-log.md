@@ -20,6 +20,16 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-10 - Replay tunables moved to constants, bonus every correct round
+
+The replay button's two numbers now live in `app/imports/constants.js` next to the other gameplay tunables: `STARTING_REPLAYS` (1) and `REPLAY_BONUS_STREAK`, which drops from 3 to 1.
+A player now earns an extra replay on every correct round instead of every third one in a row.
+
+Things that are not obvious from the diff:
+
+- **Replays are client state only.** `replaysRemaining` lives in `GamePage` React state, so a refresh resets it to `STARTING_REPLAYS`, the same way D7 loses `playerId`.
+- **The bonus toast's wording depends on the threshold.** At 1 it reads "Correct! Extra replay earned", because "1 correct in a row" reads badly.
+
 ## 2026-10-09 - Keyboard hints on the game controls, and an Undo button
 
 The game screen now has three controls, each showing the key that triggers it: CLEAR (Space), UNDO (Backspace), and SUBMIT (Enter), matching the W/A/S/D letters on the tiles (#115).

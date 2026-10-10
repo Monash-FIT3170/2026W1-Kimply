@@ -18,6 +18,8 @@ import {
   LEVEL_UP_TOAST_MS,
   DEFAULT_STARTING_LIVES,
   MAX_LIVE_FEED_ITEMS,
+  STARTING_REPLAYS,
+  REPLAY_BONUS_STREAK,
 } from '../../constants';
 
 const seqSeenKey = (gameId, roundId) => `seqSeen:${gameId}:${roundId}`;
@@ -26,14 +28,27 @@ const seqSeenKey = (gameId, roundId) => `seqSeen:${gameId}:${roundId}`;
 // covers the tiles and buttons, so it starts closed on phones and open elsewhere.
 const leaderboardOpenByDefault = () => typeof window !== 'undefined' && window.matchMedia('(min-width: 481px)').matches;
 
-// A game control with the keyboard key that triggers it shown underneath the label,
-// matching the key letters on the colour tiles.
-const ControlButton = ({ label, keyHint, onClick, enabled, enabledBackground, disabledBackground, disabledColour }) => (
+// A game control with a small hint under the label: the keyboard key that triggers it,
+// matching the key letters on the colour tiles, or another short note such as replays left.
+const ControlButton = ({
+  label,
+  keyHint,
+  hint = keyHint?.toUpperCase(),
+  ariaLabel = label,
+  onClick,
+  enabled,
+  enabledBackground,
+  disabledBackground,
+  enabledColour = 'white',
+  disabledColour,
+  enabledBorder = '1px solid transparent',
+  disabledBorder = '1px solid transparent',
+}) => (
   <button
     type="button"
     onClick={onClick}
     disabled={!enabled}
-    aria-label={label}
+    aria-label={ariaLabel}
     aria-keyshortcuts={keyHint}
     style={{
       flex: '1 1 0',
@@ -46,10 +61,10 @@ const ControlButton = ({ label, keyHint, onClick, enabled, enabledBackground, di
       justifyContent: 'center',
       gap: 2,
       backgroundColor: enabled ? enabledBackground : disabledBackground,
-      color: enabled ? 'white' : disabledColour,
+      color: enabled ? enabledColour : disabledColour,
       fontWeight: 'bold',
       fontSize: 'clamp(12px, 3vw, 20px)',
-      border: 'none',
+      border: enabled ? enabledBorder : disabledBorder,
       borderRadius: '8px',
       cursor: enabled ? 'pointer' : 'not-allowed',
       letterSpacing: '1px',
@@ -57,7 +72,7 @@ const ControlButton = ({ label, keyHint, onClick, enabled, enabledBackground, di
   >
     <span>{label}</span>
     <span className="font-mono" style={{ fontSize: 'clamp(9px, 2.2vw, 11px)', letterSpacing: '1px', opacity: 0.7 }}>
-      {keyHint.toUpperCase()}
+      {hint}
     </span>
   </button>
 );
@@ -65,6 +80,7 @@ const ControlButton = ({ label, keyHint, onClick, enabled, enabledBackground, di
 export const GamePage = () => {
   const [playerId, setPlayerId] = useState(null);
   const [playerCanInput, setPlayerCanInput] = useState(false);
+  const [replaysRemaining, setReplaysRemaining] = useState(STARTING_REPLAYS);
   const [attemptedSequence, setAttemptedSequence] = useState([]);
   const [message, setMessage] = useState('');
   const [levelUpNotices, setLevelUpNotices] = useState([]);
@@ -158,6 +174,7 @@ export const GamePage = () => {
   }, [gameId]);
   const gameMode = room?.gameMode || routeGameMode || 'default';
   const isBattleRoyale = gameMode === 'battle_royale';
+  const canReplay = !isBattleRoyale && replaysRemaining > 0 && playerCanInput;
 
   const round = useTracker(() => {
     if (!gameId) return null;
@@ -214,16 +231,47 @@ export const GamePage = () => {
     if (gameId && localStorage.getItem(seqSeenKey(gameId, player.roundId))) {
       // already watched this round (e.g. refresh): skip the replay
       setPlayerCanInput(true);
+      setReplayKey((prev) => prev + 1);
     } else {
       setPlayerCanInput(false);
       setReplayKey((prev) => prev + 1);
     }
   }, [player?.roundId, gameId]);
 
+  //replay bonus
+  const prevStreakRef = useRef(0);
+  useEffect(() => {
+    const streak = player?.currentStreak ?? 0;
+    const prev = prevStreakRef.current;
+    prevStreakRef.current = streak;
+
+    if (streak > 0 && streak % REPLAY_BONUS_STREAK === 0 && streak !== prev) {
+      setReplaysRemaining((r) => r + 1);
+      const notice = {
+        key: `replay-bonus-${Date.now()}`,
+        text:
+          REPLAY_BONUS_STREAK === 1
+            ? 'Correct! Extra replay earned 🎉'
+            : `${REPLAY_BONUS_STREAK} correct in a row 🎉 extra replay earned!`,
+      };
+      setLevelUpNotices((prev) => [...prev, notice]);
+      //setTimeout(() => setMessage(''), 2500);
+      setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), 5000);
+    }
+  }, [player?.currentStreak]);
+
   // Show the slow-motion powerup popup whenever the player picks it up
   useEffect(() => {
     setShowPowerupPopup(!!player?.slowMotionActive);
   }, [player?.slowMotionActive]);
+
+  const handleReplay = () => {
+    if (!canReplay) return;
+    setReplaysRemaining((prev) => prev - 1);
+    setPlayerCanInput(false);
+    setAttemptedSequence([]);
+    setReplayKey((prev) => prev + 1);
+  };
 
   const seenLevelUpIds = useRef(new Set());
   useEffect(() => {
@@ -752,6 +800,21 @@ export const GamePage = () => {
               disabledBackground="#222"
               disabledColour="#555"
             />
+            {!isBattleRoyale && (
+              <ControlButton
+                label="REPLAY"
+                hint={`${replaysRemaining} LEFT`}
+                ariaLabel={`Replay sequence, ${replaysRemaining} left`}
+                onClick={handleReplay}
+                enabled={canReplay}
+                enabledBackground="#1a3a5c"
+                disabledBackground="#222"
+                enabledColour="#7CFFB2"
+                disabledColour="#555"
+                enabledBorder="1px solid #7CFFB2"
+                disabledBorder="1px solid #333"
+              />
+            )}
             <ControlButton
               label="SUBMIT"
               keyHint="Enter"
