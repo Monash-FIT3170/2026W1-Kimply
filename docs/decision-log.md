@@ -33,6 +33,21 @@ Things that are not obvious from the diff:
   Without this, pressing Enter after clicking UNDO would remove a second tile, and after a full sequence it would submit and then undo.
 - **Each button has an `aria-label`**, so screen readers announce "UNDO" rather than "UNDOBACKSPACE". The key is announced through `aria-keyshortcuts` instead.
 
+## 2026-10-06 - Spectators can leave a live game without blocking it
+
+The spectator view now offers a confirmed **Leave game** action. It marks the
+player eliminated, retains their game and leaderboard records, and then
+rechecks the winner and whether the current round can advance before returning
+them to the play screen.
+
+Navigating alone would have left an active player document behind because the
+DDP connection remains open; that could keep other players waiting
+indefinitely. Marking the player eliminated removes them from active-round
+calculations while preserving their final score for the end leaderboard.
+
+Files: `app/imports/ui/pages/GamePage.jsx`, `app/imports/api/gameMethods.js`,
+`app/tests/leaveGame.test.js`, `AGENTS.md`.
+
 ## 2026-09-22 - Google sign-in
 
 Players can sign up and sign in with Google from `/account` (#105).
@@ -162,6 +177,34 @@ Things that are not obvious from the diff:
 
 Files: `docs/ecs-target-architecture.md` (new), `infra/` (new), `deploy/ecs-deploy.sh` (new), `.github/workflows/deploy.yml`, `scripts/health-check.sh`, `AGENTS.md`, `.gitignore`.
 
+## 2026-09-21 - Finished players now remain in the live round as spectators
+
+`GamePage.jsx` no longer sends a player who has completed a round or been
+eliminated to a static result screen while the game is still active. Instead it
+shows the live leaderboard and continues to follow the current shared round as
+the remaining players progress.
+
+The spectator branch intentionally does not render `ColourSequence`, its tiles,
+or selected-colour progress. This keeps the spectator interface focused on
+public player status rather than visually revealing the round sequence or any
+other player's answer.
+
+Files: `app/imports/ui/pages/GamePage.jsx`, `AGENTS.md`.
+
+## 2026-09-21 - Players now expose a safe live round status
+
+`gameMethods.js` now maintains a public `roundStatus` on each player as they
+play, complete a sequence, are eliminated, or enter the next round. The
+leaderboard model and its tests use that status instead of treating a correct
+answer as a generic completion.
+
+The status is deliberately a short label only. `attemptedSequence` remains
+excluded from every player publication, so the multiplayer activity UI can
+describe progress without exposing anyone's answer.
+
+Files: `app/imports/api/gameMethods.js`, `app/imports/ui/leaderboardModels.js`,
+`app/tests/lifeDeduction.test.js`, `app/tests/roundAdvance.test.js`,
+`app/tests/leaderboardModel.test.js`, `AGENTS.md`.
 ## 2026-09-22 - Account sessions persist instead of riding on router state
 
 Testers were signed out when a game ended and when they rejoined one (#108).

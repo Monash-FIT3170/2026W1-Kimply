@@ -299,6 +299,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         eliminated: false,
         winner: false,
         completeRound: false,
+        roundStatus: 'Playing',
         gameFinished: false,
         isBattleRoyale,
         slowMotionActive: false,
@@ -337,6 +338,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
             totalGuesses,
             correctGuesses,
             completeRound: true,
+            roundStatus: 'Correct',
             lives,
           },
         });
@@ -363,6 +365,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
               roundId: nextRoundId,
               currentLevel: nextLevel,
               completeRound: false,
+              roundStatus: 'Playing',
               attemptedSequence: [],
             },
           });
@@ -399,6 +402,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
             longestStreak,
             totalGuesses,
             eliminated,
+            roundStatus: eliminated ? 'Eliminated' : 'Playing',
             currentLevel: round.level ?? round.lengthOfSequence,
             eliminatedRound: eliminated ? (round.roundNumber ?? round.lengthOfSequence - 3) : player.eliminatedRound,
             eliminatedAt: eliminated ? new Date() : player.eliminatedAt,
@@ -446,6 +450,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
           attemptedSequence: [],
           completeRound: false,
           eliminated,
+          roundStatus: eliminated ? 'Eliminated' : 'Playing',
           currentLevel: round.level ?? round.lengthOfSequence,
           eliminatedRound: eliminated ? (round.roundNumber ?? round.lengthOfSequence - 3) : player.eliminatedRound,
           eliminatedAt: eliminated ? new Date() : player.eliminatedAt,
@@ -482,6 +487,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
           currentStreak: 0,
           longestStreak,
           eliminated: true,
+          roundStatus: 'Eliminated',
           eliminatedRound: round ? (round.roundNumber ?? round.lengthOfSequence - 3) : (player.eliminatedRound ?? 0),
           eliminatedAt: new Date(),
         },
@@ -493,6 +499,30 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         if (updatedRound) await advanceRoundIfReady(updatedRound);
       }
       return { success: true, eliminated: true };
+    },
+
+    // Let a spectator stop watching without keeping the remaining players waiting.
+    async 'players.leaveGame'(playerId) {
+      const player = await PlayersCollection.findOneAsync(playerId);
+      if (!player) throw new Meteor.Error('not-found', 'Player not found');
+
+      const round = await RoundsCollection.findOneAsync(player.roundId);
+
+      await PlayersCollection.updateAsync(player._id, {
+        $set: {
+          eliminated: true,
+          completeRound: false,
+          roundStatus: 'Eliminated',
+          currentLevel: round?.level ?? round?.lengthOfSequence ?? player.currentLevel,
+          eliminatedRound: player.eliminatedRound ?? (round?.roundNumber ?? round?.lengthOfSequence - 3),
+          eliminatedAt: new Date(),
+        },
+      });
+
+      await checkWinner(player.gameId, player.isBattleRoyale ?? false);
+      if (round) await advanceRoundIfReady(round);
+
+      return true;
     },
 
     // advance game to next round
@@ -549,6 +579,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
           $set: {
             roundId: nextRoundId,
             completeRound: false,
+            roundStatus: 'Playing',
             attemptedSequence: [],
             slowMotionActive: grantsSlowMotion,
           },
