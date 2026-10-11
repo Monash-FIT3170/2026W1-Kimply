@@ -6,6 +6,7 @@ export const DEFAULT_STARTING_LIVES = 3;
 export const DEFAULT_SEQUENCE_LENGTH = 4;
 export const INITIAL_LEVEL = 4; // starting currentLevel (level 1 == sequence length 4)
 export const BONUS_LIFE_ROUND = 7; // completing this round grants +1 life
+export const STREAK_BONUS_LIFE_THRESHOLD = 3; // a life for every N correct rounds in a row (capped at starting lives outside battle royale)
 export const ROUND_TIMER_SECONDS = 45; // whole-round countdown (not battle royale)
 export const STARTING_REPLAYS = 1; // sequence replays each player starts with (not battle royale)
 export const REPLAY_BONUS_STREAK = 1; // +1 replay every time the streak reaches a multiple of this
@@ -23,7 +24,7 @@ export const GAME_MODE_PRESETS = {
   medium: { flashingSpeed: 'medium', startingLives: 3, startingSequenceLength: 3, sequenceGrowth: 1 },
   hard: { flashingSpeed: 'fast', startingLives: 1, startingSequenceLength: 3, sequenceGrowth: 1 },
   custom: { flashingSpeed: 'medium', startingLives: 3, startingSequenceLength: 4, sequenceGrowth: 1 },
-  battle_royale: { flashingSpeed: 'medium', startingLives: 3, startingSequenceLength: 4, sequenceGrowth: 1 },
+  battle_royale: { flashingSpeed: 'medium', startingLives: 1, startingSequenceLength: 4, sequenceGrowth: 1 },
 };
 
 // Sequence playback speeds, in ms.
