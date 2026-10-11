@@ -28,7 +28,8 @@ export function AbilitiesSwitch({ pin, enabled }) {
       >
         <span className="flex flex-col items-start">
           <span className="font-outfit text-[11px] font-bold uppercase tracking-[0.12em] text-fg">Abilities</span>
-          <span className="font-manrope text-[11px] text-fg3">
+          {/* Hidden on phones so the switch fits beside the game mode badge in the lobby. */}
+          <span className="hidden font-manrope text-[11px] text-fg3 xs:block">
             {enabled ? 'Pick a card before each round' : 'Pure memory, no cards'}
           </span>
         </span>
