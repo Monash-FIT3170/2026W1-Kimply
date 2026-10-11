@@ -42,6 +42,15 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
     );
   });
 
+  // roomBans imports this module's collection, so the ban check is loaded on call.
+  async function gateRoom(connection, pin = null) {
+    const { requireBrowserSession } = await import('./playerAccess.js');
+    const { assertEntryAllowed } = await import('./roomBans.js');
+    const sessionId = requireBrowserSession(connection);
+    if (pin) await assertEntryAllowed(pin, connection);
+    return sessionId;
+  }
+
   Meteor.methods({
     async 'rooms.create'(hostName, accountId) {
       if (typeof hostName !== 'string' || !hostName.trim()) {
@@ -50,6 +59,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       const name = hostName.trim();
       const hostId = Random.id();
       const hostAccountId = typeof accountId === 'string' && accountId.trim() ? accountId.trim() : null;
+      const browserSessionId = await gateRoom(this.connection);
 
       let pin;
       for (let i = 0; i < 10; i++) {
@@ -67,7 +77,14 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
         gameName: `Game${pin}`,
         status: 'lobby',
         players: [
-          { id: hostId, name, accountId: hostAccountId, connected: true, connectionId: this.connection?.id ?? null },
+          {
+            id: hostId,
+            name,
+            accountId: hostAccountId,
+            connected: true,
+            connectionId: this.connection?.id ?? null,
+            browserSessionId,
+          },
         ],
         createdAt: new Date(),
         gameMode: 'default',
@@ -208,11 +225,11 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       }
       const room = await RoomsCollection.findOneAsync({ pin: pin.trim() });
       if (!room) throw new Meteor.Error('not-found', 'Room not found');
+      const browserSessionId = await gateRoom(this.connection, room.pin);
       if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
 
       const nameTaken = (room.players || []).some((p) => p.name.toLowerCase() === playerName.trim().toLowerCase());
       if (nameTaken) throw new Meteor.Error('name-taken', 'Name already taken');
-
       const playerId = Random.id();
       const joinAccountId = typeof accountId === 'string' && accountId.trim() ? accountId.trim() : null;
 
@@ -226,6 +243,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
               accountId: joinAccountId,
               connected: true,
               connectionId: this.connection?.id ?? null,
+              browserSessionId,
             },
           },
         }
@@ -271,6 +289,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
 
       const room = await RoomsCollection.findOneAsync({ pin: pin.trim() });
       if (!room) throw new Meteor.Error('not-found', 'Room not found');
+      const browserSessionId = await gateRoom(this.connection, room.pin);
       if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
 
       const player = room.players.find((p) => p.id === playerId);
@@ -279,9 +298,19 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
         throw new Meteor.Error('player-not-found');
       }
 
+      if (browserSessionId && player.browserSessionId && player.browserSessionId !== browserSessionId) {
+        throw new Meteor.Error('not-yours', 'That is not your player');
+      }
+
       await RoomsCollection.updateAsync(
         { pin: pin.trim(), 'players.id': playerId },
-        { $set: { 'players.$.connected': true, 'players.$.connectionId': this.connection?.id ?? null } }
+        {
+          $set: {
+            'players.$.connected': true,
+            'players.$.connectionId': this.connection?.id ?? null,
+            'players.$.browserSessionId': browserSessionId || player.browserSessionId || null,
+          },
+        }
       );
 
       return {

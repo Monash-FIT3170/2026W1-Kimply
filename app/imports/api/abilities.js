@@ -1,15 +1,11 @@
 import { Meteor } from 'meteor/meteor';
-import { PlayersCollection } from './players';
-import { isCallerBound } from './abilityRules';
 import { closeDraft, playCard, settleDraft } from './abilityEngine';
+import { boundPlayer } from './playerAccess';
+import { assertPlayAllowed } from './roomBans';
 
-// Abilities can hurt other players, so unlike the older game methods they only act
-// for the connection that owns the player (see D3 in docs/defect-register.md).
-async function boundPlayer(playerId, connection) {
-  if (typeof playerId !== 'string' || !playerId) throw new Meteor.Error('invalid', 'Invalid player');
-  const player = await PlayersCollection.findOneAsync(playerId);
-  if (!player) throw new Meteor.Error('not-found', 'Player not found');
-  if (!isCallerBound(player, connection?.id)) throw new Meteor.Error('not-yours', 'That is not your player');
+async function ownPlayer(playerId, connection) {
+  const player = await boundPlayer(playerId, connection);
+  await assertPlayAllowed(player, connection);
   return player;
 }
 
@@ -19,13 +15,13 @@ if (Meteor.isServer && !global._abilitiesInitialized) {
     // Take one of the cards dealt in the draft. Targeted Steal and Strike name their target now.
     async 'abilities.pick'(playerId, type, targetId = null) {
       if (typeof type !== 'string' || !type) throw new Meteor.Error('invalid-ability', 'Choose a card');
-      const player = await boundPlayer(playerId, this.connection);
+      const player = await ownPlayer(playerId, this.connection);
       await settleDraft(player, type, targetId);
       return true;
     },
 
     async 'abilities.skip'(playerId) {
-      const player = await boundPlayer(playerId, this.connection);
+      const player = await ownPlayer(playerId, this.connection);
       await settleDraft(player, null, null);
       return true;
     },
@@ -33,7 +29,7 @@ if (Meteor.isServer && !global._abilitiesInitialized) {
     // Play a held card: Free Pass, Reroll, Scramble (targeted) or Jump.
     async 'abilities.use'(playerId, cardId, targetId = null) {
       if (typeof cardId !== 'string' || !cardId) throw new Meteor.Error('invalid-ability', 'Choose a card');
-      const player = await boundPlayer(playerId, this.connection);
+      const player = await ownPlayer(playerId, this.connection);
       return playCard(player, cardId, targetId);
     },
 

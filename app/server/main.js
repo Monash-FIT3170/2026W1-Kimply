@@ -1,6 +1,7 @@
 import { Meteor } from 'meteor/meteor';
 import '../imports/api/gameMethods';
 import '../imports/api/playerAccounts';
+import '../imports/api/browserSessions';
 
 import '/imports/api/rooms';
 

@@ -123,7 +123,7 @@ export const ColourSequence = ({
       setClickedColour(null);
     }, 200);
 
-    onColourClick(colourId);
+    onColourClick(colourId, performance.now());
   };
 
   useEffect(() => {
@@ -146,7 +146,7 @@ export const ColourSequence = ({
         setClickedColour(null);
       }, 200);
 
-      onColourClick(colourId);
+      onColourClick(colourId, performance.now());
     };
 
     window.addEventListener('keydown', handleKeyDown);

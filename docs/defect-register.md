@@ -10,7 +10,7 @@ Keep the two in step: an ID means the same thing in both files, or neither file 
 
 There is no D13. The register and the summary table had drifted by one on the last three IDs; reconciling them on 2026-08-29 onto the summary table's numbering left the gap. Do not renumber to close it - the IDs are cited from skills and pull requests.
 
-**Last verified:** 2026-08-31
+**Last verified:** 2026-10-12
 
 ---
 
@@ -28,29 +28,27 @@ There is no D13. The register and the summary table had drifted by one on the la
 
 ---
 
-## D3 - The server trusts client-supplied player identifiers
+## D22 - A script can play a round at machine speed - **fixed 2026-10-12**
 
-**Severity: high.** The most serious outstanding defect.
+An automated client could subscribe, join, and submit a sequence as fast as the socket allowed. Short sequences and accuracy alone never distinguished that from a person.
 
-`imports/api/gameMethods.js:122`
+**Fix (applied):** `players.startAttempt` opens one attempt, and `players.submitSequence` requires its id plus per-colour offsets. An attempt of at least 4 colours is flagged when every interval is under 60 ms, the spread is at most 5 ms, and the server-observed elapsed time supports that speed. The third consecutive flagged attempt removes the player before grading, blocks that browser session for the room's lifetime, and bans the connection's address from that room for 15 minutes. A normal attempt of at least 4 colours resets the count. `BOT_DETECTION_ENABLED=false` is ignored outside development.
 
-```js
-async 'players.submitSequence'(playerId, attemptedSequence) {
-  const player = await PlayersCollection.findOneAsync(playerId);
-  // ...no check that the caller owns this player
-}
-```
+What this does not catch: input with human-looking gaps, a new address, or an IPv6 prefix that rotates. Those stay out of the ban.
 
-Every player's `_id` is published to every client in the same room by the `players` publication.
-Any browser can therefore call `Meteor.call('players.submitSequence', '<someone else>', ['x'])` in a loop and drain another player's lives to zero.
+## D3 - Room host actions still trust client-supplied identifiers
+
+**Severity: high.** Gameplay mutations are no longer in this defect.
+
+`players.startAttempt`, `players.submitSequence`, `players.timeoutTurn`, `players.timeoutRound`, `players.leaveGame`, `players.rebind`, and `abilities.pick` / `skip` / `use` now act only when the calling connection owns the player. A call with no connection, which is how the server and the existing tests invoke them, still runs.
 
 **Be precise about the framing.**
 Kimply is intentionally open to anyone, and accounts are optional by design.
 "There is no login" is therefore **not** the defect, and the fix is **not** a login wall.
 
-The defect is narrower: the server never checks that the connection sending an identifier is the connection that owns it.
+The defect that remains: room host actions still trust an identifier the client supplies.
 
-Related, all in the same category:
+Still in the same category:
 
 | Method | Location | Problem |
 |---|---|---|

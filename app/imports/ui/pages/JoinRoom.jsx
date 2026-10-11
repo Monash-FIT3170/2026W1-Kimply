@@ -6,6 +6,7 @@ import { combineKeyHandlers, removeOnBackspace, submitOnEnter } from '../keyboar
 import { appendRoomCodeInput, clearCapturedInput, roomCodeFromSearchParams } from '../roomCode';
 import { useSignedInAccount } from '../accountSession';
 import { loadUsername, saveUsername, USERNAME_MAX_LENGTH } from '../savedUsername';
+import { banMessage } from '../browserSession';
 
 const SLOTS = 5;
 
@@ -58,11 +59,13 @@ export function JoinRoom() {
       setLoading(false);
       if (err) {
         const msg =
-          {
-            'not-found': 'Room not found. Check the code.',
-            'not-lobby': 'This game has already started.',
-            'name-taken': 'That name is already taken in this room.',
-          }[err.error] ?? 'Something went wrong. Please try again.';
+          err.error === 'banned'
+            ? banMessage(err)
+            : ({
+                'not-found': 'Room not found. Check the code.',
+                'not-lobby': 'This game has already started.',
+                'name-taken': 'That name is already taken in this room.',
+              }[err.error] ?? 'Something went wrong. Please try again.');
         setError(msg);
         return;
       }

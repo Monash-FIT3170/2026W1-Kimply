@@ -12,9 +12,19 @@ import { GamePage } from '/imports/ui/pages/GamePage';
 import { Account } from '/imports/ui/pages/Account';
 import { GlobalLeaderboard } from '/imports/ui/pages/GlobalLeaderboard';
 import { resumeSession } from '/imports/ui/accountSession';
+import { resumeBrowserSession } from '/imports/ui/browserSession';
 import '/imports/ui/styles.css';
 
 Meteor.startup(() => {
+  // First, and with wait: true, so room and game methods run on a bound browser session.
+  resumeBrowserSession();
+  if (Meteor.connection) {
+    const previous = Meteor.connection.onReconnect;
+    Meteor.connection.onReconnect = () => {
+      if (typeof previous === 'function') previous();
+      resumeBrowserSession();
+    };
+  }
   resumeSession();
   const container = document.getElementById('react-target');
   const root = createRoot(container);

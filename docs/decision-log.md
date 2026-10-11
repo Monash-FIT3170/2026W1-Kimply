@@ -20,6 +20,19 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-12 - Bot detection blocks a browser session and a room's address
+
+Three consecutive machine-speed attempts remove that player before the attempt is graded (#142).
+The browser session is blocked for the life of the room, and the connection's address is banned from that room for 15 minutes. Both are stored on `rooms.security`, so they disappear with the room's existing 24-hour TTL and are never published.
+
+Things that are not obvious from the diff:
+
+- **A shared address does not drop the other people already in the room.** Their current connection keeps playing. Joining, reconnecting, or rebinding from that address is refused until the ban's `expiresAt`, including a brand-new browser session.
+- **A missing address stores a session block and no placeholder ban.** One connection without `clientAddress` cannot lock every other anonymous player out of the room.
+- **`HTTP_FORWARDED_COUNT` is 1 behind Nginx and the ALB, and 0 on the local direct connection.** Meteor's own proxy handling picks the address. A spoofed `X-Forwarded-For` prefix is not what `connection.clientAddress` returns.
+- **`BOT_DETECTION_ENABLED=false` works only in development.** In production the flag is logged once and ignored, so a deployed environment cannot turn detection off by setting it.
+- **Detection is built on the ability-system player.** The sequence being graded is `players.secret.sequence`, and an attempt cannot start while that round's draft is still open.
+
 ## 2026-10-11 - Host lobby: only the player list scrolls
 
 The host lobby in `app/imports/ui/pages/PlayerLobby.jsx` now keeps the room panel and the Start button at full size and scrolls only the player list (#143).

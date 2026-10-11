@@ -69,6 +69,8 @@ On Windows, clone into your Linux home (`cd ~` first), not `/mnt/c/...`.
 With Docker Desktop running, `docker compose up` starts MongoDB and the Meteor dev server.
 Wait for `App running at: http://localhost:3000`, then open <http://localhost:3000>.
 
+Bot detection is on. The local compose file sets `HTTP_FORWARDED_COUNT` to `0` because the browser talks to Meteor directly. To play from an automated client while you are developing, set `BOT_DETECTION_ENABLED=false` in the root `.env` and restart. That value is ignored outside a development Meteor process.
+
 **The first start takes 5 to 15 minutes** while Meteor downloads packages and compiles from scratch.
 Later starts are much faster because the build is cached in a Docker volume.
 

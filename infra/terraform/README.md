@@ -21,6 +21,8 @@ Terraform owns the infrastructure and the **first** task definition revision.
 The deploy pipeline owns every revision after that, rendered from the same template with `${IMAGE}` set to the commit's image.
 The ECS service ignores `task_definition` and `desired_count` changes, so `terraform apply` never rolls back a deploy or fights auto scaling.
 
+The load balancer appends `X-Forwarded-For` (`xff_header_processing_mode = "append"`). The task definition sets `HTTP_FORWARDED_COUNT` to `1`, so Meteor's `connection.clientAddress` is the peer the balancer saw, not a value the client put at the front of the header. Bot detection bans that address. Do not apply a Terraform change just to pick up this setting until the rest of the ECS cutover is ready; the task-definition template is what the pipeline deploys.
+
 The template hard-codes names and ARNs because the pipeline cannot read Terraform state.
 That includes the secret's full ARN with its random suffix: ECS treats a bare name in `valueFrom` as an SSM Parameter Store parameter, not a Secrets Manager secret.
 Preconditions on the task definition fail the plan if the template and the infrastructure ever disagree.
