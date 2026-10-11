@@ -75,8 +75,8 @@ if (Meteor.isServer) {
     });
 
     describe('streal life reward', function () {
-      it('awards a life when the streak reaches STREAK_LIFE_AWARD and lives are below the starting count', async function () {
-        await PlayersCollection.updateAsync(playerId, { $set: { lives: 1, currentStreak: STREAK_LIFE_AWARD - 1 } });
+      it('awards a life when the streak reaches STREAK_BONUS_LIFE_THRESHOLD and lives are below the starting count', async function () {
+        await PlayersCollection.updateAsync(playerId, { $set: { lives: 1, currentStreak: STREAK_BONUS_LIFE_THRESHOLD - 1 } });
         const result = await Meteor.callAsync('players.submitSequence', playerId, correctSequence);
         const player = await PlayersCollection.findOneAsync(playerId);
         assert.strictEqual(player.lives, 2);
@@ -85,7 +85,7 @@ if (Meteor.isServer) {
       });
 
       it('does not award a life between multiples of the streak length', async function () {
-        await PlayersCollection.updateAsync(playerId, { $set: { lives: 1, currentStreak: STREAK_LIFE_AWARD } });
+        await PlayersCollection.updateAsync(playerId, { $set: { lives: 1, currentStreak: STREAK_BONUS_LIFE_THRESHOLD } });
         const result = await Meteor.callAsync('players.submitSequence', playerId, correctSequence);
         const player = await PlayersCollection.findOneAsync(playerId);
         assert.strictEqual(player.lives, 1);
@@ -93,7 +93,7 @@ if (Meteor.isServer) {
       });
 
       it('never exceeds the starting life count', async function () {
-        await PlayersCollection.updateAsync(playerId, { $set: { currentStreak: STREAK_LIFE_AWARD - 1 } });
+        await PlayersCollection.updateAsync(playerId, { $set: { currentStreak: STREAK_BONUS_LIFE_THRESHOLD - 1 } });
         const result = await Meteor.callAsync('players.submitSequence', playerId, correctSequence);
         const player = await PlayersCollection.findOneAsync(playerId);
         assert.strictEqual(player.lives, DEFAULT_STARTING_LIVES);
