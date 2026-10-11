@@ -738,7 +738,7 @@ export const GamePage = () => {
               textAlign: 'center',
             }}
           >
-            BATTLE ROYALE • 1 LIFE ONLY
+            BATTLE ROYALE
           </div>
         )}
         <div

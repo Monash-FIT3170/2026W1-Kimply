@@ -28,6 +28,7 @@ Every `STREAK_BONUS_LIFE_THRESHOLD` (3) correct rounds in a row now earns a life
 Things that are not obvious from the diff:
 
 - **The cap depends on the mode.** Outside battle royale a streak only tops a player back up to the room's starting lives (`customSettings.startingLives`, else `DEFAULT_STARTING_LIVES`), so a player at full lives earns nothing and the next chance is the next multiple of the threshold. Battle royale has no cap, so a streak there banks lives above the start.
+- **Battle royale now starts on 1 life.** `GAME_MODE_PRESETS.battle_royale.startingLives` drops from 3 to 1, so a streak is the only way to gain a cushion there. The in-game banner loses its "1 LIFE ONLY" suffix, which had been wrong while the preset was 3 and would be wrong again as soon as a streak adds a life.
 - **The hearts row grows past the starting count.** It draws `max(startingLives, lives)` hearts and wraps, because a battle royale streak (and the round 7 bonus, which was never capped) can exceed the start.
 - **The streak earns a replay too.** With `REPLAY_BONUS_STREAK` at 1, the third correct round in a row pays out a replay and a life, each with its own toast.
 

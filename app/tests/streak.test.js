@@ -4,7 +4,7 @@ import '../imports/api/gameMethods.js';
 import { PlayersCollection } from '../imports/api/players.js';
 import { RoundsCollection } from '../imports/api/rounds.js';
 import { RoomsCollection } from '../imports/api/rooms.js';
-import { STREAK_BONUS_LIFE_THRESHOLD, DEFAULT_STARTING_LIVES } from '../imports/constants.js';
+import { STREAK_BONUS_LIFE_THRESHOLD, DEFAULT_STARTING_LIVES, GAME_MODE_PRESETS } from '../imports/constants.js';
 
 if (Meteor.isServer) {
   describe('Player streak tracking', function () {
@@ -131,14 +131,21 @@ if (Meteor.isServer) {
         assert.strictEqual(result.lifeAward, null);
       });
 
-      it('lets a battle royale streak go above the starting life count', async function () {
+      it('starts battle royale players on one life and lets a streak go above it', async function () {
+        await RoomsCollection.insertAsync({
+          pin: 'streak-test',
+          gameMode: 'battle_royale',
+          customSettings: { ...GAME_MODE_PRESETS.battle_royale },
+        });
         const royaleId = await Meteor.callAsync('players.join', roundId, 'Royale Player', 'streak-test', null, true);
+        assert.strictEqual((await PlayersCollection.findOneAsync(royaleId)).lives, 1);
+
         await PlayersCollection.updateAsync(royaleId, { $set: { currentStreak: STREAK_BONUS_LIFE_THRESHOLD - 1 } });
         const result = await Meteor.callAsync('players.submitSequence', royaleId, correctSequence);
         const player = await PlayersCollection.findOneAsync(royaleId);
-        assert.strictEqual(player.lives, DEFAULT_STARTING_LIVES + 1);
+        assert.strictEqual(player.lives, 2);
         assert.strictEqual(result.lifeAward.streak, true);
-        assert.strictEqual(result.lifeAward.lives, DEFAULT_STARTING_LIVES + 1);
+        assert.strictEqual(result.lifeAward.lives, 2);
       });
     });
   });
