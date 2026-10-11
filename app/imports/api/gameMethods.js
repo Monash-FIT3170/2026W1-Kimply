@@ -14,6 +14,7 @@ import {
   INITIAL_LEVEL,
   BONUS_LIFE_ROUND,
   DISCONNECT_GRACE_MS,
+  STREAK_BONUS_LIFE_THRESHOLD
 } from '../constants';
 
 // generate random colour sequence
@@ -325,9 +326,21 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         const longestStreak = Math.max(player.longestStreak ?? 0, currentStreak);
         const totalGuesses = (player.totalGuesses ?? 0) + 1;
         const correctGuesses = (player.correctGuesses ?? 0) + 1;
+        const room = await RoomsCollection.findOneAsync({ pin: player.gameId })
 
-        const bonusLife = round.roundNumber === BONUS_LIFE_ROUND ? 1 : 0;
-        const lives = (player.lives ?? 0) + bonusLife;
+        const startingLives = room?.customSettings?.startingLives || DEFAULT_STARTING_LIVES;
+
+        // Adding a life after a streak of 2
+
+        const bonusLife = round.roundNumber === BONUS_LIFE_ROUND ? 1 : 0
+        const streakLife = currentStreak % STREAK_BONUS_LIFE_THRESHOLD  === 0 && (player.lives?? 0) + bonusLife < startingLives ? 1 : 0;
+        const lives = (player.lives ?? 0) + bonusLife + streakLife;
+
+        const lifeAward = bonusLife || streakLife ?
+        { streak: streakLife === 1, bonusRound: bonusLife === 1, lives}
+        : null;
+
+
 
         // mark player as completed
         await PlayersCollection.updateAsync(playerId, {
@@ -389,13 +402,13 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
             createdAt: new Date(),
           });
 
-          return { success: true, sequenceComplete: true };
+          return { success: true, sequenceComplete: true, lifeAward };
         }
 
         const updatedRound = await RoundsCollection.findOneAsync(player.roundId);
         await advanceRoundIfReady(updatedRound);
 
-        return { success: true, sequenceComplete: true };
+        return { success: true, sequenceComplete: true , lifeAward};
       } else {
         // remove one life for wrong sequence
         const newLives = player.lives - 1;

@@ -20,6 +20,7 @@ import {
   MAX_LIVE_FEED_ITEMS,
   STARTING_REPLAYS,
   REPLAY_BONUS_STREAK,
+  STREAK_BONUS_LIFE_THRESHOLD
 } from '../../constants';
 
 const seqSeenKey = (gameId, roundId) => `seqSeen:${gameId}:${roundId}`;
@@ -84,6 +85,7 @@ export const GamePage = () => {
   const [attemptedSequence, setAttemptedSequence] = useState([]);
   const [message, setMessage] = useState('');
   const [levelUpNotices, setLevelUpNotices] = useState([]);
+  const [lifeFlash, setLifeFlash] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(ROUND_SECONDS);
   const [shake, setShake] = useState(false);
   const [correctGlow, setCorrectGlow] = useState(false);
@@ -294,7 +296,13 @@ export const GamePage = () => {
             ? `You have leveled up to level ${event.level}`
             : `${event.playerName} has reached level ${event.level}`,
       };
-      setLevelUpNotices((prev) => [...prev, notice].slice(-MAX_LIVE_FEED_ITEMS));
+
+      // Cap for level feed but not for life bonuses 
+      setLevelUpNotices((prev) => {
+        const lifeNotices = prev.filter((n) => n.kind === 'life');
+        const others = [...prev.filter((n) => n.kind !== 'life'), notice].slice(-MAX_LIVE_FEED_ITEMS);
+        return [...lifeNotices, ...others];
+      });
       // auto-dismiss like the elimination feed
       setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), LEVEL_UP_TOAST_MS);
     });
@@ -360,6 +368,30 @@ export const GamePage = () => {
     };
   }, [round?._id, playerId, isBattleRoyale, player?.eliminated, player?.gameFinished]);
 
+
+  const showLifeAward = ({ streak, bonusRound, lives }) => {
+    const reason = streak && bonusRound
+      ? 'Streak reward + bonus round!'
+      : bonusRound
+      ? 'Bonus round reward!'
+      : `${STREAK_BONUS_LIFE_THRESHOLD} correct in a row!`;
+
+    const notice = {
+      key: `life-${Date.now()}`,
+      kind: 'life',
+      title: `+${streak && bonusRound ? 2 : 1} ${streak && bonusRound ? 'lives' : 'life'} ❤`,
+      text: `${reason} You now have ${lives} ${lives === 1 ? 'life' : 'lives'}.`,
+    };
+
+    setLevelUpNotices((prev) => [...prev, notice]);
+    setLifeFlash(true);
+    setTimeout(() => setLifeFlash(false), 1200);
+
+    // remove the popup after 5 seconds 
+    setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), 5000);
+  };
+
+
   const handleSubmit = () => {
     if (!playerId) {
       setMessage('Player is not ready yet.');
@@ -377,7 +409,7 @@ export const GamePage = () => {
       }
       if (result.success) {
         submittedRoundRef.current = true;
-
+        if (result.lifeAward) showLifeAward(result.lifeAward);
         if (isBattleRoyale) {
           setMessage('Correct! Moving to next round...');
         } else {
@@ -397,6 +429,7 @@ export const GamePage = () => {
           setShake(true);
           setTimeout(() => setShake(false), 400);
           setAttemptedSequence([]);
+
           // Keep input locked while the sequence replays, otherwise the tiles stay
           // clickable and the player can copy the answer as it lights up. The replay
           // (triggered by the replayKey bump) re-enables input via onSequenceComplete
@@ -452,6 +485,48 @@ export const GamePage = () => {
     };
   }, [playerCanInput, attemptedSequence, round]);
 
+
+  // This is the toas stack, instead of defining it on all the screens can just be defined here.
+  const noticeStack = (
+    <div
+      style={{
+        position: 'fixed',
+        top: '18px',
+        left: '18px',
+        zIndex: 40,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '10px',
+        pointerEvents: 'none',
+        maxWidth: 'min(320px, calc(100vw - 36px))',
+      }}
+    >
+      {levelUpNotices.map((notice) => (
+        <div
+          key={notice.key}
+          className={notice.kind === 'life' ? '' : 'hidden sm:block'}
+          style={{
+            padding: '12px 14px',
+            borderRadius: '14px',
+            background: notice.kind === 'life' ? 'rgba(224,48,48,0.28)' : 'rgba(255,255,255,0.12)',
+            border: notice.kind === 'life' ? '1px solid rgba(255,120,120,0.6)' : '1px solid rgba(255,255,255,0.18)',
+            color: 'white',
+            boxShadow: '0 14px 36px rgba(0,0,0,0.28)',
+            backdropFilter: 'blur(10px)',
+            fontFamily: 'Outfit, sans-serif',
+            fontWeight: 700,
+            fontSize: '0.9rem',
+            lineHeight: 1.25,
+            animation: 'levelUpToastIn 180ms ease-out',
+          }}
+        >
+          {notice.title && <div style={{ fontSize: '1.05rem', marginBottom: '2px' }}>{notice.title}</div>}
+          {notice.text}
+        </div>
+      ))}
+    </div>
+  );
+
   // Reached by loading /game directly, or after a refresh drops location.state.
   // Without a room PIN there is no game to subscribe to, so say so instead of
   // sitting on LOADING indefinitely.
@@ -484,6 +559,7 @@ export const GamePage = () => {
     return (
       <>
         <EliminationFeed gameId={gameId} />
+        {noticeStack}
         <EndLeaderboard gameId={player.gameId} currentPlayerId={player._id} />
       </>
     );
@@ -540,6 +616,7 @@ export const GamePage = () => {
             </button>
           </main>
           <EliminationFeed gameId={gameId} />
+          {noticeStack}
         </div>
       </>
     );
@@ -628,44 +705,7 @@ export const GamePage = () => {
           Powerup Gained: Slow Motion for one round!
         </div>
       )}
-      {/* Level-up announcements are hidden under sm: in a full lobby (~100 players) they
-          fire constantly, and on a phone the stack buries the header and the game itself.
-          Phone players still get the same information on demand from the leaderboard. */}
-      <div
-        className="hidden sm:flex"
-        style={{
-          position: 'fixed',
-          top: '18px',
-          left: '18px',
-          zIndex: 40,
-          flexDirection: 'column',
-          gap: '10px',
-          pointerEvents: 'none',
-          maxWidth: 'min(320px, calc(100vw - 36px))',
-        }}
-      >
-        {levelUpNotices.map((notice) => (
-          <div
-            key={notice.key}
-            style={{
-              padding: '12px 14px',
-              borderRadius: '14px',
-              background: 'rgba(255,255,255,0.12)',
-              border: '1px solid rgba(255,255,255,0.18)',
-              color: 'white',
-              boxShadow: '0 14px 36px rgba(0,0,0,0.28)',
-              backdropFilter: 'blur(10px)',
-              fontFamily: 'Outfit, sans-serif',
-              fontWeight: 700,
-              fontSize: '0.9rem',
-              lineHeight: 1.25,
-              animation: 'levelUpToastIn 180ms ease-out',
-            }}
-          >
-            {notice.text}
-          </div>
-        ))}
-      </div>
+      {noticeStack}
       <div
         className="relative flex shrink-0 justify-between"
         style={{ width: '100%', padding: 'clamp(12px, 2dvh, 20px) clamp(24px, 5vw, 28px)' }}
@@ -722,6 +762,7 @@ export const GamePage = () => {
                 justifyContent: 'center',
                 fontSize: 'clamp(14px, 3.2dvh, 32px)',
                 boxShadow: heart <= (player?.lives ?? totalLives) ? '0 0 10px #e0303088' : 'none',
+                transform: lifeFlash && heart === (player?.lives ?? totalLives) ? 'scale(1.35)' : 'scale(1)',
                 transition: 'all 0.3s ease',
               }}
             >

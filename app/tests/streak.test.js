@@ -3,6 +3,7 @@ import { Meteor } from 'meteor/meteor';
 import '../imports/api/gameMethods.js';
 import { PlayersCollection } from '../imports/api/players.js';
 import { RoundsCollection } from '../imports/api/rounds.js';
+import { STREAK_BONUS_LIFE_THRESHOLD, DEFAULT_STARTING_LIVES } from '../imports/constants.js';
 
 if (Meteor.isServer) {
   describe('Player streak tracking', function () {
@@ -72,5 +73,33 @@ if (Meteor.isServer) {
       assert.strictEqual(player.currentStreak, 4);
       assert.strictEqual(player.longestStreak, 4);
     });
+
+    describe('streal life reward', function () {
+      it('awards a life when the streak reaches STREAK_LIFE_AWARD and lives are below the starting count', async function () {
+        await PlayersCollection.updateAsync(playerId, { $set: { lives: 1, currentStreak: STREAK_LIFE_AWARD - 1 } });
+        const result = await Meteor.callAsync('players.submitSequence', playerId, correctSequence);
+        const player = await PlayersCollection.findOneAsync(playerId);
+        assert.strictEqual(player.lives, 2);
+        assert.strictEqual(result.lifeAward.streak, true);
+        assert.strictEqual(result.lifeAward.lives, 2);
+      });
+
+      it('does not award a life between multiples of the streak length', async function () {
+        await PlayersCollection.updateAsync(playerId, { $set: { lives: 1, currentStreak: STREAK_LIFE_AWARD } });
+        const result = await Meteor.callAsync('players.submitSequence', playerId, correctSequence);
+        const player = await PlayersCollection.findOneAsync(playerId);
+        assert.strictEqual(player.lives, 1);
+        assert.strictEqual(result.lifeAward, null);
+      });
+
+      it('never exceeds the starting life count', async function () {
+        await PlayersCollection.updateAsync(playerId, { $set: { currentStreak: STREAK_LIFE_AWARD - 1 } });
+        const result = await Meteor.callAsync('players.submitSequence', playerId, correctSequence);
+        const player = await PlayersCollection.findOneAsync(playerId);
+        assert.strictEqual(player.lives, DEFAULT_STARTING_LIVES);
+        assert.strictEqual(result.lifeAward, null);
+      });
+
+    })
   });
 }

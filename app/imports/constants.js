@@ -6,10 +6,12 @@ export const DEFAULT_STARTING_LIVES = 3;
 export const DEFAULT_SEQUENCE_LENGTH = 4;
 export const INITIAL_LEVEL = 4; // starting currentLevel (level 1 == sequence length 4)
 export const BONUS_LIFE_ROUND = 7; // completing this round grants +1 life
+export const STREAK_BONUS_LIFE_THRESHOLD = 3; // Every 3 in a row right get an extra life 
 export const ROUND_TIMER_SECONDS = 45; // whole-round countdown (not battle royale)
 export const STARTING_REPLAYS = 1; // sequence replays each player starts with (not battle royale)
 export const REPLAY_BONUS_STREAK = 1; // +1 replay every time the streak reaches a multiple of this
 export const SEQUENCE_COLOURS = ['red', 'blue', 'green', 'yellow'];
+
 
 // --- Rooms ---
 export const PIN_LENGTH = 5;
