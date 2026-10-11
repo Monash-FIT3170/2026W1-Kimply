@@ -20,6 +20,29 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-11 - Round abilities: a pick-1-of-3 draft, and private per-player sequences
+
+Players now draft an ability before each round (#140).
+From round 2 of a standard game every surviving player is dealt 3 of Steal, Strike, Shield, Free Pass, Reroll and Scramble, and picks 1 or skips within 10 seconds.
+Battle Royale players draft on each level-up, where Jump (move to a random other player's level) joins the pool.
+The host can turn abilities off in the lobby; they are on by default for new rooms.
+A Me / All toggle on the game screen filters the live notices, defaulting to Me because a full room produces more events than anyone can read.
+
+New files: `app/imports/api/abilities.js`, `abilityEngine.js`, `abilityRules.js`, `gameEngine.js`, and `app/imports/ui/abilities/`.
+`gameMethods.js` now holds only method definitions; its helpers moved to `gameEngine.js` so the ability code can share them without a circular import.
+
+Things that are not obvious from the diff:
+
+- **Every player's sequence is now private, in every mode.** Reroll and Scramble give one player a different sequence from the rest of the room, so the sequence moved from the shared round to `players.secret.sequence`, which only its owner receives (`players.secret`, keyed on the connection). The `rounds` publication stops sending `sequence` altogether. This also closes a leak: Battle Royale level rounds are never marked `advanced`, so every level's answer was reaching every client (D20).
+- **`players.secret` depends on the connection binding being current.** A DDP reconnect opens a new connection, so `GamePage` now calls the new `players.rebind` when the connection comes back. Without it the player stops receiving their sequence, and the server removes them after the 15-second disconnect grace period anyway (D21, which predates this change).
+- **Drafts are resolved on the server, once.** `rounds.advance` puts `draft` on the new round at insert time, so no client starts playback before it sees the draft. A server timer closes it; clients ask again through `abilities.closeDraft` if their own countdown runs out first, in case a restart lost the timer. Whoever flips `draft.resolved` does the work, so the timer, the fallback and an early close (everyone has chosen) can race safely.
+- **Resolution order is a rule, not an accident.** Every Steal lands before any Strike, each in pick order, so a Steal is judged on the lives a player went into the round with. A player struck out in the same resolution still lands their own card.
+- **Ability methods are the first ones bound to the caller's connection.** They can hurt other players, so they apply the D3 fix to themselves only. Every older method still trusts the `playerId` it is given.
+- **Lives now move with `$inc` everywhere.** A Battle Royale Strike can land while its target submits, so wrong answers, timeouts and Steals no longer write lives computed from an earlier read. That closes the life-deduction part of D4.
+- **Steal is only dealt when the room starts players on more than 1 life**, because it never takes a last life. Battle Royale lives are being reworked separately (#116), and this rule adapts to whatever that settles on.
+- **Lives can exceed the starting count through Steal**, so the heart row draws `max(startingLives, lives)` hearts.
+- **Rooms created before this change have no `abilitiesEnabled` and play without abilities**, so a deploy mid-game does not start dealing cards into it.
+
 ## 2026-10-10 - Replay tunables moved to constants, bonus every correct round
 
 The replay button's two numbers now live in `app/imports/constants.js` next to the other gameplay tunables: `STARTING_REPLAYS` (1) and `REPLAY_BONUS_STREAK`, which drops from 3 to 1.

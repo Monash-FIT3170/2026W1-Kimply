@@ -13,6 +13,13 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { TileLattice } from '../components/design';
 import { ConfirmationPopup } from '../components/ConfirmationPopup.jsx';
 import { useSessionResuming, useSignedInAccount } from '../accountSession';
+import { playableHand } from '../../api/abilityRules';
+import { isInFeed } from '../abilities/abilityFeed';
+import { FeedScopeToggle, useFeedScope } from '../abilities/FeedScopeToggle.jsx';
+import { DraftOverlay } from '../abilities/DraftOverlay.jsx';
+import { HandDialog } from '../abilities/HandDialog.jsx';
+import { KeyHint } from '../abilities/AbilityDialog.jsx';
+import { useAbilityNotices } from '../abilities/useAbilityNotices';
 import {
   ROUND_TIMER_SECONDS as ROUND_SECONDS,
   LEVEL_UP_TOAST_MS,
@@ -22,7 +29,11 @@ import {
   REPLAY_BONUS_STREAK,
 } from '../../constants';
 
-const seqSeenKey = (gameId, roundId) => `seqSeen:${gameId}:${roundId}`;
+// Keyed on the sequence version too, so a Reroll or Scramble plays the new sequence.
+const seqSeenKey = (gameId, roundId, version) => `seqSeen:${gameId}:${roundId}:${version}`;
+const SUBMISSION_TOAST_MS = 3000;
+// How long to wait before asking the server again to close a draft whose clock ran out.
+const CLOSE_DRAFT_RETRY_MS = 2000;
 
 // Below Tailwind's `xs` breakpoint (481px) the leaderboard is a bottom sheet that
 // covers the tiles and buttons, so it starts closed on phones and open elsewhere.
@@ -91,7 +102,9 @@ export const GamePage = () => {
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(leaderboardOpenByDefault);
   const [showPowerupPopup, setShowPowerupPopup] = useState(false);
   const [completedRoundId, setCompletedRoundId] = useState(null);
-  const [submissionNotices, setSubmissionNotices] = useState([]);
+  const [handOpen, setHandOpen] = useState(false);
+  const [expiredDraftKey, setExpiredDraftKey] = useState(null);
+  const [feedScope, setFeedScope] = useFeedScope();
   const [showLeavePopup, setShowLeavePopup] = useState(false);
   const [leaveError, setLeaveError] = useState('');
 
@@ -154,15 +167,35 @@ export const GamePage = () => {
     if (!gameId) return undefined;
     const roundsSub = Meteor.subscribe('rounds', gameId);
     const playersSub = Meteor.subscribe('players', gameId);
+    // This player's own sequence, draft and hand. Never sent to anyone else.
+    const secretSub = Meteor.subscribe('players.secret', gameId);
     const roomSub = Meteor.subscribe('rooms.lobby', gameId);
-    const eventsSub = Meteor.subscribe('gameEvents', gameId);
     return () => {
       roundsSub.stop();
       playersSub.stop();
+      secretSub.stop();
       roomSub.stop();
-      eventsSub.stop();
     };
   }, [gameId]);
+
+  useEffect(() => {
+    if (!gameId || (feedScope === 'me' && !playerId)) return undefined;
+    const eventsSub = Meteor.subscribe('gameEvents', gameId, feedScope, playerId);
+    return () => eventsSub.stop();
+  }, [gameId, feedScope, playerId]);
+
+  // A DDP reconnect opens a new connection. Point the player at it, or the server
+  // treats them as gone and removes them after the disconnect grace period.
+  const connected = useTracker(() => Meteor.status().connected, []);
+  const wasConnectedRef = useRef(connected);
+  useEffect(() => {
+    if (connected && !wasConnectedRef.current && playerId) {
+      Meteor.call('players.rebind', playerId, (error) => {
+        if (error) setMessage('Lost track of your game after reconnecting. Refresh to rejoin.');
+      });
+    }
+    wasConnectedRef.current = connected;
+  }, [connected, playerId]);
 
   const player = useTracker(() => {
     if (!playerId) return null;
@@ -175,7 +208,6 @@ export const GamePage = () => {
   }, [gameId]);
   const gameMode = room?.gameMode || routeGameMode || 'default';
   const isBattleRoyale = gameMode === 'battle_royale';
-  const canReplay = !isBattleRoyale && replaysRemaining > 0 && playerCanInput;
 
   const round = useTracker(() => {
     if (!gameId) return null;
@@ -192,6 +224,45 @@ export const GamePage = () => {
     return RoundsCollection.findOne({ gameId, isCurrent: true });
   }, [gameId, player?.roundId]);
 
+  // The sequence this player repeats arrives privately on their own player document.
+  const ownSequence = player?.secret?.sequence;
+  const sequenceReady = Boolean(ownSequence && round && ownSequence.roundId === round._id);
+  const sequence = sequenceReady ? ownSequence.colours : [];
+  const sequenceVersion = sequenceReady ? ownSequence.version : null;
+
+  // Standard rounds open with a shared draft on the round. Battle Royale deals each
+  // player their own when they level up.
+  const myDraft = player?.secret?.draft && player.secret.draft.roundId === player.roundId ? player.secret.draft : null;
+  const draftKey = isBattleRoyale ? player?.roundId : round?._id;
+  const roundDraftOpen = !isBattleRoyale && Boolean(round?.draft) && !round.draft.resolved;
+  const levelDraftOpen = isBattleRoyale && myDraft?.status === 'open' && expiredDraftKey !== draftKey;
+  const playing = Boolean(player) && !player.eliminated && !player.completeRound && !player.gameFinished;
+  const draftOpen = playing && (roundDraftOpen || levelDraftOpen);
+  const hand = playing ? playableHand(player) : [];
+  const canOpenHand = hand.length > 0 && !draftOpen;
+  const dialogOpen = draftOpen || handOpen;
+  const tilesLive = playerCanInput && !dialogOpen;
+  const canReplay = !isBattleRoyale && replaysRemaining > 0 && tilesLive;
+
+  useEffect(() => {
+    if (!canOpenHand) setHandOpen(false);
+  }, [canOpenHand]);
+
+  // Who a Steal, Strike or Scramble can be aimed at.
+  const targetCandidates = useTracker(() => {
+    if (!gameId || !playerId) return [];
+    const sharedLevel = round ? (round.roundNumber ?? round.lengthOfSequence - 3) : 0;
+    return PlayersCollection.find({ gameId, eliminated: false, _id: { $ne: playerId } })
+      .fetch()
+      .map((p) => ({
+        _id: p._id,
+        name: p.name,
+        lives: p.lives ?? 0,
+        level: isBattleRoyale ? (p.currentLevel ?? 4) - 3 : sharedLevel,
+        completeRound: Boolean(p.completeRound),
+      }));
+  }, [gameId, playerId, isBattleRoyale, round?._id]);
+
   // startingLives is copied into customSettings for every preset mode (easy=5, hard=1, ...),
   // not just 'custom', so size the lives track off customSettings regardless of gameMode.
   const totalLives = room?.customSettings?.startingLives ?? DEFAULT_STARTING_LIVES;
@@ -204,6 +275,14 @@ export const GamePage = () => {
     if (!gameId) return [];
     return GameEventsCollection.find({ gameId, type: 'correct-submission' }, { sort: { createdAt: -1 } }).fetch();
   }, [gameId]);
+
+  // Every live notice (level-ups, correct answers, abilities) shares one capped stack.
+  const pushNotice = (notice, durationMs = LEVEL_UP_TOAST_MS) => {
+    setLevelUpNotices((prev) => [...prev, notice].slice(-MAX_LIVE_FEED_ITEMS));
+    setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), durationMs);
+  };
+
+  useAbilityNotices({ gameId, viewerId: playerId, scope: feedScope, onNotice: (notice) => pushNotice(notice) });
 
   useEffect(() => {
     // Wait for a stored session to resume, or the player would join without their account.
@@ -228,22 +307,22 @@ export const GamePage = () => {
     );
   }, [round?._id, playerId, gameId, playerNameFromLobby, lobbyPlayerId, isBattleRoyale, accountId, sessionResuming]);
 
+  // A new round, a new sequence (Reroll, Scramble) or the draft closing all restart
+  // playback. Nothing plays while the draft is open.
   useEffect(() => {
     if (!player?.roundId) return;
     setAttemptedSequence([]);
     setMessage('');
-    setSecondsLeft(30);
     setCompletedRoundId(null);
     submittedRoundRef.current = false;
-    if (gameId && localStorage.getItem(seqSeenKey(gameId, player.roundId))) {
-      // already watched this round (e.g. refresh): skip the replay
+    setPlayerCanInput(false);
+    if (draftOpen || sequenceVersion == null) return;
+    if (gameId && localStorage.getItem(seqSeenKey(gameId, player.roundId, sequenceVersion))) {
+      // already watched this sequence (e.g. refresh): skip the replay
       setPlayerCanInput(true);
-      setReplayKey((prev) => prev + 1);
-    } else {
-      setPlayerCanInput(false);
-      setReplayKey((prev) => prev + 1);
     }
-  }, [player?.roundId, gameId]);
+    setReplayKey((prev) => prev + 1);
+  }, [player?.roundId, gameId, sequenceVersion, draftOpen]);
 
   //replay bonus
   const prevStreakRef = useRef(0);
@@ -287,16 +366,14 @@ export const GamePage = () => {
     [...levelUpEvents].reverse().forEach((event) => {
       if (seenLevelUpIds.current.has(event._id)) return;
       seenLevelUpIds.current.add(event._id);
-      const notice = {
+      if (!isInFeed(feedScope, playerId, event)) return;
+      pushNotice({
         key: event._id,
         text:
           event.playerId === playerId
             ? `You have leveled up to level ${event.level}`
             : `${event.playerName} has reached level ${event.level}`,
-      };
-      setLevelUpNotices((prev) => [...prev, notice].slice(-MAX_LIVE_FEED_ITEMS));
-      // auto-dismiss like the elimination feed
-      setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), LEVEL_UP_TOAST_MS);
+      });
     });
   }, [levelUpEvents]);
 
@@ -308,24 +385,20 @@ export const GamePage = () => {
       if (seenSubmissionIds.current.has(event._id)) return;
 
       seenSubmissionIds.current.add(event._id);
+      // Only ever about other players, so the 'me' feed leaves these out.
+      if (feedScope !== 'everyone') return;
 
-      const notice = {
-        key: event._id,
-        text: `${event.playerName} has submitted the correct sequence!`,
-      };
-
-      setSubmissionNotices((prev) => [...prev, notice]);
-
-      setTimeout(() => {
-        setSubmissionNotices((prev) => prev.filter((n) => n.key !== notice.key));
-      }, 3000);
+      pushNotice(
+        { key: event._id, text: `${event.playerName} has submitted the correct sequence!` },
+        SUBMISSION_TOAST_MS
+      );
     });
   }, [submissionEvents, playerId]);
 
   const handleColourClick = (colour) => {
-    if (!playerCanInput) return;
-    if (!round?.sequence) return;
-    if (attemptedSequence.length >= round.sequence.length) return;
+    if (!tilesLive) return;
+    if (!sequenceReady) return;
+    if (attemptedSequence.length >= sequence.length) return;
     setAttemptedSequence((prev) => [...prev, colour]);
   };
 
@@ -333,6 +406,7 @@ export const GamePage = () => {
     if (isBattleRoyale) return undefined; // battle royale is a free-for-all: no timer
     if (!round?._id || !playerId) return undefined;
     if (player?.eliminated || player?.gameFinished) return undefined;
+    if (roundDraftOpen) return undefined; // the clock starts once the draft closes
 
     // One timer for the whole round; wrong guesses and lost lives do not reset it.
     setSecondsLeft(ROUND_SECONDS);
@@ -358,15 +432,41 @@ export const GamePage = () => {
       window.clearTimeout(timeoutId);
       window.clearInterval(intervalId);
     };
-  }, [round?._id, playerId, isBattleRoyale, player?.eliminated, player?.gameFinished]);
+  }, [round?._id, playerId, isBattleRoyale, player?.eliminated, player?.gameFinished, roundDraftOpen]);
+
+  // The server closes a draft on its own timer. If that was lost (a restart), ask it
+  // to close once this device's clock runs out, and keep asking until it does.
+  const handleDraftExpire = () => {
+    if (isBattleRoyale) {
+      setExpiredDraftKey(draftKey);
+      if (myDraft?.status === 'open') Meteor.call('abilities.skip', playerId, () => {});
+      return;
+    }
+    const roundId = round?._id;
+    const attempt = () => {
+      Meteor.call('abilities.closeDraft', roundId, (error, closed) => {
+        const current = RoundsCollection.findOne(roundId);
+        if (!closed && current?.draft && !current.draft.resolved) setTimeout(attempt, CLOSE_DRAFT_RETRY_MS);
+      });
+    };
+    if (roundId) attempt();
+  };
+
+  const pickAbility = (type, targetId, done) => Meteor.call('abilities.pick', playerId, type, targetId, done);
+  const skipDraft = (done) => Meteor.call('abilities.skip', playerId, done);
+  const playHandCard = (card, targetId, done) =>
+    Meteor.call('abilities.use', playerId, card.id, targetId, (error) => {
+      done(error);
+      if (!error) setHandOpen(false);
+    });
 
   const handleSubmit = () => {
     if (!playerId) {
       setMessage('Player is not ready yet.');
       return;
     }
-    if (attemptedSequence.length !== round.sequence.length) {
-      setMessage(`Choose ${round.sequence.length} colours before submitting.`);
+    if (attemptedSequence.length !== sequence.length) {
+      setMessage(`Choose ${sequence.length} colours before submitting.`);
       return;
     }
     Meteor.call('players.submitSequence', playerId, attemptedSequence, (error, result) => {
@@ -419,11 +519,20 @@ export const GamePage = () => {
 
   useEffect(() => {
     const handleKeyDown = (event) => {
+      // An open draft or hand owns the keyboard.
+      if (dialogOpen) return;
+
+      if (event.key.toLowerCase() === 'e' && canOpenHand) {
+        event.preventDefault();
+        setHandOpen(true);
+        return;
+      }
+
       if (event.key === 'Enter') {
         // Without this, Enter also "clicks" whichever control button last had focus.
         event.preventDefault();
 
-        if (playerCanInput && attemptedSequence.length === round.sequence.length) {
+        if (tilesLive && attemptedSequence.length === sequence.length) {
           handleSubmit();
         }
       }
@@ -431,7 +540,7 @@ export const GamePage = () => {
       if (event.key === 'Backspace') {
         event.preventDefault();
 
-        if (playerCanInput && attemptedSequence.length > 0) {
+        if (tilesLive && attemptedSequence.length > 0) {
           handleUndo();
         }
       }
@@ -439,7 +548,7 @@ export const GamePage = () => {
       if (event.code === 'Space') {
         event.preventDefault();
 
-        if (playerCanInput && attemptedSequence.length > 0) {
+        if (tilesLive && attemptedSequence.length > 0) {
           handleClear();
         }
       }
@@ -450,7 +559,7 @@ export const GamePage = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [playerCanInput, attemptedSequence, round]);
+  }, [tilesLive, attemptedSequence, sequence, dialogOpen, canOpenHand]);
 
   // Reached by loading /game directly, or after a refresh drops location.state.
   // Without a room PIN there is no game to subscribe to, so say so instead of
@@ -483,7 +592,7 @@ export const GamePage = () => {
   if (player.gameFinished) {
     return (
       <>
-        <EliminationFeed gameId={gameId} />
+        <EliminationFeed gameId={gameId} scope={feedScope} viewerId={playerId} />
         <EndLeaderboard gameId={player.gameId} currentPlayerId={player._id} />
       </>
     );
@@ -500,6 +609,7 @@ export const GamePage = () => {
           title="Leave game?"
           message="You will stop spectating and return to the play screen. The remaining players can continue their round."
         />
+        <FeedScopeToggle scope={feedScope} onChange={setFeedScope} className="fixed right-6 top-5 z-50 xs:top-6" />
         <div className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-[#1a0533] to-[#0d1b4b] px-4 py-10 text-center">
           <TileLattice opacity={0.06} />
           <main className="relative z-10 flex w-full max-w-lg flex-col items-center gap-5">
@@ -539,7 +649,7 @@ export const GamePage = () => {
               Leave game
             </button>
           </main>
-          <EliminationFeed gameId={gameId} />
+          <EliminationFeed gameId={gameId} scope={feedScope} viewerId={playerId} />
         </div>
       </>
     );
@@ -589,27 +699,25 @@ export const GamePage = () => {
       }}
     >
       <TileLattice opacity={0.06} />
-      {submissionNotices.map((notice) => (
-        <div
-          key={notice.key}
-          style={{
-            position: 'fixed',
-            bottom: '16px',
-            left: '16px',
-            padding: '8px 12px',
-            borderRadius: '8px',
-            background: 'rgba(255,255,255,0.12)',
-            border: '1px solid rgba(255,255,255,0.2)',
-            color: 'white',
-            fontWeight: 'bold',
-            fontSize: '12px',
-            zIndex: 1000,
-            backdropFilter: 'blur(8px)',
-          }}
-        >
-          {notice.text}
-        </div>
-      ))}
+      {draftOpen && (
+        <DraftOverlay
+          draft={myDraft}
+          draftKey={draftKey}
+          levelLabel={`Level ${round.roundNumber ?? round.lengthOfSequence - 3}`}
+          candidates={targetCandidates}
+          onPick={pickAbility}
+          onSkip={skipDraft}
+          onExpire={handleDraftExpire}
+        />
+      )}
+      {handOpen && (
+        <HandDialog
+          cards={hand}
+          candidates={targetCandidates}
+          onPlay={playHandCard}
+          onClose={() => setHandOpen(false)}
+        />
+      )}
       {showPowerupPopup && (
         <div
           style={{
@@ -628,14 +736,15 @@ export const GamePage = () => {
           Powerup Gained: Slow Motion for one round!
         </div>
       )}
-      {/* Level-up announcements are hidden under sm: in a full lobby (~100 players) they
-          fire constantly, and on a phone the stack buries the header and the game itself.
-          Phone players still get the same information on demand from the leaderboard. */}
+      {/* Live notices sit under the top bar so they never cover the feed toggle. With the
+          'everyone' feed they are hidden under sm: a full lobby (~100 players) fires them
+          constantly and on a phone the stack buries the game. The 'me' feed is quiet enough
+          to show everywhere. */}
       <div
-        className="hidden sm:flex"
+        className={feedScope === 'me' ? 'flex' : 'hidden sm:flex'}
         style={{
           position: 'fixed',
-          top: '18px',
+          top: '76px',
           left: '18px',
           zIndex: 40,
           flexDirection: 'column',
@@ -670,17 +779,20 @@ export const GamePage = () => {
         className="relative flex shrink-0 justify-between"
         style={{ width: '100%', padding: 'clamp(12px, 2dvh, 20px) clamp(24px, 5vw, 28px)' }}
       >
-        <span
-          style={{
-            fontSize: 'clamp(20px, 2vw, 40px)',
-            fontWeight: 800,
-            color: 'white',
-            letterSpacing: '-0.02em',
-            fontFamily: 'Outfit, sans-serif',
-          }}
-        >
-          KIMPLY
-        </span>
+        <div className="flex items-center gap-3">
+          <span
+            style={{
+              fontSize: 'clamp(20px, 2vw, 40px)',
+              fontWeight: 800,
+              color: 'white',
+              letterSpacing: '-0.02em',
+              fontFamily: 'Outfit, sans-serif',
+            }}
+          >
+            KIMPLY
+          </span>
+          <FeedScopeToggle scope={feedScope} onChange={setFeedScope} />
+        </div>
       </div>
       <div className="relative flex min-h-0 flex-1 flex-col items-center justify-start overflow-y-auto px-6 pb-6 md:justify-center">
         {isBattleRoyale && (
@@ -709,7 +821,8 @@ export const GamePage = () => {
             marginBottom: 'clamp(16px, 2.5dvh, 24px)',
           }}
         >
-          {Array.from({ length: totalLives }, (_, i) => i + 1).map((heart) => (
+          {/* A Steal can take a player above their starting lives, so draw every one they hold. */}
+          {Array.from({ length: Math.max(totalLives, player?.lives ?? 0) }, (_, i) => i + 1).map((heart) => (
             <div
               key={heart}
               style={{
@@ -768,7 +881,7 @@ export const GamePage = () => {
               marginBottom: 'clamp(16px, 2dvh, 24px)',
             }}
           >
-            {(round.sequence || []).map((_, i) => (
+            {sequence.map((_, i) => (
               <div
                 key={i}
                 style={{
@@ -782,15 +895,19 @@ export const GamePage = () => {
           </div>
           <ColourSequence
             roundId={round._id}
-            sequence={round.sequence}
+            sequence={draftOpen ? [] : sequence}
             replayKey={replayKey}
-            autoPlay={!(gameId && player?.roundId && localStorage.getItem(seqSeenKey(gameId, player.roundId)))}
-            playerCanInput={playerCanInput}
+            autoPlay={
+              !(gameId && player?.roundId && localStorage.getItem(seqSeenKey(gameId, player.roundId, sequenceVersion)))
+            }
+            playerCanInput={tilesLive}
             onSequenceComplete={() => {
               playTurnStartSound();
               setPlayerCanInput(true);
               setMessage('Your turn. Repeat the sequence.');
-              if (gameId && player?.roundId) localStorage.setItem(seqSeenKey(gameId, player.roundId), '1');
+              if (gameId && player?.roundId) {
+                localStorage.setItem(seqSeenKey(gameId, player.roundId, sequenceVersion), '1');
+              }
             }}
             onColourClick={handleColourClick}
             flashingSpeed={
@@ -810,7 +927,7 @@ export const GamePage = () => {
               fontSize: 'clamp(12px, 1.2vw, 24px)',
             }}
           >
-            Selected: {attemptedSequence.length}/{round.sequence.length}
+            Selected: {attemptedSequence.length}/{sequence.length}
           </p>
           <p
             style={{
@@ -852,7 +969,7 @@ export const GamePage = () => {
               label="CLEAR"
               keyHint="Space"
               onClick={handleClear}
-              enabled={playerCanInput && attemptedSequence.length > 0}
+              enabled={tilesLive && attemptedSequence.length > 0}
               enabledBackground="#444"
               disabledBackground="#222"
               disabledColour="#555"
@@ -861,7 +978,7 @@ export const GamePage = () => {
               label="UNDO"
               keyHint="Backspace"
               onClick={handleUndo}
-              enabled={playerCanInput && attemptedSequence.length > 0}
+              enabled={tilesLive && attemptedSequence.length > 0}
               enabledBackground="#444"
               disabledBackground="#222"
               disabledColour="#555"
@@ -885,14 +1002,27 @@ export const GamePage = () => {
               label="SUBMIT"
               keyHint="Enter"
               onClick={handleSubmit}
-              enabled={playerCanInput && attemptedSequence.length === round.sequence.length}
+              enabled={tilesLive && attemptedSequence.length === sequence.length}
               enabledBackground="#666"
               disabledBackground="#2a2a3a"
               disabledColour="#444"
             />
           </div>
+          {hand.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setHandOpen(true)}
+              disabled={!canOpenHand}
+              aria-keyshortcuts="E"
+              className="mx-auto mt-4 inline-flex min-h-11 items-center gap-3 rounded-full border border-hairline bg-surface px-4 font-outfit text-xs font-bold uppercase tracking-[0.12em] text-fg transition-colors duration-[120ms] hover:bg-surface2 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Play a card
+              <span className="font-mono text-[11px] font-semibold text-fg3">{hand.length} held</span>
+              <KeyHint>E</KeyHint>
+            </button>
+          )}
         </div>
-        <EliminationFeed gameId={gameId} />
+        <EliminationFeed gameId={gameId} scope={feedScope} viewerId={playerId} />
       </div>
       <button
         type="button"

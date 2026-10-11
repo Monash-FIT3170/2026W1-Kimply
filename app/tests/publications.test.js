@@ -3,18 +3,29 @@ import { Meteor } from 'meteor/meteor';
 import { RoundsCollection } from '../imports/api/rounds';
 import { PlayersCollection } from '../imports/api/players';
 import { LeaderboardCollection } from '../imports/api/leaderboard';
+import { GameEventsCollection } from '../imports/api/gameEvents';
 import '../server/publications.js';
 
 const READY = Symbol('ready');
 
 function runPublication(name, ...args) {
+  return runPublicationAs(null, name, ...args);
+}
+
+// connectionId stands in for the DDP connection that subscribed.
+function runPublicationAs(connectionId, name, ...args) {
   const handler = Meteor.server.publish_handlers[name];
   assert.ok(handler, `publication "${name}" is not registered`);
-  return handler.call({ ready: () => READY, userId: null }, ...args);
+  const connection = connectionId ? { id: connectionId } : null;
+  return handler.call({ ready: () => READY, userId: null, connection }, ...args);
 }
 
 async function fetchPublication(name, ...args) {
-  const result = runPublication(name, ...args);
+  return fetchPublicationAs(null, name, ...args);
+}
+
+async function fetchPublicationAs(connectionId, name, ...args) {
+  const result = runPublicationAs(connectionId, name, ...args);
   assert.notStrictEqual(result, READY, `publication "${name}" unexpectedly returned ready()`);
   return result.fetchAsync();
 }
@@ -28,6 +39,7 @@ if (Meteor.isServer) {
       await RoundsCollection.removeAsync({});
       await PlayersCollection.removeAsync({});
       await LeaderboardCollection.removeAsync({});
+      await GameEventsCollection.removeAsync({});
     });
 
     describe('rounds', function () {
@@ -60,6 +72,24 @@ if (Meteor.isServer) {
         const docs = await fetchPublication('rounds', OURS);
 
         assert.strictEqual(docs.length, 0);
+      });
+
+      it('never publishes a sequence, so no player can read another level ahead', async function () {
+        await RoundsCollection.insertAsync({
+          gameId: OURS,
+          level: 9,
+          lengthOfSequence: 9,
+          sequence: ['red', 'red', 'red', 'red', 'red', 'red', 'red', 'red', 'red'],
+          createdAt: new Date(),
+          advanced: false,
+          isCurrent: false,
+        });
+
+        const docs = await fetchPublication('rounds', OURS);
+
+        assert.strictEqual(docs.length, 1);
+        assert.ok(!('sequence' in docs[0]), 'sequence must be excluded from the publication');
+        assert.strictEqual(docs[0].lengthOfSequence, 9);
       });
 
       it('does not publish past rounds, so their sequences stay hidden', async function () {
@@ -104,6 +134,17 @@ if (Meteor.isServer) {
           gameFinished: false,
         });
       }
+
+      it('never publishes secret, which holds each player sequence, draft and hand', async function () {
+        const id = await insertPlayer(OURS, 'Player 1');
+        await PlayersCollection.updateAsync(id, {
+          $set: { secret: { sequence: { roundId: 'round-1', colours: ['red'], version: 1 }, hand: [] } },
+        });
+
+        const [doc] = await fetchPublication('players', OURS);
+
+        assert.ok(!('secret' in doc), 'secret must be excluded from the publication');
+      });
 
       it('never publishes attemptedSequence, which holds the correct answer', async function () {
         await insertPlayer(OURS, 'Player 1');
@@ -167,6 +208,91 @@ if (Meteor.isServer) {
         assert.strictEqual(runPublication('leaderboard'), READY);
         assert.strictEqual(runPublication('leaderboard', ''), READY);
         assert.strictEqual(runPublication('leaderboard', 42), READY);
+      });
+    });
+
+    describe('players.secret', function () {
+      async function insertBoundPlayer(gameId, name, connectionId) {
+        return PlayersCollection.insertAsync({
+          gameId,
+          roundId: 'round-1',
+          name,
+          lives: 3,
+          eliminated: false,
+          connectionId,
+          secret: { sequence: { roundId: 'round-1', colours: ['red', 'blue'], version: 1 }, hand: [] },
+        });
+      }
+
+      it("publishes only the subscribing connection's own secret", async function () {
+        const mine = await insertBoundPlayer(OURS, 'Mine', 'conn-mine');
+        await insertBoundPlayer(OURS, 'Theirs', 'conn-theirs');
+
+        const docs = await fetchPublicationAs('conn-mine', 'players.secret', OURS);
+
+        assert.strictEqual(docs.length, 1);
+        assert.strictEqual(docs[0]._id, mine);
+        assert.deepStrictEqual(docs[0].secret.sequence.colours, ['red', 'blue']);
+        assert.ok(!('name' in docs[0]), 'only the secret field is published here');
+      });
+
+      it('publishes nothing without a connection or a valid gameId', function () {
+        assert.strictEqual(runPublication('players.secret', OURS), READY);
+        assert.strictEqual(runPublicationAs('conn-mine', 'players.secret'), READY);
+        assert.strictEqual(runPublicationAs('conn-mine', 'players.secret', 42), READY);
+      });
+    });
+
+    describe('eliminations', function () {
+      it('never publishes secret or attemptedSequence', async function () {
+        await PlayersCollection.insertAsync({
+          gameId: OURS,
+          name: 'Out',
+          eliminated: true,
+          eliminatedAt: new Date(),
+          attemptedSequence: ['red'],
+          secret: { sequence: { roundId: 'r', colours: ['red'], version: 1 } },
+        });
+
+        const [doc] = await fetchPublication('eliminations', OURS);
+
+        assert.ok(!('secret' in doc));
+        assert.ok(!('attemptedSequence' in doc));
+      });
+    });
+
+    describe('gameEvents', function () {
+      async function insertEvent(playerId, targetId = null) {
+        return GameEventsCollection.insertAsync({
+          gameId: OURS,
+          type: 'ability',
+          playerId,
+          targetId,
+          createdAt: new Date(),
+        });
+      }
+
+      it("scope 'me' returns only events the player acted in or was targeted by", async function () {
+        const acted = await insertEvent('me');
+        const targeted = await insertEvent('someone', 'me');
+        await insertEvent('someone', 'someone-else');
+
+        const docs = await fetchPublication('gameEvents', OURS, 'me', 'me');
+
+        assert.deepStrictEqual(docs.map((d) => d._id).sort(), [acted, targeted].sort());
+      });
+
+      it("scope 'everyone' returns every event in the game", async function () {
+        await insertEvent('me');
+        await insertEvent('someone', 'someone-else');
+
+        const docs = await fetchPublication('gameEvents', OURS);
+
+        assert.strictEqual(docs.length, 2);
+      });
+
+      it("scope 'me' publishes nothing without a player", function () {
+        assert.strictEqual(runPublication('gameEvents', OURS, 'me'), READY);
       });
     });
   });

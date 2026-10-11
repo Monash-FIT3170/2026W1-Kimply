@@ -3,6 +3,7 @@ import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { Meteor } from 'meteor/meteor';
 import { useSubscribe, useTracker } from 'meteor/react-meteor-data';
 import { RoomsCollection } from '/imports/api/rooms';
+import { AbilitiesChip, AbilitiesSwitch } from '../abilities/LobbyAbilities.jsx';
 import { ConfirmationPopup } from '../components/ConfirmationPopup';
 import {
   PRIMARY,
@@ -211,6 +212,8 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
             </span>
           </div>
 
+          <AbilitiesSwitch pin={room.pin} enabled={room.abilitiesEnabled === true} />
+
           <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-fg3">Your Room Code</p>
 
           <div className="flex w-full justify-center gap-2 xs:gap-2.5">
@@ -343,11 +346,14 @@ function JoinedView({ room, playerName, playerId, onBack, navigate, gameMode, cu
           </div>
 
           {/* Game Mode Badge */}
-          <div
-            className="flex w-fit items-center gap-2 rounded-full px-4 py-2"
-            style={{ background: getGameModeColor(selectedGameMode) }}
-          >
-            <span className="font-outfit text-sm font-semibold text-bg">{getGameModeLabel(selectedGameMode)}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              className="flex w-fit items-center gap-2 rounded-full px-4 py-2"
+              style={{ background: getGameModeColor(selectedGameMode) }}
+            >
+              <span className="font-outfit text-sm font-semibold text-bg">{getGameModeLabel(selectedGameMode)}</span>
+            </div>
+            <AbilitiesChip enabled={room.abilitiesEnabled === true} />
           </div>
           <div className="flex items-center justify-between">
             <p className="font-outfit text-sm font-bold uppercase tracking-widest text-fg2">

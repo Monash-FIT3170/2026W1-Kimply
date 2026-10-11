@@ -99,11 +99,13 @@ The `active.length === 0` branch at `:39-53` uses a `{ multi: true }` update and
 
 **Fix:** `findOneAndUpdate` with the expected precondition in the selector.
 
-### Life deduction loses a life
+### Life deduction loses a life - **fixed 2026-10-11**
 `gameMethods.js:162` computes `const newLives = player.lives - 1` from a document read at `:124`, then writes `$set: { lives: newLives }` at `:171`.
 Two concurrent wrong submissions both read `lives: 3` and both write `lives: 2`, so one life is silently lost.
 
 **Fix:** `$inc: { lives: -1 }`. This is a one-line change and the cheapest win in this section.
+
+**Fixed 2026-10-11:** wrong answers, turn timeouts and Strikes go through `loseLife` in `gameEngine.js`, a guarded `$inc: { lives: -1 }` followed by an elimination check; Steal and the round-7 bonus use `$inc` too.
 
 ### Duplicate player names
 `rooms.js:113 -> 118` checks name uniqueness against a snapshot, then `$push`es.
@@ -248,6 +250,26 @@ The cost of leaving it is that every branch inherits the dirt, so no diff can be
 **Fix:** one dedicated commit that runs `meteor npm run format` and changes nothing else, so it can be reviewed as a no-op and skipped in `git blame`.
 
 ---
+
+## D21 - A network blip removes a player from the game - **fixed 2026-10-11**
+
+When a player's connection drops, the `Meteor.onConnection` close handler in `gameMethods.js` marks them `connected: false` and removes them after `DISCONNECT_GRACE_MS` (15 s) unless they reconnect.
+"Reconnect" meant `players.join` rewriting `connectionId`, but `GamePage` only calls `players.join` while it has no `playerId`.
+After a DDP auto-reconnect it already has one, so nothing rebound the player: a short Wi-Fi drop mid-round silently deleted them 15 seconds later, even though their tab had reconnected.
+
+**Fix (applied):** new `players.rebind(playerId)` sets `connectionId` and `connected: true` for the caller's connection, and `GamePage` calls it whenever `Meteor.status().connected` goes from false to true.
+It also keeps `players.secret`, which selects by `connectionId`, delivering the player's sequence after a reconnect.
+`app/imports/api/gameMethods.js`, `app/imports/ui/pages/GamePage.jsx`.
+
+## D20 - Battle Royale sent every level's sequence to every client - **fixed 2026-10-11**
+
+The `rounds` publication selected `{ gameId, advanced: false }` and published `sequence`.
+Standard rounds are marked `advanced` as the game moves on, but Battle Royale level rounds (`getOrCreateRound`) never are, so every level a leader had unlocked sat in every client's minimongo, answer included.
+A trailing player could read the next level's sequence from the browser console before reaching it.
+
+**Fix (applied):** `rounds` excludes `sequence` in every mode.
+Each player's sequence is written to `players.secret.sequence` and published only to their own connection through `players.secret`, and `players.submitSequence` grades against that copy.
+`app/server/publications.js`, `app/imports/api/gameEngine.js`, `app/imports/api/gameMethods.js`.
 
 ## D19 - The play column is taller than the screen, so CLEAR and SUBMIT vanish when the turn starts - **fixed 2026-09-01**
 

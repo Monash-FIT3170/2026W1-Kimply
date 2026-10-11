@@ -22,6 +22,7 @@ export function createLiveLeaderboardRows(players, currentRound) {
         Playing: 0,
         Submitted: 1,
         Correct: 2,
+        Passed: 2, // cleared with a Free Pass
         Winner: 3,
         Eliminated: 4,
       };

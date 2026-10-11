@@ -4,7 +4,9 @@ import { useTracker } from 'meteor/react-meteor-data';
 import { PlayersCollection } from '../api/players';
 import { ELIMINATION_FEED_MS as DISPLAY_MS, MAX_LIVE_FEED_ITEMS } from '../constants';
 
-export const EliminationFeed = ({ gameId }) => {
+// scope 'me' keeps only the viewer's own elimination: the ones they caused already
+// arrive as ability notices.
+export const EliminationFeed = ({ gameId, scope = 'everyone', viewerId = null }) => {
   const eliminations = useTracker(() => {
     const sub = Meteor.subscribe('eliminations', gameId);
 
@@ -24,6 +26,7 @@ export const EliminationFeed = ({ gameId }) => {
     [...eliminations].reverse().forEach((entry) => {
       if (seenIds.current.has(entry._id)) return;
       seenIds.current.add(entry._id);
+      if (scope === 'me' && entry._id !== viewerId) return;
 
       // Cap the stack: a big lobby eliminates players faster than the toasts expire,
       // and on a phone an uncapped column covers the whole board.
@@ -34,7 +37,7 @@ export const EliminationFeed = ({ gameId }) => {
         delete timers.current[entry._id];
       }, DISPLAY_MS);
     });
-  }, [eliminations]);
+  }, [eliminations, scope, viewerId]);
 
   useEffect(() => {
     const activeTimers = timers.current;
