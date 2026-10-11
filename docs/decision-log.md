@@ -39,9 +39,21 @@ Things that are not obvious from the diff:
 - **Resolution order is a rule, not an accident.** Every Steal lands before any Strike, each in pick order, so a Steal is judged on the lives a player went into the round with. A player struck out in the same resolution still lands their own card.
 - **Ability methods are the first ones bound to the caller's connection.** They can hurt other players, so they apply the D3 fix to themselves only. Every older method still trusts the `playerId` it is given.
 - **Lives now move with `$inc` everywhere.** A Battle Royale Strike can land while its target submits, so wrong answers, timeouts and Steals no longer write lives computed from an earlier read. That closes the life-deduction part of D4.
-- **Steal is only dealt when the room starts players on more than 1 life**, because it never takes a last life. Battle Royale lives are being reworked separately (#116), and this rule adapts to whatever that settles on.
-- **Lives can exceed the starting count through Steal**, so the heart row draws `max(startingLives, lives)` hearts.
+- **Steal is only dealt when the room starts players on more than 1 life**, because it never takes a last life. Battle Royale now starts on 1 life (#116), so it is not dealt there; a Battle Royale streak can still bank extra lives, which a Strike can then take.
+- **Lives can exceed the starting count through Steal**, which the heart row from #116 already handles by drawing `max(startingLives, lives)` hearts. The #116 streak life moved into the shared `clearRound` with the rest of the correct-answer path, and a Free Pass does not count towards a streak.
 - **Rooms created before this change have no `abilitiesEnabled` and play without abilities**, so a deploy mid-game does not start dealing cards into it.
+
+## 2026-10-11 - A life for every streak of correct rounds
+
+Every `STREAK_BONUS_LIFE_THRESHOLD` (3) correct rounds in a row now earns a life, granted by `players.submitSequence` in `app/imports/api/gameMethods.js` and returned to the submitter as `lifeAward` (#116).
+`GamePage` shows it as a toast and a flash on the newest heart.
+
+Things that are not obvious from the diff:
+
+- **The cap depends on the mode.** Outside battle royale a streak only tops a player back up to the room's starting lives (`customSettings.startingLives`, else `DEFAULT_STARTING_LIVES`), so a player at full lives earns nothing and the next chance is the next multiple of the threshold. Battle royale has no cap, so a streak there banks lives above the start.
+- **Battle royale now starts on 1 life.** `GAME_MODE_PRESETS.battle_royale.startingLives` drops from 3 to 1, so a streak is the only way to gain a cushion there. The in-game banner loses its "1 LIFE ONLY" suffix, which had been wrong while the preset was 3 and would be wrong again as soon as a streak adds a life.
+- **The hearts row grows past the starting count.** It draws `max(startingLives, lives)` hearts and wraps, because a battle royale streak (and the round 7 bonus, which was never capped) can exceed the start.
+- **The streak earns a replay too.** With `REPLAY_BONUS_STREAK` at 1, the third correct round in a row pays out a replay and a life, each with its own toast.
 
 ## 2026-10-10 - Replay tunables moved to constants, bonus every correct round
 

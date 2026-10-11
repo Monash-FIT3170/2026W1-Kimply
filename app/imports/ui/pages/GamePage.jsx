@@ -27,6 +27,7 @@ import {
   MAX_LIVE_FEED_ITEMS,
   STARTING_REPLAYS,
   REPLAY_BONUS_STREAK,
+  STREAK_BONUS_LIFE_THRESHOLD,
 } from '../../constants';
 
 // Keyed on the sequence version too, so a Reroll or Scramble plays the new sequence.
@@ -95,6 +96,7 @@ export const GamePage = () => {
   const [attemptedSequence, setAttemptedSequence] = useState([]);
   const [message, setMessage] = useState('');
   const [levelUpNotices, setLevelUpNotices] = useState([]);
+  const [lifeFlash, setLifeFlash] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(ROUND_SECONDS);
   const [shake, setShake] = useState(false);
   const [correctGlow, setCorrectGlow] = useState(false);
@@ -266,6 +268,8 @@ export const GamePage = () => {
   // startingLives is copied into customSettings for every preset mode (easy=5, hard=1, ...),
   // not just 'custom', so size the lives track off customSettings regardless of gameMode.
   const totalLives = room?.customSettings?.startingLives ?? DEFAULT_STARTING_LIVES;
+  // Battle royale streaks can bank lives above the starting count, so grow the track to fit.
+  const heartCount = Math.max(totalLives, player?.lives ?? 0);
   const levelUpEvents = useTracker(() => {
     if (!gameId) return [];
     return GameEventsCollection.find({ gameId, type: 'level-up' }, { sort: { createdAt: -1 } }).fetch();
@@ -278,7 +282,12 @@ export const GamePage = () => {
 
   // Every live notice (level-ups, correct answers, abilities) shares one capped stack.
   const pushNotice = (notice, durationMs = LEVEL_UP_TOAST_MS) => {
-    setLevelUpNotices((prev) => [...prev, notice].slice(-MAX_LIVE_FEED_ITEMS));
+    // Life awards are exempt from the cap, so a burst of other notices can not push them out.
+    setLevelUpNotices((prev) => {
+      const lifeNotices = prev.filter((n) => n.kind === 'life');
+      const others = [...prev.filter((n) => n.kind !== 'life'), notice].slice(-MAX_LIVE_FEED_ITEMS);
+      return [...lifeNotices, ...others];
+    });
     setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), durationMs);
   };
 
@@ -460,6 +469,29 @@ export const GamePage = () => {
       if (!error) setHandOpen(false);
     });
 
+  const showLifeAward = ({ streak, bonusRound, lives }) => {
+    const reason =
+      streak && bonusRound
+        ? 'Streak reward + bonus round!'
+        : bonusRound
+          ? 'Bonus round reward!'
+          : `${STREAK_BONUS_LIFE_THRESHOLD} correct in a row!`;
+
+    const notice = {
+      key: `life-${Date.now()}`,
+      kind: 'life',
+      title: `+${streak && bonusRound ? 2 : 1} ${streak && bonusRound ? 'lives' : 'life'} ❤`,
+      text: `${reason} You now have ${lives} ${lives === 1 ? 'life' : 'lives'}.`,
+    };
+
+    setLevelUpNotices((prev) => [...prev, notice]);
+    setLifeFlash(true);
+    setTimeout(() => setLifeFlash(false), 1200);
+
+    // remove the popup after 5 seconds
+    setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), 5000);
+  };
+
   const handleSubmit = () => {
     if (!playerId) {
       setMessage('Player is not ready yet.');
@@ -477,7 +509,7 @@ export const GamePage = () => {
       }
       if (result.success) {
         submittedRoundRef.current = true;
-
+        if (result.lifeAward) showLifeAward(result.lifeAward);
         if (isBattleRoyale) {
           setMessage('Correct! Moving to next round...');
         } else {
@@ -497,6 +529,7 @@ export const GamePage = () => {
           setShake(true);
           setTimeout(() => setShake(false), 400);
           setAttemptedSequence([]);
+
           // Keep input locked while the sequence replays, otherwise the tiles stay
           // clickable and the player can copy the answer as it lights up. The replay
           // (triggered by the replayKey bump) re-enables input via onSequenceComplete
@@ -561,6 +594,49 @@ export const GamePage = () => {
     };
   }, [tilesLive, attemptedSequence, sequence, dialogOpen, canOpenHand]);
 
+  // One toast stack for every screen. Life awards and anything involving this player
+  // always show. With the 'everyone' feed, other players' notices are hidden under sm:
+  // a full lobby (~100 players) fires them constantly and on a phone they bury the game.
+  const renderNoticeStack = (top) => (
+    <div
+      style={{
+        position: 'fixed',
+        top: `${top}px`,
+        left: '18px',
+        zIndex: 40,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '10px',
+        pointerEvents: 'none',
+        maxWidth: 'min(320px, calc(100vw - 36px))',
+      }}
+    >
+      {levelUpNotices.map((notice) => (
+        <div
+          key={notice.key}
+          className={notice.kind === 'life' || notice.personal || feedScope === 'me' ? '' : 'hidden sm:block'}
+          style={{
+            padding: '12px 14px',
+            borderRadius: '14px',
+            background: notice.kind === 'life' ? 'rgba(224,48,48,0.28)' : 'rgba(255,255,255,0.12)',
+            border: notice.kind === 'life' ? '1px solid rgba(255,120,120,0.6)' : '1px solid rgba(255,255,255,0.18)',
+            color: 'white',
+            boxShadow: '0 14px 36px rgba(0,0,0,0.28)',
+            backdropFilter: 'blur(10px)',
+            fontFamily: 'Outfit, sans-serif',
+            fontWeight: 700,
+            fontSize: '0.9rem',
+            lineHeight: 1.25,
+            animation: 'levelUpToastIn 180ms ease-out',
+          }}
+        >
+          {notice.title && <div style={{ fontSize: '1.05rem', marginBottom: '2px' }}>{notice.title}</div>}
+          {notice.text}
+        </div>
+      ))}
+    </div>
+  );
+
   // Reached by loading /game directly, or after a refresh drops location.state.
   // Without a room PIN there is no game to subscribe to, so say so instead of
   // sitting on LOADING indefinitely.
@@ -593,6 +669,7 @@ export const GamePage = () => {
     return (
       <>
         <EliminationFeed gameId={gameId} scope={feedScope} viewerId={playerId} />
+        {renderNoticeStack(18)}
         <EndLeaderboard gameId={player.gameId} currentPlayerId={player._id} />
       </>
     );
@@ -650,6 +727,7 @@ export const GamePage = () => {
             </button>
           </main>
           <EliminationFeed gameId={gameId} scope={feedScope} viewerId={playerId} />
+          {renderNoticeStack(18)}
         </div>
       </>
     );
@@ -736,45 +814,8 @@ export const GamePage = () => {
           Powerup Gained: Slow Motion for one round!
         </div>
       )}
-      {/* Live notices sit under the top bar so they never cover the feed toggle. With the
-          'everyone' feed they are hidden under sm: a full lobby (~100 players) fires them
-          constantly and on a phone the stack buries the game. The 'me' feed is quiet enough
-          to show everywhere. */}
-      <div
-        className={feedScope === 'me' ? 'flex' : 'hidden sm:flex'}
-        style={{
-          position: 'fixed',
-          top: '76px',
-          left: '18px',
-          zIndex: 40,
-          flexDirection: 'column',
-          gap: '10px',
-          pointerEvents: 'none',
-          maxWidth: 'min(320px, calc(100vw - 36px))',
-        }}
-      >
-        {levelUpNotices.map((notice) => (
-          <div
-            key={notice.key}
-            style={{
-              padding: '12px 14px',
-              borderRadius: '14px',
-              background: 'rgba(255,255,255,0.12)',
-              border: '1px solid rgba(255,255,255,0.18)',
-              color: 'white',
-              boxShadow: '0 14px 36px rgba(0,0,0,0.28)',
-              backdropFilter: 'blur(10px)',
-              fontFamily: 'Outfit, sans-serif',
-              fontWeight: 700,
-              fontSize: '0.9rem',
-              lineHeight: 1.25,
-              animation: 'levelUpToastIn 180ms ease-out',
-            }}
-          >
-            {notice.text}
-          </div>
-        ))}
-      </div>
+      {/* Under the top bar, so it never covers the feed toggle. */}
+      {renderNoticeStack(76)}
       <div
         className="relative flex shrink-0 justify-between"
         style={{ width: '100%', padding: 'clamp(12px, 2dvh, 20px) clamp(24px, 5vw, 28px)' }}
@@ -810,19 +851,19 @@ export const GamePage = () => {
               textAlign: 'center',
             }}
           >
-            BATTLE ROYALE • 1 LIFE ONLY
+            BATTLE ROYALE
           </div>
         )}
         <div
           style={{
             display: 'flex',
+            flexWrap: 'wrap',
             justifyContent: 'flex-start',
             gap: 'clamp(8px, 2.5vw, 16px)',
             marginBottom: 'clamp(16px, 2.5dvh, 24px)',
           }}
         >
-          {/* A Steal can take a player above their starting lives, so draw every one they hold. */}
-          {Array.from({ length: Math.max(totalLives, player?.lives ?? 0) }, (_, i) => i + 1).map((heart) => (
+          {Array.from({ length: heartCount }, (_, i) => i + 1).map((heart) => (
             <div
               key={heart}
               style={{
@@ -835,6 +876,7 @@ export const GamePage = () => {
                 justifyContent: 'center',
                 fontSize: 'clamp(14px, 3.2dvh, 32px)',
                 boxShadow: heart <= (player?.lives ?? totalLives) ? '0 0 10px #e0303088' : 'none',
+                transform: lifeFlash && heart === (player?.lives ?? totalLives) ? 'scale(1.35)' : 'scale(1)',
                 transition: 'all 0.3s ease',
               }}
             >

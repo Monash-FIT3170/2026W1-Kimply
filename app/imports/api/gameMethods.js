@@ -122,9 +122,9 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       const correct = JSON.stringify(attemptedSequence) === JSON.stringify(sequenceFor(player, round));
 
       if (correct) {
-        const { nextRoundId } = await clearRound(player, round, { credited: true, attemptedSequence });
+        const { nextRoundId, lifeAward } = await clearRound(player, round, { credited: true, attemptedSequence });
         if (nextRoundId) await dealLevelUpDraft(playerId);
-        return { success: true, sequenceComplete: true };
+        return { success: true, sequenceComplete: true, lifeAward };
       }
 
       // remove one life for wrong sequence

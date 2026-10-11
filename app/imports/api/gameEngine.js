@@ -10,7 +10,13 @@ import { GlobalLeaderboardCollection } from './globalLeaderboard';
 import { RoomsCollection } from './rooms';
 import { generateSequence } from './sequence';
 import { ABILITIES, ABILITY_TYPES } from './abilityRules';
-import { GLOBAL_LEADERBOARD_SIZE, BONUS_LIFE_ROUND, INITIAL_LEVEL } from '../constants';
+import {
+  GLOBAL_LEADERBOARD_SIZE,
+  BONUS_LIFE_ROUND,
+  DEFAULT_STARTING_LIVES,
+  INITIAL_LEVEL,
+  STREAK_BONUS_LIFE_THRESHOLD,
+} from '../constants';
 
 export { generateSequence };
 
@@ -271,18 +277,39 @@ export async function loseLife(playerId, round) {
 
 // A player has cleared their round, by repeating it (credited) or with a Free Pass
 // (not credited: no streak, accuracy or bonus life). Returns the next round id in
-// Battle Royale, where the player moves on straight away.
+// Battle Royale, where the player moves on straight away, and any life it earned.
 export async function clearRound(player, round, { credited, attemptedSequence = [] }) {
   const isBattleRoyale = player.isBattleRoyale ?? false;
   const set = { attemptedSequence, completeRound: true, roundStatus: credited ? 'Correct' : 'Passed' };
   const inc = {};
+
+  let lifeAward = null;
 
   if (credited) {
     set.currentStreak = (player.currentStreak ?? 0) + 1;
     set.longestStreak = Math.max(player.longestStreak ?? 0, set.currentStreak);
     inc.totalGuesses = 1;
     inc.correctGuesses = 1;
-    if (round.roundNumber === BONUS_LIFE_ROUND) inc.lives = 1;
+
+    const room = await RoomsCollection.findOneAsync({ pin: player.gameId });
+    const startingLives = room?.customSettings?.startingLives || DEFAULT_STARTING_LIVES;
+
+    // Every STREAK_BONUS_LIFE_THRESHOLD correct rounds in a row earns a life. In battle
+    // royale a streak can bank lives above the starting count; every other mode only
+    // tops a player back up to the starting lives the room was created with.
+    const bonusLife = round.roundNumber === BONUS_LIFE_ROUND ? 1 : 0;
+    const streakReached = set.currentStreak % STREAK_BONUS_LIFE_THRESHOLD === 0;
+    const belowCap = isBattleRoyale || (player.lives ?? 0) + bonusLife < startingLives;
+    const streakLife = streakReached && belowCap ? 1 : 0;
+
+    if (bonusLife + streakLife) {
+      inc.lives = bonusLife + streakLife;
+      lifeAward = {
+        streak: streakLife === 1,
+        bonusRound: bonusLife === 1,
+        lives: (player.lives ?? 0) + bonusLife + streakLife,
+      };
+    }
   }
 
   await PlayersCollection.updateAsync(player._id, Object.keys(inc).length ? { $set: set, $inc: inc } : { $set: set });
@@ -325,12 +352,12 @@ export async function clearRound(player, round, { credited, attemptedSequence = 
       createdAt: new Date(),
     });
 
-    return { nextRoundId };
+    return { nextRoundId, lifeAward };
   }
 
   const updatedRound = await RoundsCollection.findOneAsync(player.roundId);
   await advanceRoundIfReady(updatedRound);
-  return { nextRoundId: null };
+  return { nextRoundId: null, lifeAward };
 }
 
 // Battle Royale: put a player on a level's round with that round's sequence. Cards
