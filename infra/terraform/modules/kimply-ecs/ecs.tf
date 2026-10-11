@@ -147,6 +147,7 @@ resource "aws_ecs_service" "app" {
 
   depends_on = [
     aws_lb_listener.https,
+    aws_lb_listener_rule.shared_host,
     aws_iam_role_policy.execution_secret,
     aws_route_table_association.private,
   ]

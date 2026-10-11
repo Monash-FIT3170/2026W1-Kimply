@@ -14,13 +14,20 @@ const SHAPE_ICONS = {
 };
 
 const COLOURS = {
-  red:    { active: '#ff2d55', dim: '#c0203e' },
+  red: { active: '#ff2d55', dim: '#c0203e' },
   yellow: { active: '#ffd60a', dim: '#b89800' },
-  green:  { active: '#30d158', dim: '#1e8a3a' },
-  blue:   { active: '#0a84ff', dim: '#0a5ab5' },
+  green: { active: '#30d158', dim: '#1e8a3a' },
+  blue: { active: '#0a84ff', dim: '#0a5ab5' },
 };
 
 const TILE_ORDER = ['red', 'yellow', 'green', 'blue'];
+
+const KEY_LABELS = {
+  red: 'W',
+  yellow: 'A',
+  green: 'S',
+  blue: 'D',
+};
 
 export const ColourSequence = ({
   roundId,
@@ -118,8 +125,39 @@ export const ColourSequence = ({
 
     onColourClick(colourId);
   };
+
+  useEffect(() => {
+    const keyMap = {
+      w: 'red',
+      a: 'yellow',
+      s: 'green',
+      d: 'blue',
+    };
+
+    const handleKeyDown = (event) => {
+      const colourId = keyMap[event.key.toLowerCase()];
+
+      if (!colourId || !playerCanInput) return;
+
+      setClickedColour(colourId);
+      playClickSound();
+
+      setTimeout(() => {
+        setClickedColour(null);
+      }, 200);
+
+      onColourClick(colourId);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [playerCanInput, onColourClick]);
+
   return (
-    <div style={{ '--tile-grid': 'min(360px, 90vw, 38dvh)' }}>
+    <div style={{ '--tile-grid': 'min(360px, calc(100vw - 48px), 38dvh)' }}>
       <p
         style={{
           color: 'white',
@@ -140,7 +178,7 @@ export const ColourSequence = ({
         style={{
           display: 'grid',
           gridTemplateColumns: '1fr 1fr',
-          gap: '6px',
+          gap: '8px',
           width: 'var(--tile-grid)',
           margin: '0 auto',
         }}
@@ -157,8 +195,8 @@ export const ColourSequence = ({
               disabled={!playerCanInput}
               onClick={() => handleTileClick(colourId)}
               style={{
-                width: 'calc(var(--tile-grid) / 2 - 3px)',
-                height: 'calc(var(--tile-grid) / 2 - 3px)',
+                width: 'calc(var(--tile-grid) / 2 - 4px)',
+                height: 'calc(var(--tile-grid) / 2 - 4px)',
                 backgroundColor: bg,
                 display: 'flex',
                 alignItems: 'center',
@@ -172,11 +210,26 @@ export const ColourSequence = ({
                 cursor: playerCanInput ? 'pointer' : 'not-allowed',
                 opacity: playerCanInput || isPlaying ? 1 : 0.7,
                 transform: isActive ? 'scale(0.95)' : 'scale(1)',
+                position: 'relative',
               }}
             >
               <svg width="36%" height="36%" viewBox="0 0 64 64">
                 <ShapeIcon />
               </svg>
+
+              <span
+                style={{
+                  position: 'absolute',
+                  bottom: '8px',
+                  left: '10px',
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                  color: 'rgba(255,255,255,0.8)',
+                  letterSpacing: '1px',
+                }}
+              >
+                {KEY_LABELS[colourId]}
+              </span>
             </button>
           );
         })}

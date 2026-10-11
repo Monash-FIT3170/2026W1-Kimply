@@ -1,7 +1,7 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
- 
+
 @layer base {
   html,
   body,
@@ -9,10 +9,17 @@
     @apply m-0 h-full bg-bg p-0;
     font-family: 'Manrope', system-ui, sans-serif;
   }
-  body { -webkit-user-select: none; user-select: none; }
-  input, textarea { -webkit-user-select: text; user-select: text; }
+  body {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  input,
+  textarea {
+    -webkit-user-select: text;
+    user-select: text;
+  }
 }
- 
+
 @keyframes kimplyPulse {
   0%,
   100% {
@@ -24,7 +31,7 @@
     opacity: 0.5;
   }
 }
- 
+
 @keyframes kimplyCaret {
   0%,
   49% {
@@ -35,7 +42,7 @@
     opacity: 0;
   }
 }
- 
+
 @keyframes killFeedPop {
   0% {
     transform: translateY(8px);
@@ -54,28 +61,28 @@
     opacity: 0;
   }
 }
- 
+
 .kill-feed {
   position: fixed;
-  bottom: 20px;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
   left: 20px;
-  width: 260px;
+  width: min(260px, calc(100vw - 40px));
   display: flex;
   flex-direction: column;
   gap: 6px;
   pointer-events: none;
   z-index: 50;
 }
- 
+
 @media (max-width: 767px) {
   .kill-feed {
-    bottom: max(10px, env(safe-area-inset-bottom));
+    bottom: max(10px, env(safe-area-inset-bottom, 0px));
     left: 50%;
     transform: translateX(-50%);
     width: min(280px, calc(100vw - 32px));
   }
 }
- 
+
 @keyframes podiumRise {
   0% {
     transform: translateY(100%) scaleY(0.82);
@@ -90,7 +97,7 @@
     opacity: 1;
   }
 }
- 
+
 @keyframes avatarPop {
   0% {
     transform: scale(0);
@@ -107,7 +114,7 @@
     transform: scale(1);
   }
 }
- 
+
 @keyframes rowSlideIn {
   from {
     transform: translateY(16px);
@@ -118,7 +125,7 @@
     opacity: 1;
   }
 }
- 
+
 @keyframes leaderboardTitleIn {
   from {
     transform: translateY(-14px);
@@ -129,7 +136,7 @@
     opacity: 1;
   }
 }
- 
+
 @keyframes winnerCrown {
   0% {
     transform: translateY(12px) scale(0.86);
@@ -144,7 +151,7 @@
     opacity: 1;
   }
 }
- 
+
 @keyframes scoreboardRowIn {
   0% {
     transform: translateX(-18px) scale(0.98);
@@ -159,7 +166,7 @@
     opacity: 1;
   }
 }
- 
+
 @keyframes homeButtonIn {
   from {
     transform: translateY(12px);
@@ -170,7 +177,7 @@
     opacity: 1;
   }
 }
- 
+
 @keyframes winnerPulse {
   0%,
   100% {
@@ -180,7 +187,7 @@
     opacity: 0.4;
   }
 }
- 
+
 @keyframes levelUpToastIn {
   from {
     transform: translateX(18px);
@@ -191,16 +198,47 @@
     opacity: 1;
   }
 }
- 
+
 html,
 body,
 #react-target {
   height: 100dvh;
   background: #1a0533;
 }
- 
-@keyframes ecm-backdrop-in  { from{opacity:0} to{opacity:1} }
-@keyframes ecm-backdrop-out { from{opacity:1} to{opacity:0} }
-@keyframes ecm-card-in  { from{opacity:0;transform:translateY(22px) scale(0.96)} to{opacity:1;transform:none} }
-@keyframes ecm-card-out { from{opacity:1;transform:none} to{opacity:0;transform:translateY(14px) scale(0.97)} }
- 
+
+@keyframes ecm-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes ecm-backdrop-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes ecm-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(22px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes ecm-card-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+}

@@ -9,35 +9,119 @@ import { ColourSequence } from '../ColourSequence.jsx';
 import { Leaderboard } from '../Leaderboard.jsx';
 import { EndLeaderboard } from '../EndLeaderboard.jsx';
 import { EliminationFeed } from '../EliminationFeed.jsx';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { TileLattice } from '../components/design';
-import { ROUND_TIMER_SECONDS as ROUND_SECONDS, LEVEL_UP_TOAST_MS, DEFAULT_STARTING_LIVES } from '../../constants';
+import { ConfirmationPopup } from '../components/ConfirmationPopup.jsx';
+import { useSessionResuming, useSignedInAccount } from '../accountSession';
+import {
+  ROUND_TIMER_SECONDS as ROUND_SECONDS,
+  LEVEL_UP_TOAST_MS,
+  DEFAULT_STARTING_LIVES,
+  MAX_LIVE_FEED_ITEMS,
+  STARTING_REPLAYS,
+  REPLAY_BONUS_STREAK,
+  STREAK_BONUS_LIFE_THRESHOLD,
+} from '../../constants';
 
 const seqSeenKey = (gameId, roundId) => `seqSeen:${gameId}:${roundId}`;
+
+// Below Tailwind's `xs` breakpoint (481px) the leaderboard is a bottom sheet that
+// covers the tiles and buttons, so it starts closed on phones and open elsewhere.
+const leaderboardOpenByDefault = () => typeof window !== 'undefined' && window.matchMedia('(min-width: 481px)').matches;
+
+// A game control with a small hint under the label: the keyboard key that triggers it,
+// matching the key letters on the colour tiles, or another short note such as replays left.
+const ControlButton = ({
+  label,
+  keyHint,
+  hint = keyHint?.toUpperCase(),
+  ariaLabel = label,
+  onClick,
+  enabled,
+  enabledBackground,
+  disabledBackground,
+  enabledColour = 'white',
+  disabledColour,
+  enabledBorder = '1px solid transparent',
+  disabledBorder = '1px solid transparent',
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={!enabled}
+    aria-label={ariaLabel}
+    aria-keyshortcuts={keyHint}
+    style={{
+      flex: '1 1 0',
+      maxWidth: 160,
+      minHeight: 44,
+      height: 'clamp(48px, 6.5dvh, 68px)',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 2,
+      backgroundColor: enabled ? enabledBackground : disabledBackground,
+      color: enabled ? enabledColour : disabledColour,
+      fontWeight: 'bold',
+      fontSize: 'clamp(12px, 3vw, 20px)',
+      border: enabled ? enabledBorder : disabledBorder,
+      borderRadius: '8px',
+      cursor: enabled ? 'pointer' : 'not-allowed',
+      letterSpacing: '1px',
+    }}
+  >
+    <span>{label}</span>
+    <span className="font-mono" style={{ fontSize: 'clamp(9px, 2.2vw, 11px)', letterSpacing: '1px', opacity: 0.7 }}>
+      {hint}
+    </span>
+  </button>
+);
 
 export const GamePage = () => {
   const [playerId, setPlayerId] = useState(null);
   const [playerCanInput, setPlayerCanInput] = useState(false);
+  const [replaysRemaining, setReplaysRemaining] = useState(STARTING_REPLAYS);
   const [attemptedSequence, setAttemptedSequence] = useState([]);
   const [message, setMessage] = useState('');
   const [levelUpNotices, setLevelUpNotices] = useState([]);
+  const [lifeFlash, setLifeFlash] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(ROUND_SECONDS);
   const [shake, setShake] = useState(false);
   const [correctGlow, setCorrectGlow] = useState(false);
   const [replayKey, setReplayKey] = useState(0);
-  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
+  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(leaderboardOpenByDefault);
   const [showPowerupPopup, setShowPowerupPopup] = useState(false);
   const [completedRoundId, setCompletedRoundId] = useState(null);
+  const [submissionNotices, setSubmissionNotices] = useState([]);
+  const [showLeavePopup, setShowLeavePopup] = useState(false);
+  const [leaveError, setLeaveError] = useState('');
 
   const location = useLocation();
+  const navigate = useNavigate();
   const playerNameFromLobby = location.state?.playerName || 'Demo Player';
   const routeGameMode = location.state?.gameMode;
   const roomPin = location.state?.pin;
   const lobbyPlayerId = location.state?.playerId;
-  const accountId = location.state?.playerAccount?._id || null;
+  const playerAccount = useSignedInAccount();
+  const accountId = playerAccount?._id || null;
+  const sessionResuming = useSessionResuming();
   // No 'demo' fallback: the publications are scoped by gameId, so a placeholder
   // would subscribe to a game that does not exist and hang on LOADING forever.
   const gameId = roomPin || null;
+
+  const handleLeaveGame = () => {
+    Meteor.call('players.leaveGame', playerId, (error) => {
+      if (error) {
+        setLeaveError('Could not leave the game. Please try again.');
+        return;
+      }
+
+      localStorage.removeItem(`gamePlayerId:${gameId}`);
+      localStorage.removeItem('reconnectData');
+      navigate('/play', { replace: true, state: playerAccount ? { playerAccount } : undefined });
+    });
+  };
 
   const playTurnStartSound = () => {
     const AudioCtor = window.AudioContext || window.webkitAudioContext;
@@ -93,9 +177,16 @@ export const GamePage = () => {
   }, [gameId]);
   const gameMode = room?.gameMode || routeGameMode || 'default';
   const isBattleRoyale = gameMode === 'battle_royale';
+  const canReplay = !isBattleRoyale && replaysRemaining > 0 && playerCanInput;
 
   const round = useTracker(() => {
     if (!gameId) return null;
+    // Eliminated players stay on their original round in the database. Follow
+    // the active round instead so their spectator view remains live after the
+    // remaining players advance.
+    if (player?.eliminated) {
+      return RoundsCollection.findOne({ gameId, isCurrent: true }) || RoundsCollection.findOne(player.roundId);
+    }
     // in battle royale follow the player's specific round
     if (player?.roundId) {
       return RoundsCollection.findOne(player.roundId);
@@ -106,13 +197,21 @@ export const GamePage = () => {
   // startingLives is copied into customSettings for every preset mode (easy=5, hard=1, ...),
   // not just 'custom', so size the lives track off customSettings regardless of gameMode.
   const totalLives = room?.customSettings?.startingLives ?? DEFAULT_STARTING_LIVES;
+  // Battle royale streaks can bank lives above the starting count, so grow the track to fit.
+  const heartCount = Math.max(totalLives, player?.lives ?? 0);
   const levelUpEvents = useTracker(() => {
     if (!gameId) return [];
     return GameEventsCollection.find({ gameId, type: 'level-up' }, { sort: { createdAt: -1 } }).fetch();
   }, [gameId]);
 
+  const submissionEvents = useTracker(() => {
+    if (!gameId) return [];
+    return GameEventsCollection.find({ gameId, type: 'correct-submission' }, { sort: { createdAt: -1 } }).fetch();
+  }, [gameId]);
+
   useEffect(() => {
-    if (!round?._id || playerId) return;
+    // Wait for a stored session to resume, or the player would join without their account.
+    if (!round?._id || playerId || sessionResuming) return;
     Meteor.call(
       'players.join',
       round._id,
@@ -131,7 +230,7 @@ export const GamePage = () => {
         localStorage.setItem(`gamePlayerId:${gameId}`, result);
       }
     );
-  }, [round?._id, playerId, gameId, playerNameFromLobby, lobbyPlayerId, isBattleRoyale, accountId]);
+  }, [round?._id, playerId, gameId, playerNameFromLobby, lobbyPlayerId, isBattleRoyale, accountId, sessionResuming]);
 
   useEffect(() => {
     if (!player?.roundId) return;
@@ -139,58 +238,130 @@ export const GamePage = () => {
     setMessage('');
     setSecondsLeft(30);
     setCompletedRoundId(null);
+    submittedRoundRef.current = false;
     if (gameId && localStorage.getItem(seqSeenKey(gameId, player.roundId))) {
       // already watched this round (e.g. refresh): skip the replay
       setPlayerCanInput(true);
+      setReplayKey((prev) => prev + 1);
     } else {
       setPlayerCanInput(false);
       setReplayKey((prev) => prev + 1);
     }
   }, [player?.roundId, gameId]);
 
+  //replay bonus
+  const prevStreakRef = useRef(0);
+  useEffect(() => {
+    const streak = player?.currentStreak ?? 0;
+    const prev = prevStreakRef.current;
+    prevStreakRef.current = streak;
+
+    if (streak > 0 && streak % REPLAY_BONUS_STREAK === 0 && streak !== prev) {
+      setReplaysRemaining((r) => r + 1);
+      const notice = {
+        key: `replay-bonus-${Date.now()}`,
+        text:
+          REPLAY_BONUS_STREAK === 1
+            ? 'Correct! Extra replay earned 🎉'
+            : `${REPLAY_BONUS_STREAK} correct in a row 🎉 extra replay earned!`,
+      };
+      setLevelUpNotices((prev) => [...prev, notice]);
+      //setTimeout(() => setMessage(''), 2500);
+      setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), 5000);
+    }
+  }, [player?.currentStreak]);
+
   // Show the slow-motion powerup popup whenever the player picks it up
   useEffect(() => {
-    if (!player?.slowMotionActive) { setShowPowerupPopup(false); return; }
+    if (!player?.slowMotionActive) {
+      setShowPowerupPopup(false);
+      return;
+    }
     setShowPowerupPopup(true);
     const t = setTimeout(() => setShowPowerupPopup(false), 3000);
     return () => clearTimeout(t);
   }, [player?.slowMotionActive]);
 
+  const handleReplay = () => {
+    if (!canReplay) return;
+    setReplaysRemaining((prev) => prev - 1);
+    setPlayerCanInput(false);
+    setAttemptedSequence([]);
+    setReplayKey((prev) => prev + 1);
+  };
+
   const seenLevelUpIds = useRef(new Set());
-  const mountedAt = useRef(Date.now());
-  useEffect(()=>{
-    levelUpEvents.forEach((event) => {
+  const submittedRoundRef = useRef(false);
+  useEffect(() => {
+    // The cursor is newest-first; replay oldest-first so the cap below keeps the newest.
+    [...levelUpEvents].reverse().forEach((event) => {
       if (seenLevelUpIds.current.has(event._id)) return;
       seenLevelUpIds.current.add(event._id);
-      if (event.playerId !== playerId) return; 
-      if (Date.now() - mountedAt.current < 2000) return;
-      const notice = {key: event._id, text: `You have levelled up to level ${event.level}!`};
-      setLevelUpNotices((prev) => [...prev.slice(-1), notice]);
+      const notice = {
+        key: event._id,
+        text:
+          event.playerId === playerId
+            ? `You have leveled up to level ${event.level}`
+            : `${event.playerName} has reached level ${event.level}`,
+      };
+
+      // Cap for level feed but not for life bonuses
+      setLevelUpNotices((prev) => {
+        const lifeNotices = prev.filter((n) => n.kind === 'life');
+        const others = [...prev.filter((n) => n.kind !== 'life'), notice].slice(-MAX_LIVE_FEED_ITEMS);
+        return [...lifeNotices, ...others];
+      });
+      // auto-dismiss like the elimination feed
       setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), LEVEL_UP_TOAST_MS);
     });
   }, [levelUpEvents, playerId]);
+
+  const seenSubmissionIds = useRef(new Set());
+
+  useEffect(() => {
+    submissionEvents.forEach((event) => {
+      if (event.playerId === playerId) return;
+      if (seenSubmissionIds.current.has(event._id)) return;
+
+      seenSubmissionIds.current.add(event._id);
+
+      const notice = {
+        key: event._id,
+        text: `${event.playerName} has submitted the correct sequence!`,
+      };
+
+      setSubmissionNotices((prev) => [...prev, notice]);
+
+      setTimeout(() => {
+        setSubmissionNotices((prev) => prev.filter((n) => n.key !== notice.key));
+      }, 3000);
+    });
+  }, [submissionEvents, playerId]);
 
   const handleColourClick = (colour) => {
     if (!playerCanInput) return;
     if (!round?.sequence) return;
     if (attemptedSequence.length >= round.sequence.length) return;
-    setAttemptedSequence([...attemptedSequence, colour]);
+    setAttemptedSequence((prev) => [...prev, colour]);
   };
 
   useEffect(() => {
     if (isBattleRoyale) return undefined; // battle royale is a free-for-all: no timer
     if (!round?._id || !playerId) return undefined;
     if (player?.eliminated || player?.gameFinished) return undefined;
-    if (completedRoundId === round._id) return undefined; // already finished this round
 
     // One timer for the whole round; wrong guesses and lost lives do not reset it.
-    // If it runs out the player is eliminated so the game can continue.
     setSecondsLeft(ROUND_SECONDS);
 
     const timeoutId = window.setTimeout(() => {
+      if (player?.roundId !== round?._id || submittedRoundRef.current) {
+        return;
+      }
+
       setMessage('Time is up! You have been eliminated.');
       setPlayerCanInput(false);
-      Meteor.call('players.timeoutRound', playerId, (error) => {
+
+      Meteor.call('players.timeoutRound', playerId, round._id, (error) => {
         if (error) console.error(error);
       });
     }, ROUND_SECONDS * 1000);
@@ -203,7 +374,30 @@ export const GamePage = () => {
       window.clearTimeout(timeoutId);
       window.clearInterval(intervalId);
     };
-  }, [round?._id, playerId, isBattleRoyale, player?.eliminated, player?.gameFinished, completedRoundId]);
+  }, [round?._id, playerId, isBattleRoyale, player?.eliminated, player?.gameFinished]);
+
+  const showLifeAward = ({ streak, bonusRound, lives }) => {
+    const reason =
+      streak && bonusRound
+        ? 'Streak reward + bonus round!'
+        : bonusRound
+          ? 'Bonus round reward!'
+          : `${STREAK_BONUS_LIFE_THRESHOLD} correct in a row!`;
+
+    const notice = {
+      key: `life-${Date.now()}`,
+      kind: 'life',
+      title: `+${streak && bonusRound ? 2 : 1} ${streak && bonusRound ? 'lives' : 'life'} ❤`,
+      text: `${reason} You now have ${lives} ${lives === 1 ? 'life' : 'lives'}.`,
+    };
+
+    setLevelUpNotices((prev) => [...prev, notice]);
+    setLifeFlash(true);
+    setTimeout(() => setLifeFlash(false), 1200);
+
+    // remove the popup after 5 seconds
+    setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), 5000);
+  };
 
   const handleSubmit = () => {
     if (!playerId) {
@@ -221,6 +415,8 @@ export const GamePage = () => {
         return;
       }
       if (result.success) {
+        submittedRoundRef.current = true;
+        if (result.lifeAward) showLifeAward(result.lifeAward);
         if (isBattleRoyale) {
           setMessage('Correct! Moving to next round...');
         } else {
@@ -240,6 +436,7 @@ export const GamePage = () => {
           setShake(true);
           setTimeout(() => setShake(false), 400);
           setAttemptedSequence([]);
+
           // Keep input locked while the sequence replays, otherwise the tiles stay
           // clickable and the player can copy the answer as it lights up. The replay
           // (triggered by the replayKey bump) re-enables input via onSequenceComplete
@@ -255,6 +452,86 @@ export const GamePage = () => {
     setAttemptedSequence([]);
     setMessage('Try again. Repeat the flashed sequence.');
   };
+
+  const handleUndo = () => {
+    setAttemptedSequence((prev) => prev.slice(0, -1));
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Enter') {
+        // Without this, Enter also "clicks" whichever control button last had focus.
+        event.preventDefault();
+
+        if (playerCanInput && attemptedSequence.length === round.sequence.length) {
+          handleSubmit();
+        }
+      }
+
+      if (event.key === 'Backspace') {
+        event.preventDefault();
+
+        if (playerCanInput && attemptedSequence.length > 0) {
+          handleUndo();
+        }
+      }
+
+      if (event.code === 'Space') {
+        event.preventDefault();
+
+        if (playerCanInput && attemptedSequence.length > 0) {
+          handleClear();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [playerCanInput, attemptedSequence, round]);
+
+  // This is the toas stack, instead of defining it on all the screens can just be defined here.
+  const noticeStack = (
+    <div
+      style={{
+        position: 'fixed',
+        top: '18px',
+        left: '18px',
+        zIndex: 40,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '10px',
+        pointerEvents: 'none',
+        maxWidth: 'min(320px, calc(100vw - 36px))',
+      }}
+    >
+      {levelUpNotices.map((notice) => (
+        <div
+          key={notice.key}
+          className={notice.kind === 'life' ? '' : 'hidden sm:block'}
+          style={{
+            padding: '12px 14px',
+            borderRadius: '14px',
+            background: notice.kind === 'life' ? 'rgba(224,48,48,0.28)' : 'rgba(255,255,255,0.12)',
+            border: notice.kind === 'life' ? '1px solid rgba(255,120,120,0.6)' : '1px solid rgba(255,255,255,0.18)',
+            color: 'white',
+            boxShadow: '0 14px 36px rgba(0,0,0,0.28)',
+            backdropFilter: 'blur(10px)',
+            fontFamily: 'Outfit, sans-serif',
+            fontWeight: 700,
+            fontSize: '0.9rem',
+            lineHeight: 1.25,
+            animation: 'levelUpToastIn 180ms ease-out',
+          }}
+        >
+          {notice.title && <div style={{ fontSize: '1.05rem', marginBottom: '2px' }}>{notice.title}</div>}
+          {notice.text}
+        </div>
+      ))}
+    </div>
+  );
 
   // Reached by loading /game directly, or after a refresh drops location.state.
   // Without a room PIN there is no game to subscribe to, so say so instead of
@@ -279,6 +556,75 @@ export const GamePage = () => {
           Join or create a room
         </a>
       </div>
+    );
+  }
+
+  if (!player) return null;
+
+  if (player.gameFinished) {
+    return (
+      <>
+        <EliminationFeed gameId={gameId} />
+        {noticeStack}
+        <EndLeaderboard gameId={player.gameId} currentPlayerId={player._id} />
+      </>
+    );
+  }
+
+  if (player.eliminated || player.completeRound) {
+    const isEliminated = player.eliminated;
+    return (
+      <>
+        <ConfirmationPopup
+          isOpen={showLeavePopup}
+          onConfirm={handleLeaveGame}
+          onCancel={() => setShowLeavePopup(false)}
+          title="Leave game?"
+          message="You will stop spectating and return to the play screen. The remaining players can continue their round."
+        />
+        <div className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-[#1a0533] to-[#0d1b4b] px-4 py-10 text-center">
+          <TileLattice opacity={0.06} />
+          <main className="relative z-10 flex w-full max-w-lg flex-col items-center gap-5">
+            <p className="font-mono text-xs font-bold uppercase tracking-[0.3em] text-fg3">Live round activity</p>
+            <h1 className="font-outfit text-3xl font-extrabold text-fg sm:text-4xl">
+              {isEliminated ? 'You are spectating' : 'Round complete'}
+            </h1>
+            <p className="max-w-md font-manrope text-sm leading-6 text-fg2">
+              {isEliminated
+                ? 'You are out of this game, but you can still follow the remaining players.'
+                : 'Nice work. Follow the remaining players until the next round begins.'}
+            </p>
+            {/* The round timer keeps running after a correct submit, so a finished player
+                can see how long the others still have. */}
+            {!isEliminated && !isBattleRoyale && (
+              <p
+                className="font-mono text-sm font-bold tracking-[0.1em]"
+                style={{ color: secondsLeft <= 5 ? '#ff7a7a' : '#9ce8ff' }}
+              >
+                Time left: {secondsLeft}s
+              </p>
+            )}
+            <Leaderboard gameId={gameId} currentPlayerId={playerId} />
+            {leaveError && (
+              <p role="alert" className="font-manrope text-sm text-red-300">
+                {leaveError}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setLeaveError('');
+                setShowLeavePopup(true);
+              }}
+              className="min-h-11 rounded-[10px] border border-hairline bg-surface px-5 py-3 font-outfit text-xs font-semibold uppercase tracking-[0.1em] text-fg2 transition-colors hover:bg-surface2 hover:text-fg"
+            >
+              Leave game
+            </button>
+          </main>
+          <EliminationFeed gameId={gameId} />
+          {noticeStack}
+        </div>
+      </>
     );
   }
 
@@ -308,139 +654,9 @@ export const GamePage = () => {
     );
   }
 
-  if (!player) return null;
-
-  if (player.gameFinished) {
-    return (
-      <>
-        <EliminationFeed gameId={gameId} />
-        <EndLeaderboard gameId={player.gameId} currentPlayerId={player._id} />
-      </>
-    );
-  }
-
-  if (player?.eliminated) {
-    const longestStreak = player.longestStreak ?? 0;
-    const totalGuesses = player.totalGuesses ?? 0;
-    const correctGuesses = player.correctGuesses ?? 0;
-    const accuracy = totalGuesses > 0 ? Math.round((correctGuesses / totalGuesses) * 100) : 0;
-    return (
-      <div
-        style={{
-          minHeight: '100vh',
-          background: '#000',
-          color: 'white',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          textAlign: 'center',
-          padding: '24px',
-        }}
-      >
-        <h1
-          style={{
-            fontSize: '3rem',
-            marginBottom: '18px',
-            color: isBattleRoyale ? '#ff6b6b' : 'white',
-            fontWeight: '900',
-            letterSpacing: '4px',
-            textTransform: 'uppercase',
-          }}
-        >
-          {isBattleRoyale ? 'ELIMINATED' : 'GAME OVER'}
-        </h1>
-        {isBattleRoyale && (
-          <div
-            style={{
-              border: '1px solid #e03030',
-              borderRadius: '10px',
-              padding: '12px 24px',
-              marginBottom: '24px',
-              background: 'rgba(224, 48, 48, 0.12)',
-              color: '#ff6b6b',
-              fontWeight: 'bold',
-              letterSpacing: '1px',
-            }}
-          >
-            You lost your final life.
-          </div>
-        )}
-        <div
-          style={{
-            border: '1px solid rgba(255,255,255,0.18)',
-            borderRadius: '14px',
-            padding: '18px 24px',
-            background: 'rgba(255,255,255,0.08)',
-            minWidth: '220px',
-          }}
-        >
-          <p
-            style={{
-              color: '#aaa',
-              fontSize: '0.75rem',
-              fontWeight: 'bold',
-              letterSpacing: '3px',
-              marginBottom: '8px',
-              textTransform: 'uppercase',
-            }}
-          >
-            Longest Streak
-          </p>
-          <p style={{ color: '#ffd369', fontSize: '3rem', fontWeight: 'bold', lineHeight: 1 }}>{longestStreak}</p>
-          <p style={{ color: '#ccc', fontSize: '0.9rem', marginTop: '8px' }}>
-            {longestStreak === 1 ? 'round correct in a row' : 'rounds correct in a row'}
-          </p>
-          <div
-            style={{
-              height: '1px',
-              background: 'rgba(255,255,255,0.12)',
-              margin: '16px 0 14px',
-            }}
-          />
-          <p
-            style={{
-              color: '#aaa',
-              fontSize: '0.75rem',
-              fontWeight: 'bold',
-              letterSpacing: '3px',
-              marginBottom: '8px',
-              textTransform: 'uppercase',
-            }}
-          >
-            Accuracy
-          </p>
-          <p style={{ color: '#9ce8ff', fontSize: '2rem', fontWeight: 'bold', lineHeight: 1 }}>{accuracy}%</p>
-          <p style={{ color: '#ccc', fontSize: '0.9rem', marginTop: '8px' }}>
-            {correctGuesses}/{totalGuesses} correct guesses
-          </p>
-        </div>
-        <a
-          href="/play"
-          style={{
-            marginTop: '24px',
-            padding: '12px 28px',
-            borderRadius: '999px',
-            border: '1px solid rgba(124,255,178,0.5)',
-            background: 'rgba(124,255,178,0.12)',
-            color: '#7CFFB2',
-            fontWeight: 'bold',
-            letterSpacing: '2px',
-            textTransform: 'uppercase',
-            fontSize: '0.85rem',
-            textDecoration: 'none',
-          }}
-        >
-          New Game
-        </a>
-        <EliminationFeed gameId={gameId} />
-      </div>
-    );
-  }
-
   return (
     <div
-      className='relative'
+      className="relative"
       style={{
         height: '100dvh',
         position: 'relative',
@@ -456,6 +672,27 @@ export const GamePage = () => {
       }}
     >
       <TileLattice opacity={0.06} />
+      {submissionNotices.map((notice) => (
+        <div
+          key={notice.key}
+          style={{
+            position: 'fixed',
+            bottom: '16px',
+            left: '16px',
+            padding: '8px 12px',
+            borderRadius: '8px',
+            background: 'rgba(255,255,255,0.12)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            color: 'white',
+            fontWeight: 'bold',
+            fontSize: '12px',
+            zIndex: 1000,
+            backdropFilter: 'blur(8px)',
+          }}
+        >
+          {notice.text}
+        </div>
+      ))}
       {showPowerupPopup && (
         <div
           style={{
@@ -474,44 +711,10 @@ export const GamePage = () => {
           Powerup Gained: Slow Motion for one round!
         </div>
       )}
-      <div
-        style={{
-          position: 'fixed',
-          top: '18px',
-          left: '18px',
-          zIndex: 40,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '10px',
-          pointerEvents: 'none',
-          maxWidth: 'min(320px, calc(100vw - 36px))',
-        }}
-      >
-        {levelUpNotices.map((notice) => (
-          <div
-            key={notice.key}
-            style={{
-              padding: '12px 14px',
-              borderRadius: '14px',
-              background: 'rgba(255,255,255,0.12)',
-              border: '1px solid rgba(255,255,255,0.18)',
-              color: 'white',
-              boxShadow: '0 14px 36px rgba(0,0,0,0.28)',
-              backdropFilter: 'blur(10px)',
-              fontFamily: 'Outfit, sans-serif',
-              fontWeight: 700,
-              fontSize: '0.9rem',
-              lineHeight: 1.25,
-              animation: 'levelUpToastIn 180ms ease-out',
-            }}
-          >
-            {notice.text}
-          </div>
-        ))}
-      </div>
+      {noticeStack}
       <div
         className="relative flex shrink-0 justify-between"
-        style={{ width: '100%', padding: 'clamp(6px, 1.5dvh, 20px) clamp(16px, 2vw, 28px)' }}
+        style={{ width: '100%', padding: 'clamp(12px, 2dvh, 20px) clamp(24px, 5vw, 28px)' }}
       >
         <span
           style={{
@@ -525,7 +728,7 @@ export const GamePage = () => {
           KIMPLY
         </span>
       </div>
-      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-start overflow-y-auto pt-[5dvh] md:justify-center md:pt-0">
+      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-start overflow-y-auto px-6 pb-6 pt-[5dvh] md:justify-center md:pt-0">
         {isBattleRoyale && (
           <div
             style={{
@@ -541,16 +744,24 @@ export const GamePage = () => {
               textAlign: 'center',
             }}
           >
-            BATTLE ROYALE • 1 LIFE ONLY
+            BATTLE ROYALE
           </div>
         )}
-        <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2dvh' }}>
-          {Array.from({ length: totalLives }, (_, i) => i + 1).map((heart) => (
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            justifyContent: 'flex-start',
+            gap: 'clamp(8px, 2.5vw, 16px)',
+            marginBottom: 'clamp(16px, 2.5dvh, 24px)',
+          }}
+        >
+          {Array.from({ length: heartCount }, (_, i) => i + 1).map((heart) => (
             <div
               key={heart}
               style={{
-                width: 'clamp(26px, 6dvh, 76px)',
-                height: 'clamp(26px, 6dvh, 76px)',
+                width: 'clamp(32px, 6dvh, 76px)',
+                height: 'clamp(32px, 6dvh, 76px)',
                 backgroundColor: heart <= (player?.lives ?? totalLives) ? '#e03030' : '#333',
                 borderRadius: '50%',
                 display: 'flex',
@@ -558,6 +769,7 @@ export const GamePage = () => {
                 justifyContent: 'center',
                 fontSize: 'clamp(14px, 3.2dvh, 32px)',
                 boxShadow: heart <= (player?.lives ?? totalLives) ? '0 0 10px #e0303088' : 'none',
+                transform: lifeFlash && heart === (player?.lives ?? totalLives) ? 'scale(1.35)' : 'scale(1)',
                 transition: 'all 0.3s ease',
               }}
             >
@@ -584,7 +796,7 @@ export const GamePage = () => {
             FINAL LIFE
           </div>
         )}
-        <div style={{ textAlign: 'center' }}>
+        <div style={{ width: '100%', maxWidth: 420, textAlign: 'center' }}>
           <p
             style={{
               color: 'white',
@@ -600,16 +812,16 @@ export const GamePage = () => {
             style={{
               display: 'flex',
               justifyContent: 'center',
-              gap: '0.5vw',
-              marginBottom: '2dvh',
+              gap: 'clamp(4px, 1.5vw, 10px)',
+              marginBottom: 'clamp(16px, 2dvh, 24px)',
             }}
           >
             {(round.sequence || []).map((_, i) => (
               <div
                 key={i}
                 style={{
-                  width: 'clamp(10px, 1vw, 50px)',
-                  height: 'clamp(10px, 1vw, 50px)',
+                  width: 'clamp(10px, 2.8vw, 50px)',
+                  height: 'clamp(10px, 2.8vw, 50px)',
                   borderRadius: '50%',
                   backgroundColor: i < attemptedSequence.length ? '#fff' : '#556',
                 }}
@@ -633,8 +845,8 @@ export const GamePage = () => {
               player?.slowMotionActive
                 ? 'slow'
                 : room?.gameMode === 'custom'
-                ? room.customSettings?.flashingSpeed
-                : 'medium'
+                  ? room.customSettings?.flashingSpeed
+                  : 'medium'
             }
           />
           <p
@@ -671,55 +883,61 @@ export const GamePage = () => {
                 letterSpacing: '1px',
               }}
             >
-              {playerCanInput ? `Time left: ${secondsLeft}s` : ''}
+              {`Time left: ${secondsLeft}s`}
             </p>
           )}
           <div
             style={{
               display: 'flex',
               justifyContent: 'center',
-              gap: '1vw',
-              marginTop: '2dvh',
+              width: 'min(100%, 520px)',
+              marginInline: 'auto',
+              gap: 'clamp(8px, 3vw, 16px)',
+              marginTop: 'clamp(20px, 3dvh, 28px)',
             }}
           >
-            <button
+            <ControlButton
+              label="CLEAR"
+              keyHint="Space"
               onClick={handleClear}
-              disabled={!playerCanInput || attemptedSequence.length === 0}
-              style={{
-                width: 'clamp(100px, 8vw, 300px)',
-                height: 'clamp(34px, 5.5dvh, 60px)',
-                backgroundColor: playerCanInput && attemptedSequence.length > 0 ? '#444' : '#222',
-                color: playerCanInput && attemptedSequence.length > 0 ? 'white' : '#555',
-                fontWeight: 'bold',
-                fontSize: 'clamp(10px, 1vw, 20px)',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: playerCanInput && attemptedSequence.length > 0 ? 'pointer' : 'not-allowed',
-                letterSpacing: '1px',
-              }}
-            >
-              CLEAR
-            </button>
-            <button
+              enabled={playerCanInput && attemptedSequence.length > 0}
+              enabledBackground="#444"
+              disabledBackground="#222"
+              disabledColour="#555"
+            />
+            <ControlButton
+              label="UNDO"
+              keyHint="Backspace"
+              onClick={handleUndo}
+              enabled={playerCanInput && attemptedSequence.length > 0}
+              enabledBackground="#444"
+              disabledBackground="#222"
+              disabledColour="#555"
+            />
+            {!isBattleRoyale && (
+              <ControlButton
+                label="REPLAY"
+                hint={`${replaysRemaining} LEFT`}
+                ariaLabel={`Replay sequence, ${replaysRemaining} left`}
+                onClick={handleReplay}
+                enabled={canReplay}
+                enabledBackground="#1a3a5c"
+                disabledBackground="#222"
+                enabledColour="#7CFFB2"
+                disabledColour="#555"
+                enabledBorder="1px solid #7CFFB2"
+                disabledBorder="1px solid #333"
+              />
+            )}
+            <ControlButton
+              label="SUBMIT"
+              keyHint="Enter"
               onClick={handleSubmit}
-              disabled={!playerCanInput || attemptedSequence.length !== round.sequence.length}
-              style={{
-                width: 'clamp(100px, 8vw, 300px)',
-                height: 'clamp(34px, 5.5dvh, 60px)',
-                backgroundColor:
-                  playerCanInput && attemptedSequence.length === round.sequence.length ? '#666' : '#2a2a3a',
-                color: playerCanInput && attemptedSequence.length === round.sequence.length ? 'white' : '#444',
-                fontWeight: 'bold',
-                fontSize: 'clamp(10px, 1vw, 20px)',
-                border: 'none',
-                borderRadius: '8px',
-                cursor:
-                  playerCanInput && attemptedSequence.length === round.sequence.length ? 'pointer' : 'not-allowed',
-                letterSpacing: '1px',
-              }}
-            >
-              SUBMIT
-            </button>
+              enabled={playerCanInput && attemptedSequence.length === round.sequence.length}
+              enabledBackground="#666"
+              disabledBackground="#2a2a3a"
+              disabledColour="#444"
+            />
           </div>
         </div>
         <EliminationFeed gameId={gameId} />
@@ -728,16 +946,16 @@ export const GamePage = () => {
         type="button"
         onClick={() => setIsLeaderboardOpen((open) => !open)}
         aria-expanded={isLeaderboardOpen}
-        className="fixed right-4 top-4 z-50 rounded-full border border-hairline bg-surface px-4 py-3 font-outfit text-xs font-bold text-fg shadow-lg sm:right-6 sm:top-6 sm:text-sm"
+        className="fixed right-6 top-5 z-50 min-h-11 rounded-full border border-hairline bg-surface px-4 py-3 font-outfit text-xs font-bold text-fg shadow-lg xs:top-6 xs:text-sm"
       >
         {isLeaderboardOpen ? 'Collapse leaderboard' : 'Leaderboard'}
       </button>
       <aside
-        className={`fixed right-4 top-20 z-30 w-[calc(100vw-2rem)] max-w-[28rem] transition-transform duration-300 ease-in-out ${
-          isLeaderboardOpen ? 'translate-x-0' : 'translate-x-[120%]'
+        className={`fixed bottom-6 left-6 right-6 z-30 transition-transform duration-300 ease-in-out xs:bottom-auto xs:left-auto xs:top-20 xs:w-[calc(100vw-3rem)] xs:max-w-[28rem] ${
+          isLeaderboardOpen ? 'translate-y-0' : 'translate-y-[120%] xs:translate-x-[120%] xs:translate-y-0'
         }`}
       >
-        <Leaderboard gameId={gameId} currentPlayerId={playerId} />
+        <Leaderboard gameId={gameId} currentPlayerId={playerId} className="max-h-[52vh] xs:max-h-[80vh]" />
       </aside>
     </div>
   );

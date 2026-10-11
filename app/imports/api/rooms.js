@@ -65,7 +65,9 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
         hostName: name,
         gameName: `Game${pin}`,
         status: 'lobby',
-        players: [{ id: hostId, name, accountId: hostAccountId, connected: true, connectionId: this.connection?.id ?? null }],
+        players: [
+          { id: hostId, name, accountId: hostAccountId, connected: true, connectionId: this.connection?.id ?? null },
+        ],
         createdAt: new Date(),
         gameMode: 'default',
         customSettings: { ...GAME_MODE_PRESETS.default },
@@ -119,7 +121,10 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       ) {
         throw new Meteor.Error('invalid-length', 'startingSequenceLength must be a positive integer');
       }
-      if (settings.sequenceGrowth != null && (!Number.isInteger(settings.sequenceGrowth) || settings.sequenceGrowth < 1)) {
+      if (
+        settings.sequenceGrowth != null &&
+        (!Number.isInteger(settings.sequenceGrowth) || settings.sequenceGrowth < 1)
+      ) {
         throw new Meteor.Error('invalid-growth', 'sequenceGrowth must be a positive integer');
       }
 
@@ -143,7 +148,10 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       await PlayersCollection.removeAsync({ gameId: pin });
       await RoundsCollection.removeAsync({ gameId: pin });
 
-      await RoomsCollection.updateAsync({ _id: room._id }, { $set: { status: 'in_progress', gameMode: selectedGameMode } });
+      await RoomsCollection.updateAsync(
+        { _id: room._id },
+        { $set: { status: 'in_progress', gameMode: selectedGameMode } }
+      );
       await Meteor.callAsync('rounds.generate', room.pin);
     },
 

@@ -11,9 +11,11 @@ import { EndLeaderboard } from '/imports/ui/EndLeaderboard';
 import { GamePage } from '/imports/ui/pages/GamePage';
 import { Account } from '/imports/ui/pages/Account';
 import { GlobalLeaderboard } from '/imports/ui/pages/GlobalLeaderboard';
+import { resumeSession } from '/imports/ui/accountSession';
 import '/imports/ui/styles.css';
 
 Meteor.startup(() => {
+  resumeSession();
   const container = document.getElementById('react-target');
   const root = createRoot(container);
   root.render(

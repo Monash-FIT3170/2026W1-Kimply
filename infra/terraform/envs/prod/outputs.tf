@@ -2,6 +2,20 @@ output "acm_validation_records" {
   value = module.kimply.acm_validation_records
 }
 
+output "hosted_zone_nameservers" {
+  description = "Set these four as kimply.online's nameservers at GoDaddy."
+  value       = module.kimply.hosted_zone_nameservers
+}
+
+output "shared_alb" {
+  description = "Read by envs/dev through remote state: development serves from this load balancer."
+  value       = module.kimply.shared_alb
+}
+
+output "hosted_zone_id" {
+  value = module.kimply.hosted_zone_id
+}
+
 output "alb_dns_name" {
   value = module.kimply.alb_dns_name
 }

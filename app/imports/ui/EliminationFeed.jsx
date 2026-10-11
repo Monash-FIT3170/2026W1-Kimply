@@ -2,9 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Meteor } from 'meteor/meteor';
 import { useTracker } from 'meteor/react-meteor-data';
 import { PlayersCollection } from '../api/players';
-import { ELIMINATION_FEED_MS as DISPLAY_MS } from '../constants';
-
-const MAX_VISIBLE = 3;
+import { ELIMINATION_FEED_MS as DISPLAY_MS, MAX_LIVE_FEED_ITEMS } from '../constants';
 
 export const EliminationFeed = ({ gameId }) => {
   const { ready, eliminations } = useTracker(() => {
@@ -28,6 +26,8 @@ export const EliminationFeed = ({ gameId }) => {
   useEffect(() => {
     if (!ready) return;
 
+    // Eliminations from before this feed mounted (a player moving into the spectator
+    // view remounts it) are history, not news, so only announce ones that arrive later.
     if (!baselined.current) {
       eliminations.forEach((e) => seenIds.current.add(e._id));
       baselined.current = true;
@@ -39,13 +39,13 @@ export const EliminationFeed = ({ gameId }) => {
     fresh.forEach((e) => seenIds.current.add(e._id));
 
     // Show the most recent few; count the rest.
-    const shown = fresh.slice(-MAX_VISIBLE);
+    const shown = fresh.slice(-MAX_LIVE_FEED_ITEMS);
     let hidden = fresh.length - shown.length;
 
     const combined = [...visibleRef.current, ...shown];
-    const evicted = Math.max(0, combined.length - MAX_VISIBLE);
+    const evicted = Math.max(0, combined.length - MAX_LIVE_FEED_ITEMS);
     hidden += evicted;
-    visibleRef.current = combined.slice(-MAX_VISIBLE);
+    visibleRef.current = combined.slice(-MAX_LIVE_FEED_ITEMS);
     setVisible(visibleRef.current);
 
     shown.forEach((entry) => {

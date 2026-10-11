@@ -10,7 +10,7 @@ Shared guidance for any coding agent working in this repository (Cursor, Claude 
 > If you change any of those things, update the matching table before you finish, and add an entry to [docs/decision-log.md](docs/decision-log.md) in the same change.
 > See [Maintaining this file](#maintaining-this-file) at the bottom.
 
-**Last verified against the codebase:** 2026-08-29
+**Last verified against the codebase:** 2026-10-06
 
 ---
 
@@ -47,6 +47,7 @@ Everything below has a home of its own. Read the home file rather than expecting
 | [`docs/dev-environment.md`](docs/dev-environment.md) | How the development stack differs from production |
 | [`docs/operations.md`](docs/operations.md) | Monitoring, backups, incident runbook, cost |
 | [`docs/ecs-target-architecture.md`](docs/ecs-target-architecture.md) | Target production design on ECS Fargate: decisions, risks, migration order. In progress, not yet serving traffic |
+| [`docs/google-sign-in.md`](docs/google-sign-in.md) | Google sign-in: the OAuth client, its origins, and where `GOOGLE_CLIENT_ID` lives in each environment |
 | [`infra/terraform/README.md`](infra/terraform/README.md) | How to build and operate the ECS stack with Terraform |
 | [`infra/docs/architecture.md`](infra/docs/architecture.md) | Mermaid diagrams of the ECS stack: runtime traffic, which Terraform file builds what, a deploy |
 | [`README.md`](README.md) | WSL2 and Docker setup, and the full local command list |
@@ -119,8 +120,9 @@ The full loop is built end to end:
 - The game itself: sequence playback, tile input, life deduction, streaks, accuracy tracking
 - Round advancement, elimination, and winner detection
 - A live per-round leaderboard and an end-of-game ranking screen
-- Optional player accounts (register and sign in)
+- Optional player accounts (register, sign in with a password or Google, sign out), with a session that survives reloads, new tabs, and the end of a game
 - A lobby-only reconnect prompt backed by `localStorage`
+- The last username used is remembered in `localStorage` and prefilled on `/play` and `/play/join`
 
 ---
 
@@ -175,7 +177,8 @@ app/
 │   │   ├── players.js        # PlayersCollection (definition only)
 │   │   ├── leaderboard.js    # LeaderboardCollection (definition only)
 │   │   ├── gameMethods.js    # The game loop: rounds.*, players.* methods
-│   │   ├── playerAccounts.js # PlayerAccountsCollection + register/signIn
+│   │   ├── playerAccounts.js # PlayerAccountsCollection + register/signIn/googleSignIn/resume/signOut
+│   │   ├── googleAuth.js     # GOOGLE_CLIENT_ID + Google ID-token verification (server use only)
 │   │   └── sequence.js       # COLOURS + generateSequence (see note below)
 │   └── ui/
 │       ├── pages/            # Splash, PlayRoute, JoinRoom, PlayerLobby, GamePage, Account
@@ -187,6 +190,8 @@ app/
 │       ├── ColourSequence.jsx     # sequence playback + tile input
 │       ├── roomCode.js            # pure helpers for the 5-slot code entry
 │       ├── keyboard.js            # pure key handlers
+│       ├── accountSession.js      # signed-in account: session token, resume, useSignedInAccount
+│       ├── savedUsername.js       # remembers the last username in localStorage
 │       └── styles.css             # Tailwind directives + keyframes
 └── tests/                    # meteortesting:mocha specs, see Testing below
 ```
@@ -209,7 +214,7 @@ Meteor's connect handler does this by default when the whole app is proxied.
 | `/play` | `PlayRoute` | username entry, then Create Room or Join Room |
 | `/play/join` | `JoinRoom` | 5-slot code entry; reads `?code=` from invite links |
 | `/play/:pin` | `PlayerLobby` | host view or joined view based on `location.state.isHost` |
-| `/account` | `Account` | register / sign in |
+| `/account` | `Account` | register / sign in, with a Google button when `GOOGLE_CLIENT_ID` is set |
 | `*` | `Navigate to="/"` | catch-all |
 
 `main.jsx:24` and `:26` declare **two identical `path="*"` routes**.
@@ -228,6 +233,7 @@ React Router v7 ranks by specificity rather than declaration order, so `/account
 | `PlayersCollection` | `players` | `imports/api/players.js:6` |
 | `LeaderboardCollection` | `leaderboard` | `imports/api/leaderboard.js:6` |
 | `PlayerAccountsCollection` | `playerAccounts` | `imports/api/playerAccounts.js:8` |
+| `GameEventsCollection` | `gameEvents` | `imports/api/gameEvents.js:6` |
 
 Each definition is wrapped in a `global._<Name>Collection` guard so it survives double evaluation under `meteor test --full-app`.
 
@@ -250,20 +256,26 @@ Each definition is wrapped in a `global._<Name>Collection` guard so it survives 
 ```js
 { gameId, roundId, name, lives: 3, attemptedSequence: [], currentStreak: 0,
   longestStreak: 0, totalGuesses: 0, correctGuesses: 0, eliminatedRound: null,
-  eliminated: false, winner: false, completeRound: false, gameFinished: false }
+  eliminated: false, winner: false, completeRound: false,
+  roundStatus: 'Playing' | 'Correct' | 'Eliminated', gameFinished: false }
 ```
+`roundStatus` is public, summary-only state for the live round UI. It must never
+contain a sequence, attempted colour, or answer detail.
 
 **`leaderboard`** (written by `gameMethods.js:152-159`, append-only)
 ```js
 { gameId, playerId, name, lives, roundId, completedAt }
 ```
 
-**`playerAccounts`** (written by `playerAccounts.register`, `:55-64`)
+**`playerAccounts`** (written by `playerAccounts.register`, `:144-155`, and by `playerAccounts.googleSignIn` through `findOrCreateGoogleAccount`)
 ```js
-{ displayName, email, passwordSalt, passwordHash,
-  gamesPlayed: 0, wins: 0, bestRound: 0, createdAt }
+{ displayName, email, passwordSalt?, passwordHash?, googleSub?,
+  gamesPlayed: 0, wins: 0, bestRound: 0,
+  sessions: [{ hash, createdAt, expiresAt }], createdAt, updatedAt }
 ```
-`gamesPlayed`, `wins`, and `bestRound` are written once at 0 and never updated by any code.
+An account has either a password or a `googleSub`, never both. One created by Google sign-in has no password fields. A password account that its owner signs in to with Google, using the same verified email, gains `googleSub` and **loses its password and sessions**, because registration never proved who owned that email.
+`gamesPlayed` and `wins` are incremented by `recordGlobalResult` in `gameMethods.js` when a game with a linked account ends.
+`sessions` holds the SHA-256 of each live session token, never the token itself. Sessions last 30 days, and expired ones are pruned whenever a new one is issued.
 
 ### Indexes
 
@@ -283,6 +295,8 @@ A failure is logged and does not take the server down, because a unique index ca
 | `leaderboard` | `{ gameId: 1, roundId: 1 }` | |
 | `leaderboard` | `{ completedAt: 1 }` | TTL 7 days |
 | `playerAccounts` | `{ email: 1 }` | unique |
+| `playerAccounts` | `{ 'sessions.hash': 1 }` | |
+| `playerAccounts` | `{ googleSub: 1 }` | unique, sparse |
 
 The TTL indexes on `rooms` and `rounds` are what replaced the old destructive startup wipe: data expires on a timer instead of being deleted out from under live games on every restart.
 `leaderboard` is append-only and nothing deletes from it, so its TTL is what keeps it inside the 512 MB Atlas free-tier allowance.
@@ -295,9 +309,11 @@ All publications are **scoped to a single game**. `gameId` is the 5-character ro
 
 | Name | Defined at | Args | Selector | Projection |
 |---|---|---|---|---|
-| `rounds` | `server/publications.js:28` | `gameId` | `{ gameId, isCurrent: true }` | none |
-| `players` | `server/publications.js:35` | `gameId` | `{ gameId }` | excludes `attemptedSequence` |
-| `leaderboard` | `server/publications.js:40` | `gameId` | `{ gameId }` | none |
+| `rounds` | `server/publications.js:12` | `gameId` | `{ gameId, advanced: false }` | none |
+| `players` | `server/publications.js:17` | `gameId` | `{ gameId }` | excludes `attemptedSequence` |
+| `leaderboard` | `server/publications.js:22` | `gameId` | `{ gameId }` | none |
+| `eliminations` | `server/publications.js:27` | `gameId` | eliminated players in game | excludes `attemptedSequence`, newest 20 |
+| `gameEvents` | `server/publications.js:35` | `gameId` | `{ gameId }` | newest 20 |
 | `rooms.lobby` | `imports/api/rooms.js:20` | `pin` | `{ pin }` | `_id, pin, status, gameName, hostName, players.name, players.id` |
 
 Three properties are load-bearing and must not be undone:
@@ -316,15 +332,15 @@ The module carries a `global._publicationsInitialized` guard because under `--fu
 
 | File:line | Publication | Args |
 |---|---|---|
-| `ui/pages/GamePage.jsx:28` | `rounds` | `gameId` |
-| `ui/pages/GamePage.jsx:29` | `players` | `gameId` |
+| `ui/pages/GamePage.jsx` | `rounds`, `players`, `rooms.lobby`, `gameEvents` | `gameId` |
 | `ui/Leaderboard.jsx:12-13` | `players`, `rounds` | `gameId` |
 | `ui/EndLeaderboard.jsx:30` | `players` | `gameId` |
+| `ui/EliminationFeed.jsx` | `eliminations` | `gameId` |
 | `ui/pages/PlayerLobby.jsx:366` | `rooms.lobby` | `pin` |
 
 The `leaderboard` publication still exists and is tested, but the live UI no longer subscribes to it. `Leaderboard.jsx` builds rows from `players` + the current round via `leaderboardModels.js`. The `leaderboard` collection is still written by `players.submitSequence`.
 
-`GamePage` derives `gameId` from `location.state.pin` and renders a "no game selected" screen when it is absent.
+`GamePage` derives `gameId` from `location.state.pin` and renders a "no game selected" screen when it is absent. A player who has completed the current round or been eliminated enters a spectator view that renders only the live leaderboard; it does not render the active round's sequence or colour controls.
 There is deliberately no `'demo'` placeholder: with scoped publications it would subscribe to a game that does not exist and hang on LOADING forever.
 
 ---
@@ -356,6 +372,9 @@ PIN alphabet is `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (`rooms.js:12`), generated wi
 | `rounds.generate` | 88 | `length = 4, gameId = null` | Inserts a new `isCurrent` round |
 | `players.join` | 102 | `roundId, playerName, gameId = null` | Inserts a player with 3 lives |
 | `players.submitSequence` | 122 | `playerId, attemptedSequence` | Grades the attempt. 6-9 DB round-trips, plus 4 more if it triggers a round advance |
+| `players.timeoutTurn` | 415 | `playerId` | Deducts a life and updates the public round status |
+| `players.timeoutRound` | 461 | `playerId` | Eliminates a player whose standard-round timer expires |
+| `players.leaveGame` | 495 | `playerId` | Marks a spectator eliminated while retaining their result, then rechecks the winner and round progress |
 | `rounds.advance` | 218 | `currentRoundId` | Marks the round advanced, inserts the next one, moves active players onto it |
 
 Private helpers: `checkWinner(gameId)` at `:13`, `advanceRoundIfReady(round)` at `:67`.
@@ -367,11 +386,17 @@ There is no timer or deadline, so one player leaving mid-round stalls that game 
 
 | Method | Line | Args | Description |
 |---|---|---|---|
-| `playerAccounts.register` | 31 | `{ displayName, email, password }` | Salted SHA-256, min 8-char password |
-| `playerAccounts.signIn` | 69 | `{ email, password }` | Returns `{ displayName, email }`. **Issues no session token** |
+| `playerAccounts.register` | 120 | `{ displayName, email, password }` | Salted SHA-256, min 8-char password. Returns `{ _id, displayName, email, sessionToken }` |
+| `playerAccounts.signIn` | 160 | `{ email, password }` | Returns `{ _id, displayName, email, sessionToken }`. Each sign-in is its own session. Throws `use-google` for a Google-only account |
+| `playerAccounts.googleClientId` | 190 | none | The public OAuth client ID, or `null` when Google sign-in is off |
+| `playerAccounts.googleSignIn` | 194 | `idToken` | Verifies a Google ID token (audience, signature, `email_verified`), then finds by `googleSub`, links by email (removing that account's password and sessions), or creates. Returns the same shape as `signIn` |
+| `playerAccounts.resume` | 222 | `token` | Returns `{ _id, displayName, email }` for a live session, else throws `invalid-session` |
+| `playerAccounts.signOut` | 230 | `token` | Deletes that one session. Unknown tokens are a no-op |
 
 `PlayerAccountsCollection` is never published, so hashes and salts stay server-side.
-Meteor's `accounts-base` / `accounts-password` packages are **not** installed; this is a hand-rolled implementation.
+Meteor's `accounts-base` / `accounts-password` / `accounts-google` packages are **not** installed; this is a hand-rolled implementation.
+Google sign-in uses Google Identity Services in the browser and `google-auth-library` on the server, loaded lazily from `imports/api/googleAuth.js`.
+That module reaches the client bundle through `playerAccounts.js`, so `app/rspack.config.js` aliases `google-auth-library` to nothing for the client build.
 
 ---
 
@@ -385,7 +410,9 @@ There are three unrelated identity mechanisms, none of them Meteor's.
    The host branch that would persist it is commented out at `PlayRoute.jsx:144-150`, so a host who reloads has no reconnect path.
 2. **In-game identity** - the `_id` of a `players` document, held only in React state at `GamePage.jsx:12`.
    Not persisted, so it is lost on refresh (see D7).
-3. **Account identity** - passed via `location.state.playerAccount`, with no token and no DDP session binding.
+3. **Account identity** - a session token from `register` / `signIn`, kept in `localStorage['kimply.session']` and resumed at startup by `imports/ui/accountSession.js`.
+   Pages read the account with `useSignedInAccount()`; it is never passed through router state.
+   The token is not bound to the DDP connection, and methods such as `rooms.join` and `players.join` still accept a client-supplied `accountId`.
 
 `location.state` is stored in `window.history.state.usr`, so it survives F5 on the same history entry but **not** a new tab or a shared link.
 On `/game` a missing `location.state.pin` renders a "no game selected" screen (`gameId` is `null`). The display name still falls back to `'Demo Player'` (`GamePage.jsx:21`). There is deliberately no `'demo'` gameId: a placeholder would subscribe to a game that does not exist and hang on LOADING.
@@ -413,16 +440,17 @@ How to write and run them is the `test` skill. What exists today:
 | File | Covers |
 |---|---|
 | `rooms.test.js` | `rooms.create`, `rooms.join`, `rooms.kick` |
-| `playerAccounts.test.js` | register and signIn validation, hashing, normalisation |
+| `playerAccounts.test.js` | register and signIn validation, hashing, normalisation; session issue, resume, expiry, sign-out; Google sign-in create, link, reject (verifier stubbed) |
 | `roundAdvance.test.js` | `rounds.advance` increments, player migration, idempotency |
 | `lifeDeduction.test.js` | life loss on wrong guess, streak reset |
 | `streak.test.js` | current vs longest streak |
 | `accuracy.test.js` | `totalGuesses` / `correctGuesses` |
 | `updateWinner.test.js` | last-one-standing winner selection |
-| `uiHelpers.test.js` | `roomCode.js` and `keyboard.js` pure helpers |
+| `uiHelpers.test.js` | `roomCode.js`, `keyboard.js`, and `savedUsername.js` pure helpers |
 | `sequence.test.js` | `imports/api/sequence.js` (the copy the game does not use) |
 | `publications.test.js` | scoped `rounds` / `players` / `leaderboard` pubs, no `attemptedSequence` |
 | `leaderboardModel.test.js` | live leaderboard row helpers in `leaderboardModels.js` |
+| `leaveGame.test.js` | spectator departure retains their result and allows the game to finish |
 
 **Not covered:** any authorization case, any concurrency or race scenario, `rooms.start`, `rooms.disconnect`, `rooms.updateGameName`, `rooms.reconnect`.
 
@@ -442,7 +470,7 @@ One line each, so a review can cite an ID without opening anything.
 | D5 | `gameMethods.js:79-81` | No round deadline. One player leaving mid-round stalls that game forever |
 | D6 | `rooms.js:172` | `hostId` is never persisted, so `rooms.reconnect` always reports `isHost: false` |
 | D7 | `GamePage.jsx:43-53` | `playerId` lives only in React state, so a refresh mints a second player with fresh lives |
-| D8 | `playerAccounts.js:20-22` | Unstretched SHA-256, non-constant-time compare, no rate limiting, enumeration oracle |
+| D8 | `playerAccounts.js:22-24` | Unstretched SHA-256, non-constant-time compare, no rate limiting, enumeration oracle |
 | D11 | root `package-lock.json` | Desynced against an empty root `package.json`, so `npm ci` at the repo root fails |
 | D12 | `ColourSequence.jsx:80-92` | A new `AudioContext` per tile click, never closed |
 | D14 | repo-wide | `npm run format:check` fails on `main`. Needs one dedicated formatting commit before it can gate CI |
@@ -464,9 +492,14 @@ Dev, from `docker-compose.yml`:
 - `ROOT_URL` - app root URL (`http://localhost:3000`)
 - `PORT` - 3000
 - `CHOKIDAR_USEPOLLING` / `CHOKIDAR_INTERVAL` - file watch polling, for Windows
+- `GOOGLE_CLIENT_ID` - optional. Empty turns Google sign-in off, which is the default everywhere until an OAuth client exists
 
-`METEOR_SETTINGS` is passed by `docker-compose.prod.yml` but **`Meteor.settings` is never read anywhere in the codebase**.
-There is no configuration surface: starting lives (3), initial sequence length (4), PIN length (5), and minimum password length (8) are all hardcoded literals.
+`GOOGLE_CLIENT_ID` is the only app-level setting with an environment-specific value, and each stack carries it differently:
+`docker-compose.yml` locally (from the root `.env`), plain `environment` in `infra/ecs/task-definition.{dev,prod}.json` on ECS, and `/opt/kimply/.env` on the legacy EC2 instances.
+It is a public value, not a secret, so it is not in Secrets Manager. Setup is [`docs/google-sign-in.md`](docs/google-sign-in.md).
+
+`METEOR_SETTINGS` is not passed by either compose file, and **`Meteor.settings` is never read anywhere in the codebase**.
+Apart from `GOOGLE_CLIENT_ID`, there is no configuration surface: starting lives (3), initial sequence length (4), PIN length (5), and minimum password length (8) are all hardcoded literals.
 
 ---
 

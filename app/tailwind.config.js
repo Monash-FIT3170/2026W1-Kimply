@@ -2,6 +2,17 @@
 module.exports = {
   content: ['./imports/**/*.{js,jsx}', './client/**/*.{js,jsx,html}'],
   theme: {
+    // Listed ascending so variant order in the output CSS is min-width order.
+    // `xs` is the phone/tablet boundary from docs/design_system.md (<=480px is
+    // the single-column band); the rest are Tailwind's defaults, unchanged.
+    screens: {
+      xs: '481px',
+      sm: '640px',
+      md: '768px',
+      lg: '1024px',
+      xl: '1280px',
+      '2xl': '1536px',
+    },
     extend: {
       colors: {
         bg: 'oklch(0.14 0.02 270)',
