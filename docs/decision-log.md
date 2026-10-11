@@ -20,6 +20,20 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-11 - Host lobby: only the player list scrolls
+
+The host lobby in `app/imports/ui/pages/PlayerLobby.jsx` now keeps the room panel and the Start button at full size and scrolls only the player list (#143).
+The panel is also more compact: the game mode badge and the abilities switch share a row, the room code tiles are smaller, and the game name and invite link are single rows on phones.
+
+Things that are not obvious from the diff:
+
+- **Centring uses auto margins, not `justify-center`.** In a scrolling flex column, `justify-center` pushes overflow above the top edge where it cannot be scrolled to. That is what squashed the panel and hid the invite link once a few players joined.
+- **The player section has an explicit minimum (heading plus one row).** Its automatic minimum would be the whole list, so the list would never shrink. On a screen too short for the panel plus one row, the page itself scrolls as a fallback.
+- **Player rows lost their "Player" sub-label and have a fixed height**, in both the host and joined views, so a row with a kick button matches the host's own row.
+- **From `lg` up both lobby views go full screen.** The host view becomes a grid: panel and Start in a fixed 26rem left column, players filling the rest as cards (at least 12rem wide). The joined view drops its `max-w-2xl` cap. In both, only the player grid scrolls, so a big lobby never pushes the panel, title or waiting line away.
+- **Your own row is tinted with the primary colour**, matching the leaderboards, because in a narrow grid card the "· you" suffix truncates away.
+- **The abilities switch hides its one-line description below `xs`** so it fits beside the mode badge on a phone. The badge shows the short mode name ("Battle Royale") for the same reason.
+
 ## 2026-10-11 - Round abilities: a pick-1-of-3 draft, and private per-player sequences
 
 Players now draft an ability before each round (#140).
