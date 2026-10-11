@@ -2,234 +2,21 @@ import { Meteor } from 'meteor/meteor';
 import { RoundsCollection } from './rounds';
 import { PlayersCollection } from './players';
 import { LeaderboardCollection } from './leaderboard';
-import { PlayerAccountsCollection } from './playerAccounts';
-import { GameEventsCollection } from './gameEvents';
-import { GlobalLeaderboardCollection } from './globalLeaderboard';
 import { RoomsCollection } from './rooms';
 import {
-  SEQUENCE_COLOURS as COLOURS,
-  GLOBAL_LEADERBOARD_SIZE,
-  DEFAULT_SEQUENCE_LENGTH,
-  DEFAULT_STARTING_LIVES,
-  INITIAL_LEVEL,
-  BONUS_LIFE_ROUND,
-  DISCONNECT_GRACE_MS,
-  STREAK_BONUS_LIFE_THRESHOLD,
-} from '../constants';
-
-// generate random colour sequence
-function generateSequence(length) {
-  return Array.from({ length }, () => COLOURS[Math.floor(Math.random() * COLOURS.length)]);
-}
-
-async function recordGlobalResult(accountId, displayName, levelReached, won) {
-  if (!accountId) return;
-
-  const now = new Date();
-
-  await PlayerAccountsCollection.updateAsync(accountId, {
-    $inc: { gamesPlayed: 1, wins: won ? 1 : 0 },
-    $max: { bestRound: levelReached },
-    $set: { updatedAt: now },
-  });
-
-  const account = await PlayerAccountsCollection.findOneAsync(accountId);
-  if (!account) return;
-
-  const existing = await GlobalLeaderboardCollection.findOneAsync({ accountId });
-
-  if (!existing) {
-    await GlobalLeaderboardCollection.insertAsync({
-      accountId,
-      displayName,
-      bestRound: levelReached,
-      achievedAt: now,
-      gamesPlayed: account.gamesPlayed,
-      wins: account.wins,
-      updatedAt: now,
-    });
-  } else {
-    const isNewBest = levelReached > existing.bestRound;
-    await GlobalLeaderboardCollection.updateAsync(existing._id, {
-      $set: {
-        displayName,
-        gamesPlayed: account.gamesPlayed,
-        wins: account.wins,
-        updatedAt: now,
-        ...(isNewBest ? { bestRound: levelReached, achievedAt: now } : {}),
-      },
-    });
-  }
-
-  const total = await GlobalLeaderboardCollection.find().countAsync();
-  if (total > GLOBAL_LEADERBOARD_SIZE) {
-    const overflow = await GlobalLeaderboardCollection.find(
-      {},
-      { sort: { bestRound: 1, wins: 1, achievedAt: -1 }, limit: total - GLOBAL_LEADERBOARD_SIZE }
-    ).fetchAsync();
-    await GlobalLeaderboardCollection.removeAsync({ _id: { $in: overflow.map((doc) => doc._id) } });
-  }
-}
-
-async function checkWinner(gameId, isBattleRoyale = false) {
-  const players = await PlayersCollection.find({ gameId }).fetchAsync();
-
-  const alreadyFinished = players.some((p) => p.gameFinished);
-  if (alreadyFinished) return;
-
-  // Wait until every lobby member has actually joined before declaring a winner.
-  const room = await RoomsCollection.findOneAsync({ pin: gameId });
-  const expectedPlayerCount = room?.players?.length ?? 0;
-  if (players.length < expectedPlayerCount) return;
-
-  const active = players.filter((p) => !p.eliminated);
-  const hasMultiplePlayers = players.length > 1;
-
-  // Battle Royale: everyone races independently; the winner is whoever reached
-  // the highest level once nobody is left standing.
-  if (isBattleRoyale) {
-    if (active.length > 0) return; // game is still going
-
-    const highestLevel = Math.max(...players.map((p) => p.currentLevel ?? 4));
-    const winners = players.filter((p) => (p.currentLevel ?? 4) === highestLevel);
-    const winnerIds = new Set(winners.map((w) => w._id));
-
-    await PlayersCollection.updateAsync(
-      { gameId, _id: { $in: winners.map((w) => w._id) } },
-      { $set: { winner: true } },
-      { multi: true }
-    );
-    await PlayersCollection.updateAsync({ gameId }, { $set: { gameFinished: true } }, { multi: true });
-
-    for (const p of players) {
-      const isWinner = winnerIds.has(p._id);
-      await recordGlobalResult(p.accountId, p.name, (p.currentLevel ?? 4) - 3, isWinner);
-    }
-    return;
-  }
-
-  // Standard mode - last player standing wins.
-  if (active.length === 1) {
-    const winner = active[0];
-    await PlayersCollection.updateAsync(winner._id, {
-      $set: {
-        winner: true,
-      },
-    });
-
-    await PlayersCollection.updateAsync(
-      { gameId },
-      {
-        $set: {
-          gameFinished: true,
-        },
-      },
-      { multi: true }
-    );
-
-    const winnerRound = await RoundsCollection.findOneAsync(winner.roundId);
-    const winnerLevel = winnerRound
-      ? (winnerRound.roundNumber ?? winnerRound.lengthOfSequence - 3)
-      : (winner.eliminatedRound ?? 0);
-
-    for (const p of players) {
-      const isWinner = p._id === winner._id;
-      await recordGlobalResult(p.accountId, p.name, isWinner ? winnerLevel : (p.eliminatedRound ?? 0), isWinner);
-    }
-    return;
-  }
-
-  // Standard mode - everyone was eliminated on the same round: highest round reached wins.
-  if (hasMultiplePlayers && active.length === 0 && players.length > 0) {
-    const highestRound = Math.max(...players.map((p) => p.eliminatedRound ?? 0));
-
-    await PlayersCollection.updateAsync(
-      {
-        gameId,
-        eliminatedRound: highestRound,
-      },
-      {
-        $set: {
-          winner: true,
-        },
-      },
-      { multi: true }
-    );
-
-    await PlayersCollection.updateAsync(
-      { gameId },
-      {
-        $set: {
-          gameFinished: true,
-        },
-      },
-      { multi: true }
-    );
-
-    for (const p of players) {
-      const isWinner = (p.eliminatedRound ?? 0) === highestRound;
-      await recordGlobalResult(p.accountId, p.name, p.eliminatedRound ?? 0, isWinner);
-    }
-  }
-}
-
-async function advanceRoundIfReady(round) {
-  if (!round) return false;
-
-  const playersInRound = await PlayersCollection.find({
-    roundId: round._id,
-  }).fetchAsync();
-  const room = await RoomsCollection.findOneAsync({ pin: round.gameId });
-  const lobbyPlayerIds = (room?.players || []).map((player) => player.id).filter(Boolean);
-
-  // Eliminated players stay on their old round and never join later rounds, so
-  // they must not count towards the players this round waits for.
-  const eliminatedPlayers = await PlayersCollection.find({ gameId: round.gameId, eliminated: true }).fetchAsync();
-  const eliminatedLobbyIds = new Set(eliminatedPlayers.map((p) => p.lobbyPlayerId).filter(Boolean));
-  const activeLobbyIds = lobbyPlayerIds.filter((id) => !eliminatedLobbyIds.has(id));
-  const expectedPlayerCount = activeLobbyIds.length;
-
-  const playersToEvaluate = activeLobbyIds.length
-    ? activeLobbyIds
-        .map((lobbyPlayerId) => playersInRound.find((player) => player.lobbyPlayerId === lobbyPlayerId))
-        .filter(Boolean)
-    : playersInRound.filter((p) => !p.eliminated);
-
-  if (playersToEvaluate.length < expectedPlayerCount) return false;
-
-  const activePlayers = playersToEvaluate.filter((p) => !p.eliminated);
-  const allFinished = activePlayers.length > 0 && activePlayers.every((p) => p.completeRound);
-  const hasWinner = await PlayersCollection.findOneAsync({
-    gameId: round.gameId,
-    winner: true,
-  });
-
-  if (!round.advanced && allFinished && !hasWinner) {
-    await Meteor.callAsync('rounds.advance', round._id);
-    return true;
-  }
-  return false;
-}
-
-// Gets an existing round for a level or creates a new one (Battle Royale runs a
-// per-player round rather than one shared current round).
-async function getOrCreateRound(gameId, level) {
-  const existing = await RoundsCollection.findOneAsync({ gameId, level });
-
-  if (existing) {
-    return existing._id;
-  }
-  const sequence = generateSequence(level);
-  return await RoundsCollection.insertAsync({
-    gameId,
-    level,
-    lengthOfSequence: level,
-    sequence,
-    createdAt: new Date(),
-    advanced: false,
-    isCurrent: false, // current round is not shared, it is per player to accommodate battle royale
-  });
-}
+  advanceRoundIfReady,
+  checkWinner,
+  clearRound,
+  generateSequence,
+  loseLife,
+  roundLevel,
+  sequenceFor,
+  sequenceState,
+  ROUND_ONLY_CARDS,
+} from './gameEngine';
+import { dealLevelUpDraft, dealRoundDrafts, gameContext, newRoundDraft } from './abilityEngine';
+import './abilities';
+import { DEFAULT_SEQUENCE_LENGTH, DEFAULT_STARTING_LIVES, INITIAL_LEVEL, DISCONNECT_GRACE_MS } from '../constants';
 
 if (Meteor.isServer && !global._gameMethodsInitialized) {
   global._gameMethodsInitialized = true;
@@ -279,6 +66,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       }
 
       const room = await RoomsCollection.findOneAsync({ pin: gameId });
+      const round = await RoundsCollection.findOneAsync(roundId);
       const startingLives = room?.customSettings?.startingLives
         ? room.customSettings.startingLives
         : DEFAULT_STARTING_LIVES;
@@ -307,7 +95,19 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         eliminatedAt: null,
         connectionId,
         connected: true,
+        // Only ever published to this player's own connection (players.secret).
+        secret: { sequence: round ? sequenceState(roundId, round.sequence) : null, hand: [] },
       });
+    },
+
+    // Point a player at the caller's connection again. A DDP reconnect opens a new
+    // connection, and without this the disconnect grace timer removes the player.
+    async 'players.rebind'(playerId) {
+      if (typeof playerId !== 'string' || !playerId) throw new Meteor.Error('invalid', 'Invalid player');
+      const connectionId = this.connection?.id ?? null;
+      const updated = await PlayersCollection.updateAsync(playerId, { $set: { connectionId, connected: true } });
+      if (!updated) throw new Meteor.Error('not-found', 'Player not found');
+      return true;
     },
 
     // Submit a player's attempted sequence
@@ -317,132 +117,40 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       const round = await RoundsCollection.findOneAsync(player.roundId);
       const isBattleRoyale = player.isBattleRoyale ?? false;
 
-      // compare submitted sequence with actual sequence
-      const correct = JSON.stringify(attemptedSequence) === JSON.stringify(round.sequence);
+      // compare submitted sequence with the player's own sequence
+      const correct = JSON.stringify(attemptedSequence) === JSON.stringify(sequenceFor(player, round));
 
-      // if correct update player values
       if (correct) {
-        const currentStreak = (player.currentStreak ?? 0) + 1;
-        const longestStreak = Math.max(player.longestStreak ?? 0, currentStreak);
-        const totalGuesses = (player.totalGuesses ?? 0) + 1;
-        const correctGuesses = (player.correctGuesses ?? 0) + 1;
-        const room = await RoomsCollection.findOneAsync({ pin: player.gameId });
-        const startingLives = room?.customSettings?.startingLives || DEFAULT_STARTING_LIVES;
+        const { nextRoundId, lifeAward } = await clearRound(player, round, { credited: true, attemptedSequence });
+        if (nextRoundId) await dealLevelUpDraft(playerId);
+        return { success: true, sequenceComplete: true, lifeAward };
+      }
 
-        // Every STREAK_BONUS_LIFE_THRESHOLD correct rounds in a row earns a life. In battle
-        // royale a streak can bank lives above the starting count; every other mode only
-        // tops a player back up to the starting lives the room was created with.
-        const bonusLife = round.roundNumber === BONUS_LIFE_ROUND ? 1 : 0;
-        const streakReached = currentStreak % STREAK_BONUS_LIFE_THRESHOLD === 0;
-        const belowCap = isBattleRoyale || (player.lives ?? 0) + bonusLife < startingLives;
-        const streakLife = streakReached && belowCap ? 1 : 0;
-        const lives = (player.lives ?? 0) + bonusLife + streakLife;
+      // remove one life for wrong sequence
+      await PlayersCollection.updateAsync(playerId, {
+        $set: {
+          attemptedSequence,
+          currentStreak: 0,
+          longestStreak: Math.max(player.longestStreak ?? 0, player.currentStreak ?? 0),
+          currentLevel: round.level ?? round.lengthOfSequence,
+          roundStatus: 'Playing', // loseLife switches it to 'Eliminated' on the last life
+        },
+        $inc: { totalGuesses: 1 },
+      });
+      const { lives: remainingLives } = await loseLife(playerId, round);
 
-        const lifeAward =
-          bonusLife || streakLife ? { streak: streakLife === 1, bonusRound: bonusLife === 1, lives } : null;
+      await checkWinner(player.gameId, isBattleRoyale);
 
-        // mark player as completed
-        await PlayersCollection.updateAsync(playerId, {
-          $set: {
-            attemptedSequence,
-            currentStreak,
-            longestStreak,
-            totalGuesses,
-            correctGuesses,
-            completeRound: true,
-            roundStatus: 'Correct',
-            lives,
-          },
-        });
-
-        await GameEventsCollection.insertAsync({
-          gameId: player.gameId,
-          type: 'correct-submission',
-          playerId: player._id,
-          playerName: player.name,
-          roundId: player.roundId,
-          createdAt: new Date(),
-        });
-
-        await checkWinner(player.gameId, isBattleRoyale);
-
-        // add successful completion to leaderboard
-        await LeaderboardCollection.insertAsync({
-          gameId: player.gameId,
-          playerId,
-          name: player.name,
-          lives,
-          roundId: player.roundId,
-          completedAt: new Date(),
-        });
-
-        if (isBattleRoyale) {
-          // advance player immediately to next round, no waiting for other players
-          const nextLevel = (player.currentLevel ?? 4) + 1;
-          const nextRoundId = await getOrCreateRound(player.gameId, nextLevel);
-
-          await PlayersCollection.updateAsync(playerId, {
-            $set: {
-              roundId: nextRoundId,
-              currentLevel: nextLevel,
-              completeRound: false,
-              roundStatus: 'Playing',
-              attemptedSequence: [],
-            },
-          });
-
-          // announce the level-up so it shows in the live levels feed
-          await GameEventsCollection.insertAsync({
-            gameId: player.gameId,
-            type: 'level-up',
-            playerId: player._id,
-            playerName: player.name,
-            level: nextLevel - 3,
-            createdAt: new Date(),
-          });
-
-          return { success: true, sequenceComplete: true, lifeAward };
-        }
-
+      if (!isBattleRoyale) {
         const updatedRound = await RoundsCollection.findOneAsync(player.roundId);
         await advanceRoundIfReady(updatedRound);
-
-        return { success: true, sequenceComplete: true, lifeAward };
-      } else {
-        // remove one life for wrong sequence
-        const newLives = player.lives - 1;
-        const eliminated = newLives <= 0;
-        const longestStreak = Math.max(player.longestStreak ?? 0, player.currentStreak ?? 0);
-        const totalGuesses = (player.totalGuesses ?? 0) + 1;
-
-        await PlayersCollection.updateAsync(playerId, {
-          $set: {
-            attemptedSequence,
-            lives: newLives,
-            currentStreak: 0,
-            longestStreak,
-            totalGuesses,
-            eliminated,
-            roundStatus: eliminated ? 'Eliminated' : 'Playing',
-            currentLevel: round.level ?? round.lengthOfSequence,
-            eliminatedRound: eliminated ? (round.roundNumber ?? round.lengthOfSequence - 3) : player.eliminatedRound,
-            eliminatedAt: eliminated ? new Date() : player.eliminatedAt,
-          },
-        });
-
-        await checkWinner(player.gameId, isBattleRoyale);
-
-        if (!isBattleRoyale) {
-          const updatedRound = await RoundsCollection.findOneAsync(player.roundId);
-          await advanceRoundIfReady(updatedRound);
-        }
-
-        return {
-          success: false,
-          sequenceComplete: false,
-          remainingLives: newLives,
-        };
       }
+
+      return {
+        success: false,
+        sequenceComplete: false,
+        remainingLives: remainingLives ?? 0,
+      };
     },
 
     // Deduct a life when a player runs out of time on their turn
@@ -458,25 +166,19 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       }
 
       const isBattleRoyale = player.isBattleRoyale ?? false;
-      const newLives = player.lives - 1;
-      const eliminated = newLives <= 0;
-      const longestStreak = Math.max(player.longestStreak ?? 0, player.currentStreak ?? 0);
 
       await PlayersCollection.updateAsync(playerId, {
         $set: {
-          lives: newLives,
           currentStreak: 0,
-          longestStreak,
-          totalGuesses: (player.totalGuesses ?? 0) + 1,
+          longestStreak: Math.max(player.longestStreak ?? 0, player.currentStreak ?? 0),
           attemptedSequence: [],
           completeRound: false,
-          eliminated,
-          roundStatus: eliminated ? 'Eliminated' : 'Playing',
           currentLevel: round.level ?? round.lengthOfSequence,
-          eliminatedRound: eliminated ? (round.roundNumber ?? round.lengthOfSequence - 3) : player.eliminatedRound,
-          eliminatedAt: eliminated ? new Date() : player.eliminatedAt,
+          roundStatus: 'Playing', // loseLife switches it to 'Eliminated' on the last life
         },
+        $inc: { totalGuesses: 1 },
       });
+      const { lives: remainingLives, eliminated } = await loseLife(playerId, round);
 
       await checkWinner(player.gameId, isBattleRoyale);
 
@@ -487,7 +189,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
 
       return {
         success: true,
-        remainingLives: newLives,
+        remainingLives: remainingLives ?? 0,
         eliminated,
       };
     },
@@ -514,7 +216,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
           longestStreak,
           eliminated: true,
           roundStatus: 'Eliminated',
-          eliminatedRound: round ? (round.roundNumber ?? round.lengthOfSequence - 3) : (player.eliminatedRound ?? 0),
+          eliminatedRound: round ? roundLevel(round) : (player.eliminatedRound ?? 0),
           eliminatedAt: new Date(),
         },
       });
@@ -540,7 +242,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
           completeRound: false,
           roundStatus: 'Eliminated',
           currentLevel: round?.level ?? round?.lengthOfSequence ?? player.currentLevel,
-          eliminatedRound: player.eliminatedRound ?? round?.roundNumber ?? round?.lengthOfSequence - 3,
+          eliminatedRound: player.eliminatedRound ?? (round ? roundLevel(round) : undefined),
           eliminatedAt: new Date(),
         },
       });
@@ -560,16 +262,14 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         throw new Meteor.Error('round-not-found', 'Current round does not exist');
       }
 
-      // prevent duplicate advancement
-      if (currentRound.advanced) return;
-
-      // mark current round as completed
-      await RoundsCollection.updateAsync(currentRoundId, {
-        $set: {
-          advanced: true,
-          isCurrent: false,
-        },
-      });
+      // Claim the advance atomically. Two final answers landing together both pass a
+      // read-then-check, and each then inserted its own next round (D4). Only the call
+      // whose update flips `advanced` goes on to create the next round.
+      const claimed = await RoundsCollection.updateAsync(
+        { _id: currentRoundId, advanced: { $ne: true } },
+        { $set: { advanced: true, isCurrent: false } }
+      );
+      if (!claimed) return;
 
       // increase sequence size for next round
       const room = await RoomsCollection.findOneAsync({ pin: currentRound.gameId });
@@ -577,6 +277,8 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       const nextLength = currentRound.lengthOfSequence + sequenceGrowth;
       const nextSequence = generateSequence(nextLength);
       const nextRoundNumber = (currentRound.roundNumber ?? 1) + 1;
+      // Set on insert, so no client starts the sequence before it sees the draft.
+      const draft = newRoundDraft(await gameContext(currentRound.gameId), nextRoundNumber);
 
       // create next round
       const nextRoundId = await RoundsCollection.insertAsync({
@@ -591,6 +293,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         advanced: false,
         isCurrent: true,
         roundNumber: nextRoundNumber,
+        ...(draft ? { draft } : {}),
       });
 
       const grantsSlowMotion = currentRound.roundNumber === 5;
@@ -608,27 +311,15 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
             roundStatus: 'Playing',
             attemptedSequence: [],
             slowMotionActive: grantsSlowMotion,
+            'secret.sequence': sequenceState(nextRoundId, nextSequence),
           },
+          // Reroll and Scramble only last the round they were dealt for.
+          $pull: { 'secret.hand': ROUND_ONLY_CARDS },
         },
         { multi: true }
       );
 
-      // announce the level-up for everyone who advanced
-      const movedPlayers = await PlayersCollection.find({
-        roundId: nextRoundId,
-        eliminated: false,
-      }).fetchAsync();
-
-      for (const player of movedPlayers) {
-        await GameEventsCollection.insertAsync({
-          gameId: currentRound.gameId,
-          type: 'level-up',
-          playerId: player._id,
-          playerName: player.name,
-          level: nextRoundNumber,
-          createdAt: new Date(),
-        });
-      }
+      if (draft) await dealRoundDrafts(nextRoundId);
 
       return nextRoundId;
     },
