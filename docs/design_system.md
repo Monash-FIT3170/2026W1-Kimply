@@ -319,6 +319,12 @@ Surface card (18px radius) holding a mono eyebrow (`LEVEL 3 · ABILITY DRAFT`), 
 Picking a card that needs a target replaces the cards with the target picker in the same card, with a Back ghost button.
 After a pick, the card shows what was locked in until the draft closes.
 
+### Live feed
+Surface panel (16px radius, `--surface` at 82% over a blur) with an H2-sized "Live feed" title, a mono event count, the Me / All segmented toggle and a close icon button, then a scrolling list, newest first.
+Each row is a 12px-radius card with a 4px left edge in the card's tile accent (pink for eliminations), the sentence in Manrope 13px, and a mono 10px uppercase line: `ROUND 3 · STRIKE · BLOCKED`.
+Rows involving the viewer are raised (`--surface-2`, `--fg-3` border, semibold text, a `YOU` chip); rows aimed at the viewer use a pink edge and an `AT YOU` chip.
+A drawer from the left above `xs`, a bottom sheet below; open by default from 1280px. The Feed button carries an unread badge, amber, or pink when an unread row was aimed at the viewer.
+
 ### Target picker
 Mono label with the count (`PLAYERS (7)`), a text input that filters by name, then player rows (avatar, name, mono `LEVEL 4 · 2 LIVES`).
 The first 9 rows carry key hints `1`-`9` while the filter is empty, so a name containing digits can still be typed.
@@ -444,4 +450,4 @@ The system grows by addition, not by drift.
 | v0.1 | 2026-08-29 | Initial system. Covers brand, tokens, components, and patterns for the room create / join flow. |
 | v0.2 | 2026-09-21 | Spacing scale gains a phone screen-edge value (`--s-5`, 24px); breakpoint table gains a screen-edge column, the `min(100%, ...)` grid-track rule, and the `xs` (481px) Tailwind boundary. |
 | v0.3 | 2026-09-22 | Adds the Third-party sign-in pattern for Google sign-in on the Account page. |
-| v0.4 | 2026-10-11 | Adds the Ability card, Key hint, Segmented toggle and Switch components, and the Ability draft and Target picker patterns, for round abilities. |
+| v0.4 | 2026-10-11 | Adds the Ability card, Key hint, Segmented toggle and Switch components, and the Ability draft, Target picker and Live feed patterns, for round abilities. |

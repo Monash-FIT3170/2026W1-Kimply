@@ -5,7 +5,6 @@ import { RoundsCollection } from './rounds';
 import { PlayersCollection } from './players';
 import { LeaderboardCollection } from './leaderboard';
 import { PlayerAccountsCollection } from './playerAccounts';
-import { GameEventsCollection } from './gameEvents';
 import { GlobalLeaderboardCollection } from './globalLeaderboard';
 import { RoomsCollection } from './rooms';
 import { generateSequence } from './sequence';
@@ -314,17 +313,6 @@ export async function clearRound(player, round, { credited, attemptedSequence = 
 
   await PlayersCollection.updateAsync(player._id, Object.keys(inc).length ? { $set: set, $inc: inc } : { $set: set });
 
-  if (credited) {
-    await GameEventsCollection.insertAsync({
-      gameId: player.gameId,
-      type: 'correct-submission',
-      playerId: player._id,
-      playerName: player.name,
-      roundId: player.roundId,
-      createdAt: new Date(),
-    });
-  }
-
   await checkWinner(player.gameId, isBattleRoyale);
 
   const updated = await PlayersCollection.findOneAsync(player._id);
@@ -341,17 +329,6 @@ export async function clearRound(player, round, { credited, attemptedSequence = 
     // advance player immediately to next round, no waiting for other players
     const nextLevel = (player.currentLevel ?? INITIAL_LEVEL) + 1;
     const nextRoundId = await moveToLevel(player._id, player.gameId, nextLevel);
-
-    // announce the level-up so it shows in the live levels feed
-    await GameEventsCollection.insertAsync({
-      gameId: player.gameId,
-      type: 'level-up',
-      playerId: player._id,
-      playerName: player.name,
-      level: nextLevel - 3,
-      createdAt: new Date(),
-    });
-
     return { nextRoundId, lifeAward };
   }
 

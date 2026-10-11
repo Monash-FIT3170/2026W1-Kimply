@@ -6,9 +6,10 @@ import { describeAbilityEvent, isInFeed } from './abilityFeed';
 // Tolerates a little clock skew between this device and the server.
 const STALE_MS = 5000;
 
-// Turns new ability events into notices for the shared toast stack in GamePage.
+// Turns new ability events involving the viewer into notices for GamePage's toast stack,
+// so a player notices being targeted even with the live feed closed.
 // Events from before the page loaded (a refresh) are not replayed.
-export function useAbilityNotices({ gameId, viewerId, scope, onNotice }) {
+export function useAbilityNotices({ gameId, viewerId, onNotice }) {
   const events = useTracker(() => {
     if (!gameId || !viewerId) return [];
     return GameEventsCollection.find({ gameId, type: 'ability' }, { sort: { createdAt: 1 } }).fetch();
@@ -25,12 +26,13 @@ export function useAbilityNotices({ gameId, viewerId, scope, onNotice }) {
       if (seen.current.has(event._id)) return;
       seen.current.add(event._id);
       if (event.createdAt.getTime() < mountedAt.current - STALE_MS) return;
-      if (!isInFeed(scope, viewerId, event)) return;
+      // Only cards involving this player pop up; everything else waits in the live feed.
+      if (!isInFeed('me', viewerId, event)) return;
       onNoticeRef.current({
         key: event._id,
         text: describeAbilityEvent(event, viewerId),
-        personal: event.playerId === viewerId || event.targetId === viewerId,
+        personal: true,
       });
     });
-  }, [events, viewerId, scope]);
+  }, [events, viewerId]);
 }

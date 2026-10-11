@@ -330,7 +330,7 @@ All publications are **scoped to a single game**. `gameId` is the 5-character ro
 | `players.secret` | `server/publications.js:31` | `gameId` | `{ gameId, connectionId: this.connection.id }` | `secret` only |
 | `leaderboard` | `server/publications.js:36` | `gameId` | `{ gameId }` | none |
 | `eliminations` | `server/publications.js:41` | `gameId` | eliminated players in game | excludes `attemptedSequence`, `secret`, newest 20 |
-| `gameEvents` | `server/publications.js:51` | `gameId, scope = 'everyone', playerId` | `{ gameId }`, plus `$or: [{ playerId }, { targetId: playerId }]` when `scope` is `'me'` | newest 20 |
+| `gameFeed` | `server/publications.js:52` | `gameId` | `{ gameId, type: 'ability' }` | newest `FEED_EVENT_LIMIT` (500) |
 | `rooms.lobby` | `imports/api/rooms.js:23` | `pin` | `{ pin }` | `_id, pin, status, gameName, hostName, customSettings, gameMode, abilitiesEnabled, players.name, players.id, players.connected` |
 
 These properties are load-bearing and must not be undone:
@@ -351,7 +351,7 @@ The module carries a `global._publicationsInitialized` guard because under `--fu
 | File:line | Publication | Args |
 |---|---|---|
 | `ui/pages/GamePage.jsx` | `rounds`, `players`, `players.secret`, `rooms.lobby` | `gameId` |
-| `ui/pages/GamePage.jsx` | `gameEvents` | `gameId, feedScope, playerId` |
+| `ui/abilities/LiveFeed.jsx` | `gameFeed` | `gameId` |
 | `ui/Leaderboard.jsx:12-13` | `players`, `rounds` | `gameId` |
 | `ui/EndLeaderboard.jsx:30` | `players` | `gameId` |
 | `ui/EliminationFeed.jsx` | `eliminations` | `gameId` |
@@ -416,7 +416,9 @@ The rules and copy live in `abilityRules.js`; the server work in `abilityEngine.
 | `abilities.use` | 34 | `playerId, cardId, targetId?` | Plays a held card: Free Pass, Reroll, Scramble, Jump. Refused while the round's draft is open |
 | `abilities.closeDraft` | 41 | `roundId` | Client fallback for the server's draft timer. Resolves only past `endsAt` or once everyone has chosen, and only once |
 
-Ability outcomes are written to `gameEvents` as `{ type: 'ability', ability, outcome: 'hit'|'blocked'|'failed'|'eliminated'|'used', playerId, playerName, targetId, targetName }`.
+Ability outcomes are written to `gameEvents` as `{ type: 'ability', ability, outcome: 'hit'|'blocked'|'failed'|'eliminated'|'used', playerId, playerName, targetId, targetName, round }`.
+The game screen's live feed (`ui/abilities/LiveFeed.jsx`) lists all of them for the whole game, merged with eliminations from `players`.
+Ability events are the only thing written to `gameEvents`; the old `level-up` and `correct-submission` events and the `gameEvents` publication were removed with the toasts they fed.
 
 A round advances only when **every** active player has submitted (`:79-81` and `:206-208`).
 There is no timer or deadline, so one player leaving mid-round stalls that game permanently (see D5).
@@ -482,17 +484,17 @@ How to write and run them is the `test` skill. What exists today:
 |---|---|
 | `rooms.test.js` | `rooms.create`, `rooms.join`, `rooms.kick` |
 | `playerAccounts.test.js` | register and signIn validation, hashing, normalisation; session issue, resume, expiry, sign-out; Google sign-in create, link, reject (verifier stubbed) |
-| `roundAdvance.test.js` | `rounds.advance` increments, player migration, idempotency |
+| `roundAdvance.test.js` | `rounds.advance` increments, player migration, idempotency, concurrent advances create one round |
 | `lifeDeduction.test.js` | life loss on wrong guess, streak reset |
 | `streak.test.js` | current vs longest streak |
 | `accuracy.test.js` | `totalGuesses` / `correctGuesses` |
 | `updateWinner.test.js` | last-one-standing winner selection |
 | `uiHelpers.test.js` | `roomCode.js`, `keyboard.js`, and `savedUsername.js` pure helpers |
 | `sequence.test.js` | `imports/api/sequence.js` |
-| `publications.test.js` | scoped pubs; no `sequence` on `rounds`; no `attemptedSequence` or `secret` on `players` / `eliminations`; `players.secret` is connection-bound; `gameEvents` scope |
+| `publications.test.js` | scoped pubs; no `sequence` on `rounds`; no `attemptedSequence` or `secret` on `players` / `eliminations`; `players.secret` is connection-bound; `gameFeed` |
 | `abilityRules.test.js` | dealing, eligibility, Shield, hand expiry, caller binding |
 | `abilities.test.js` | draft dealing, resolution order, Shield, Steal and Strike outcomes, Free Pass, Reroll, Scramble, Jump, `rooms.setAbilities` |
-| `abilityFeed.test.js` | feed scope filtering and the wording of ability notices |
+| `abilityFeed.test.js` | feed rows, scope filtering and the wording of ability notices |
 | `leaderboardModel.test.js` | live leaderboard row helpers in `leaderboardModels.js` |
 | `leaveGame.test.js` | spectator departure retains their result and allows the game to finish |
 
@@ -510,7 +512,7 @@ One line each, so a review can cite an ID without opening anything.
 | ID | Where | Issue |
 |---|---|---|
 | D3 | `gameMethods.js:122` | `players.submitSequence` trusts a client-supplied `playerId`. Fix is binding `this.connection.id`, **not** a login wall |
-| D4 | `gameEngine.js` `checkWinner`, `gameMethods.js` `rounds.advance` | Read-then-write races: double advance, double winner. Life changes now use `$inc` |
+| D4 | `gameEngine.js` `checkWinner` | Read-then-write race: double winner. Life changes now use `$inc` and `rounds.advance` claims the round atomically |
 | D5 | `gameMethods.js:79-81` | No round deadline. One player leaving mid-round stalls that game forever |
 | D6 | `rooms.js:172` | `hostId` is never persisted, so `rooms.reconnect` always reports `isHost: false` |
 | D7 | `GamePage.jsx:43-53` | `playerId` lives only in React state, so a refresh mints a second player with fresh lives |

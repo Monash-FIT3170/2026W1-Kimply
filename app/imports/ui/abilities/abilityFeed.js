@@ -30,7 +30,7 @@ export function normaliseFeedScope(value) {
   return FEED_SCOPES.includes(value) ? value : DEFAULT_FEED_SCOPE;
 }
 
-// Whether a level-up, correct-answer or elimination entry belongs in the viewer's feed.
+// Whether an event involves the viewer (as the actor or the target).
 export function isInFeed(scope, viewerId, { playerId, targetId } = {}) {
   if (scope === 'everyone') return true;
   return Boolean(viewerId) && (playerId === viewerId || targetId === viewerId);
@@ -82,4 +82,38 @@ export function describeAbilityEvent(event, viewerId) {
     default:
       return `${actor} played ${card}.`;
   }
+}
+
+// The persistent live feed: every ability event plus every elimination, newest first.
+// `mine` rows involve the viewer; `aimedAtMe` rows are cards that came for them.
+export function buildFeedRows({ abilityEvents = [], players = [], viewerId = null, scope = 'everyone' }) {
+  const abilityRows = abilityEvents.map((event) => {
+    const aimedAtMe = Boolean(viewerId) && event.targetId === viewerId;
+    return {
+      key: event._id,
+      kind: 'ability',
+      ability: event.ability,
+      outcome: event.outcome,
+      at: event.createdAt,
+      round: event.round ?? null,
+      text: describeAbilityEvent(event, viewerId),
+      mine: isInFeed('me', viewerId, event),
+      aimedAtMe,
+    };
+  });
+  const eliminationRows = players
+    .filter((player) => player.eliminated && player.eliminatedAt)
+    .map((player) => ({
+      key: `elimination-${player._id}`,
+      kind: 'elimination',
+      at: player.eliminatedAt,
+      round: player.eliminatedRound ?? null,
+      text: player._id === viewerId ? 'You were eliminated.' : `${player.name} was eliminated.`,
+      mine: player._id === viewerId,
+      aimedAtMe: player._id === viewerId,
+    }));
+
+  return [...abilityRows, ...eliminationRows]
+    .filter((row) => scope === 'everyone' || row.mine)
+    .sort((a, b) => new Date(b.at) - new Date(a.at));
 }

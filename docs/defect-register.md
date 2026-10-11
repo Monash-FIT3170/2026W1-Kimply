@@ -85,12 +85,15 @@ This preserves anonymous play exactly as designed.
 
 Meteor's single-threaded event loop currently serialises many of these by accident, which is why they have not been noticed. They become much more likely with concurrent submissions, and much worse if a second replica is ever added.
 
-### Double round advance
+### Double round advance - **fixed 2026-10-11**
 `gameMethods.js:220 -> 227 -> 230` reads `currentRound`, checks `if (currentRound.advanced) return`, then sets `advanced: true`. Not atomic.
 Two concurrent submissions that both satisfy `allFinished` can both pass the guard and create **two `isCurrent: true` rounds** for one game, splitting the player set.
 The `advanced` flag is checked in three separate places (`:79`, `:206`, `:227`), all on stale snapshots.
 
 **Fix:** conditional update, `updateAsync({ _id, advanced: false }, { $set: { advanced: true } })`, and only proceed if `matchedCount === 1`.
+
+**Fixed 2026-10-11:** reproduced live while testing abilities with bots. Two final answers for round 5 landed 3ms apart and produced two round-6 documents; the orphan stayed `isCurrent: true`, so the live leaderboard read the wrong level from it.
+`rounds.advance` now claims the round with `updateAsync({ _id, advanced: { $ne: true } }, { $set: { advanced: true, isCurrent: false } })` and returns unless that update matched, so only one caller inserts the next round. `roundAdvance.test.js` fires two advances at once.
 
 ### Double winner
 `checkWinner` at `gameMethods.js:14 -> 22` fetches all players, computes `active.length === 1`, then writes `winner: true`.

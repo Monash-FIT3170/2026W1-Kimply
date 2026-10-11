@@ -4,6 +4,7 @@ import { PlayersCollection } from '../imports/api/players.js';
 import { LeaderboardCollection } from '../imports/api/leaderboard.js';
 import { GameEventsCollection } from '../imports/api/gameEvents.js';
 import { GlobalLeaderboardCollection } from '../imports/api/globalLeaderboard.js';
+import { FEED_EVENT_LIMIT } from '../imports/constants.js';
 
 // attemptedSequence holds a submitted answer and secret holds a player's sequence,
 // draft and hand. Neither may reach other players.
@@ -46,16 +47,14 @@ if (Meteor.isServer && !global._publicationsInitialized) {
     );
   });
 
-  // scope 'me' keeps only the events a player is part of, so in a big game a burst of
-  // other players' events can not push theirs out of the newest-20 window.
-  Meteor.publish('gameEvents', function (gameId, scope = 'everyone', playerId = null) {
+  // Every ability event in a game, for the persistent live feed. Results only: picks
+  // that have not resolved yet stay in players.secret.
+  Meteor.publish('gameFeed', function (gameId) {
     if (typeof gameId !== 'string' || !gameId.trim()) return this.ready();
-    const selector = { gameId: gameId.trim() };
-    if (scope === 'me') {
-      if (typeof playerId !== 'string' || !playerId) return this.ready();
-      selector.$or = [{ playerId }, { targetId: playerId }];
-    }
-    return GameEventsCollection.find(selector, { sort: { createdAt: -1 }, limit: 20 });
+    return GameEventsCollection.find(
+      { gameId: gameId.trim(), type: 'ability' },
+      { sort: { createdAt: -1 }, limit: FEED_EVENT_LIMIT }
+    );
   });
 
   Meteor.publish('globalLeaderboard', function () {

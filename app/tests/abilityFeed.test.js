@@ -1,5 +1,11 @@
 import assert from 'assert';
-import { describeAbilityEvent, isInFeed, normaliseFeedScope, abilityTags } from '../imports/ui/abilities/abilityFeed';
+import {
+  abilityTags,
+  buildFeedRows,
+  describeAbilityEvent,
+  isInFeed,
+  normaliseFeedScope,
+} from '../imports/ui/abilities/abilityFeed';
 
 const event = (fields) => ({ playerId: 'ian', playerName: 'Ian', targetId: 'sam', targetName: 'Sam', ...fields });
 
@@ -69,5 +75,51 @@ describe('ability feed', function () {
     assert.deepStrictEqual(abilityTags('shield'), ['This round']);
     assert.deepStrictEqual(abilityTags('freePass'), ['Saved until used']);
     assert.deepStrictEqual(abilityTags('scramble'), ['Pick a player', 'Play this round']);
+  });
+
+  describe('buildFeedRows', function () {
+    const abilityEvents = [
+      event({ _id: 'e1', ability: 'strike', outcome: 'hit', round: 2, createdAt: new Date(1000) }),
+      event({
+        _id: 'e2',
+        ability: 'steal',
+        outcome: 'hit',
+        playerId: 'zoe',
+        playerName: 'Zoe',
+        round: 3,
+        createdAt: new Date(3000),
+      }),
+    ];
+    const players = [
+      { _id: 'sam', name: 'Sam', eliminated: true, eliminatedAt: new Date(2000), eliminatedRound: 2 },
+      { _id: 'zoe', name: 'Zoe', eliminated: false },
+    ];
+
+    it('merges ability events and eliminations, newest first', function () {
+      const rows = buildFeedRows({ abilityEvents, players, viewerId: 'zoe' });
+      assert.deepStrictEqual(
+        rows.map((row) => row.key),
+        ['e2', 'elimination-sam', 'e1']
+      );
+      assert.strictEqual(rows[1].text, 'Sam was eliminated.');
+      assert.strictEqual(rows[1].round, 2);
+    });
+
+    it('marks rows involving the viewer, and the ones aimed at them', function () {
+      const rows = buildFeedRows({ abilityEvents, players, viewerId: 'sam' });
+      const byKey = Object.fromEntries(rows.map((row) => [row.key, row]));
+      assert.strictEqual(byKey.e1.mine, true);
+      assert.strictEqual(byKey.e1.aimedAtMe, true);
+      assert.strictEqual(byKey['elimination-sam'].text, 'You were eliminated.');
+      assert.strictEqual(byKey.e2.mine, true, 'Zoe stole from Sam');
+    });
+
+    it("keeps only the viewer's rows in the 'me' scope", function () {
+      const rows = buildFeedRows({ abilityEvents, players, viewerId: 'ian', scope: 'me' });
+      assert.deepStrictEqual(
+        rows.map((row) => row.key),
+        ['e1']
+      );
+    });
   });
 });

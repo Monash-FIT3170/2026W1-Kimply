@@ -261,7 +261,7 @@ if (Meteor.isServer) {
       });
     });
 
-    describe('gameEvents', function () {
+    describe('gameFeed', function () {
       async function insertEvent(playerId, targetId = null) {
         return GameEventsCollection.insertAsync({
           gameId: OURS,
@@ -272,27 +272,31 @@ if (Meteor.isServer) {
         });
       }
 
-      it("scope 'me' returns only events the player acted in or was targeted by", async function () {
-        const acted = await insertEvent('me');
-        const targeted = await insertEvent('someone', 'me');
-        await insertEvent('someone', 'someone-else');
+      it('gameFeed publishes every ability event in the game and nothing else', async function () {
+        for (let i = 0; i < 25; i++) await insertEvent(`p${i}`);
+        await GameEventsCollection.insertAsync({
+          gameId: OURS,
+          type: 'level-up',
+          playerId: 'p1',
+          createdAt: new Date(),
+        });
+        await GameEventsCollection.insertAsync({
+          gameId: THEIRS,
+          type: 'ability',
+          playerId: 'p1',
+          createdAt: new Date(),
+        });
 
-        const docs = await fetchPublication('gameEvents', OURS, 'me', 'me');
+        const docs = await fetchPublication('gameFeed', OURS);
 
-        assert.deepStrictEqual(docs.map((d) => d._id).sort(), [acted, targeted].sort());
+        assert.strictEqual(docs.length, 25, 'all of them, not a newest-N window');
+        assert.ok(docs.every((d) => d.type === 'ability' && d.gameId === OURS));
       });
 
-      it("scope 'everyone' returns every event in the game", async function () {
-        await insertEvent('me');
-        await insertEvent('someone', 'someone-else');
-
-        const docs = await fetchPublication('gameEvents', OURS);
-
-        assert.strictEqual(docs.length, 2);
-      });
-
-      it("scope 'me' publishes nothing without a player", function () {
-        assert.strictEqual(runPublication('gameEvents', OURS, 'me'), READY);
+      it('publishes nothing when gameId is missing or not a string', function () {
+        assert.strictEqual(runPublication('gameFeed'), READY);
+        assert.strictEqual(runPublication('gameFeed', ''), READY);
+        assert.strictEqual(runPublication('gameFeed', 42), READY);
       });
     });
   });

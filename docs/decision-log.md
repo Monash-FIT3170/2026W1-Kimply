@@ -37,10 +37,10 @@ Things that are not obvious from the diff:
 ## 2026-10-11 - Round abilities: a pick-1-of-3 draft, and private per-player sequences
 
 Players now draft an ability before each round (#140).
-From round 2 of a standard game every surviving player is dealt 3 of Steal, Strike, Shield, Free Pass, Reroll and Scramble, and picks 1 or skips within 10 seconds.
+From round 2 of a standard game every surviving player is dealt 3 of Steal, Strike, Shield, Free Pass, Reroll and Scramble, and picks 1 or skips within `DRAFT_SECONDS` (20 seconds).
 Battle Royale players draft on each level-up, where Jump (move to a random other player's level) joins the pool.
 The host can turn abilities off in the lobby; they are on by default for new rooms.
-A Me / All toggle on the game screen filters the live notices, defaulting to Me because a full room produces more events than anyone can read.
+A persistent live feed lists every ability event and elimination; its Me / All toggle defaults to Me because a full room produces more events than anyone can read.
 
 New files: `app/imports/api/abilities.js`, `abilityEngine.js`, `abilityRules.js`, `gameEngine.js`, and `app/imports/ui/abilities/`.
 `gameMethods.js` now holds only method definitions; its helpers moved to `gameEngine.js` so the ability code can share them without a circular import.
@@ -56,6 +56,19 @@ Things that are not obvious from the diff:
 - **Steal is only dealt when the room starts players on more than 1 life**, because it never takes a last life. Battle Royale now starts on 1 life (#116), so it is not dealt there; a Battle Royale streak can still bank extra lives, which a Strike can then take.
 - **Lives can exceed the starting count through Steal**, which the heart row from #116 already handles by drawing `max(startingLives, lives)` hearts. The #116 streak life moved into the shared `clearRound` with the rest of the correct-answer path, and a Free Pass does not count towards a streak.
 - **Rooms created before this change have no `abilitiesEnabled` and play without abilities**, so a deploy mid-game does not start dealing cards into it.
+
+Changed after playtesting with bot players (same day):
+
+- **The draft is 20 seconds, not 10.** Reading three cards and finding a target took longer than 10 seconds in practice.
+- **Ability events live in a persistent, scrollable live feed** instead of vanishing toasts, so a player can see who came for them and answer back. It keeps every ability event (`gameFeed`, capped at `FEED_EVENT_LIMIT`) and every elimination for the whole game. Me shows only rows involving you; All shows everything with yours highlighted and the ones aimed at you edged in pink. The feed is open by default only from 1280px, where it fits beside the play area; narrower screens open it from a Feed button that badges unread rows (pink when one was aimed at you). On phones the feed and the leaderboard are bottom sheets in the same place, so opening one closes the other.
+- **Toasts only carry things about you**: cards played on or by you, life awards and the replay bonus, so an attack is still noticed with the feed closed. Toasts about other players' progress ("X has reached level 8", "X has submitted the correct sequence") are gone; the server no longer writes `level-up` or `correct-submission` events (about one per player per round), and the `gameEvents` publication that fed them was removed, so `gameEvents` holds ability events only. In-game elimination toasts went too, since eliminations are in the feed.
+- **A draft is marked resolved only after its effects have landed.** It used to flip `draft.resolved` first, so for a few hundred milliseconds clients could see the round open while lives and feed rows were still changing. A separate `draft.resolving` claim keeps the server timer, client fallbacks and an early close from resolving twice.
+- **Two final answers arriving together no longer create two next rounds** (D4). Seen live: round 5's last two answers landed 3ms apart and produced two round-6 documents, the orphan left `isCurrent`.
+- **"Already watched this sequence" is per tab** (`sessionStorage`), not per browser. It only exists so a refresh skips the replay, and two players in one browser were skipping each other's sequences.
+- **The play column centres with an auto margin, not `justify-content: center`.** A held card adds a row; centring pushed the overflow off the top of the screen, where it could not be scrolled to, and the hearts disappeared.
+- **A submit's result is ignored for round state once the round has moved on.** The last answer is what advances the round, so its result arrives after the next round has started and used to write "please wait for other players" and a stale submitted flag into it.
+- **A refresh no longer awards a replay.** The replay bonus compared the streak with 0 on load, so any page load mid-streak counted as a new streak and gave a free replay with a toast.
+- **The "FINAL LIFE" banner is gone**, as it duplicated the hearts.
 
 ## 2026-10-11 - A life for every streak of correct rounds
 

@@ -269,6 +269,26 @@ if (Meteor.isServer) {
         assert.strictEqual((await PlayersCollection.findOneAsync(ids.B)).secret.draft.status, 'expired');
       });
 
+      it('marks the draft resolved only after every effect has landed', async function () {
+        const { roundId, ids } = await setupGame();
+        await openDraft(roundId, { [ids.A]: ['strike', 'shield', 'reroll'], [ids.B]: ['strike', 'shield', 'reroll'] });
+        await Meteor.callAsync('abilities.pick', ids.A, 'strike', ids.B);
+        // A resolution already under way (claimed, effects still landing) is left alone.
+        await RoundsCollection.updateAsync(roundId, {
+          $set: { 'draft.resolving': true, 'draft.endsAt': new Date(Date.now() - 1) },
+        });
+
+        assert.strictEqual(await Meteor.callAsync('abilities.closeDraft', roundId), false);
+        assert.strictEqual(await lives(ids.B), 3);
+
+        await RoundsCollection.updateAsync(roundId, { $unset: { 'draft.resolving': '' } });
+        assert.strictEqual(await Meteor.callAsync('abilities.closeDraft', roundId), true);
+        const round = await RoundsCollection.findOneAsync(roundId);
+        assert.strictEqual(round.draft.resolved, true);
+        assert.strictEqual(round.draft.resolving, undefined);
+        assert.strictEqual(await lives(ids.B), 2);
+      });
+
       it('will not close early while someone is still choosing', async function () {
         const { roundId, ids } = await setupGame();
         await openDraft(roundId, { [ids.A]: ['strike', 'shield', 'reroll'], [ids.B]: ['strike', 'shield', 'reroll'] });
@@ -296,7 +316,7 @@ if (Meteor.isServer) {
           (e) => e.error === 'invalid-target'
         );
         await Meteor.callAsync('abilities.pick', ids.A, 'shield');
-        await assert.rejects(Meteor.callAsync('abilities.pick', ids.A, 'reroll'), (e) => e.error === 'draft-closed');
+        await assert.rejects(Meteor.callAsync('abilities.pick', ids.A, 'reroll'), (e) => e.error === 'already-chosen');
       });
 
       it('rejects a pick after the draft has closed', async function () {

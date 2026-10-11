@@ -4,18 +4,17 @@ import { useTracker } from 'meteor/react-meteor-data';
 import { RoundsCollection } from '../../api/rounds';
 import { PlayersCollection } from '../../api/players';
 import { RoomsCollection } from '../../api/rooms';
-import { GameEventsCollection } from '../../api/gameEvents';
 import { ColourSequence } from '../ColourSequence.jsx';
 import { Leaderboard } from '../Leaderboard.jsx';
 import { EndLeaderboard } from '../EndLeaderboard.jsx';
 import { EliminationFeed } from '../EliminationFeed.jsx';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { TileLattice } from '../components/design';
+import { TILE, TileLattice } from '../components/design';
 import { ConfirmationPopup } from '../components/ConfirmationPopup.jsx';
 import { useSessionResuming, useSignedInAccount } from '../accountSession';
 import { playableHand } from '../../api/abilityRules';
-import { isInFeed } from '../abilities/abilityFeed';
-import { FeedScopeToggle, useFeedScope } from '../abilities/FeedScopeToggle.jsx';
+import { useFeedScope } from '../abilities/FeedScopeToggle.jsx';
+import { LiveFeedPanel, useLiveFeed } from '../abilities/LiveFeed.jsx';
 import { DraftOverlay } from '../abilities/DraftOverlay.jsx';
 import { HandDialog } from '../abilities/HandDialog.jsx';
 import { KeyHint } from '../abilities/AbilityDialog.jsx';
@@ -30,15 +29,35 @@ import {
   STREAK_BONUS_LIFE_THRESHOLD,
 } from '../../constants';
 
-// Keyed on the sequence version too, so a Reroll or Scramble plays the new sequence.
+// Whether this tab has already watched a sequence, so a refresh skips straight to input.
+// Per tab (sessionStorage), not per browser: two players in one browser must each watch
+// their own. Keyed on the version too, so a Reroll or Scramble plays the new sequence.
 const seqSeenKey = (gameId, roundId, version) => `seqSeen:${gameId}:${roundId}:${version}`;
-const SUBMISSION_TOAST_MS = 3000;
+const hasSeenSequence = (gameId, roundId, version) => {
+  try {
+    return Boolean(gameId && roundId && sessionStorage.getItem(seqSeenKey(gameId, roundId, version)));
+  } catch {
+    return false;
+  }
+};
+const markSequenceSeen = (gameId, roundId, version) => {
+  try {
+    if (gameId && roundId) sessionStorage.setItem(seqSeenKey(gameId, roundId, version), '1');
+  } catch {
+    // Storage blocked: a refresh replays the sequence, which is harmless.
+  }
+};
 // How long to wait before asking the server again to close a draft whose clock ran out.
 const CLOSE_DRAFT_RETRY_MS = 2000;
 
 // Below Tailwind's `xs` breakpoint (481px) the leaderboard is a bottom sheet that
 // covers the tiles and buttons, so it starts closed on phones and open elsewhere.
 const leaderboardOpenByDefault = () => typeof window !== 'undefined' && window.matchMedia('(min-width: 481px)').matches;
+// The live feed sits on the left. Only from 1280px is there room for it beside the play
+// area, so narrower screens start with it closed behind the Feed button.
+const feedOpenByDefault = () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1280px)').matches;
+// Phones show the feed and the leaderboard as bottom sheets in the same place, so only one opens at a time.
+const isPhone = () => typeof window !== 'undefined' && !window.matchMedia('(min-width: 481px)').matches;
 
 // A game control with a small hint under the label: the keyboard key that triggers it,
 // matching the key letters on the colour tiles, or another short note such as replays left.
@@ -95,13 +114,15 @@ export const GamePage = () => {
   const [replaysRemaining, setReplaysRemaining] = useState(STARTING_REPLAYS);
   const [attemptedSequence, setAttemptedSequence] = useState([]);
   const [message, setMessage] = useState('');
-  const [levelUpNotices, setLevelUpNotices] = useState([]);
+  const [notices, setNotices] = useState([]);
   const [lifeFlash, setLifeFlash] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(ROUND_SECONDS);
   const [shake, setShake] = useState(false);
   const [correctGlow, setCorrectGlow] = useState(false);
   const [replayKey, setReplayKey] = useState(0);
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(leaderboardOpenByDefault);
+  const [isFeedOpen, setIsFeedOpen] = useState(feedOpenByDefault);
+  const [feedSeenAt, setFeedSeenAt] = useState(() => new Date());
   const [showPowerupPopup, setShowPowerupPopup] = useState(false);
   const [completedRoundId, setCompletedRoundId] = useState(null);
   const [handOpen, setHandOpen] = useState(false);
@@ -179,12 +200,6 @@ export const GamePage = () => {
       roomSub.stop();
     };
   }, [gameId]);
-
-  useEffect(() => {
-    if (!gameId || (feedScope === 'me' && !playerId)) return undefined;
-    const eventsSub = Meteor.subscribe('gameEvents', gameId, feedScope, playerId);
-    return () => eventsSub.stop();
-  }, [gameId, feedScope, playerId]);
 
   // A DDP reconnect opens a new connection. Point the player at it, or the server
   // treats them as gone and removes them after the disconnect grace period.
@@ -270,28 +285,35 @@ export const GamePage = () => {
   const totalLives = room?.customSettings?.startingLives ?? DEFAULT_STARTING_LIVES;
   // Battle royale streaks can bank lives above the starting count, so grow the track to fit.
   const heartCount = Math.max(totalLives, player?.lives ?? 0);
-  const levelUpEvents = useTracker(() => {
-    if (!gameId) return [];
-    return GameEventsCollection.find({ gameId, type: 'level-up' }, { sort: { createdAt: -1 } }).fetch();
-  }, [gameId]);
-
-  const submissionEvents = useTracker(() => {
-    if (!gameId) return [];
-    return GameEventsCollection.find({ gameId, type: 'correct-submission' }, { sort: { createdAt: -1 } }).fetch();
-  }, [gameId]);
-
-  // Every live notice (level-ups, correct answers, abilities) shares one capped stack.
+  // Every toast (cards involving this player, life awards, the replay bonus) shares one capped stack.
   const pushNotice = (notice, durationMs = LEVEL_UP_TOAST_MS) => {
     // Life awards are exempt from the cap, so a burst of other notices can not push them out.
-    setLevelUpNotices((prev) => {
+    setNotices((prev) => {
       const lifeNotices = prev.filter((n) => n.kind === 'life');
       const others = [...prev.filter((n) => n.kind !== 'life'), notice].slice(-MAX_LIVE_FEED_ITEMS);
       return [...lifeNotices, ...others];
     });
-    setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), durationMs);
+    setTimeout(() => setNotices((prev) => prev.filter((n) => n.key !== notice.key)), durationMs);
   };
 
-  useAbilityNotices({ gameId, viewerId: playerId, scope: feedScope, onNotice: (notice) => pushNotice(notice) });
+  useAbilityNotices({ gameId, viewerId: playerId, onNotice: (notice) => pushNotice(notice) });
+
+  const feedRows = useLiveFeed({ gameId, viewerId: playerId, scope: feedScope });
+  // While the feed is open everything in it counts as read; closed, new rows show as a badge.
+  useEffect(() => {
+    if (isFeedOpen) setFeedSeenAt(new Date());
+  }, [isFeedOpen, feedRows.length]);
+  const unreadRows = isFeedOpen ? [] : feedRows.filter((row) => new Date(row.at) > feedSeenAt);
+  const unreadAimedAtMe = unreadRows.some((row) => row.aimedAtMe);
+
+  const toggleFeed = () => {
+    if (!isFeedOpen && isPhone()) setIsLeaderboardOpen(false);
+    setIsFeedOpen((open) => !open);
+  };
+  const toggleLeaderboard = () => {
+    if (!isLeaderboardOpen && isPhone()) setIsFeedOpen(false);
+    setIsLeaderboardOpen((open) => !open);
+  };
 
   useEffect(() => {
     // Wait for a stored session to resume, or the player would join without their account.
@@ -326,7 +348,7 @@ export const GamePage = () => {
     submittedRoundRef.current = false;
     setPlayerCanInput(false);
     if (draftOpen || sequenceVersion == null) return;
-    if (gameId && localStorage.getItem(seqSeenKey(gameId, player.roundId, sequenceVersion))) {
+    if (hasSeenSequence(gameId, player.roundId, sequenceVersion)) {
       // already watched this sequence (e.g. refresh): skip the replay
       setPlayerCanInput(true);
     }
@@ -334,11 +356,15 @@ export const GamePage = () => {
   }, [player?.roundId, gameId, sequenceVersion, draftOpen]);
 
   //replay bonus
-  const prevStreakRef = useRef(0);
+  // null until the player's streak is first seen, so loading the page (a refresh, or the
+  // end screen) does not count the streak the player already had as a new one.
+  const prevStreakRef = useRef(null);
   useEffect(() => {
-    const streak = player?.currentStreak ?? 0;
+    if (!player) return;
+    const streak = player.currentStreak ?? 0;
     const prev = prevStreakRef.current;
     prevStreakRef.current = streak;
+    if (prev === null) return;
 
     if (streak > 0 && streak % REPLAY_BONUS_STREAK === 0 && streak !== prev) {
       setReplaysRemaining((r) => r + 1);
@@ -349,9 +375,9 @@ export const GamePage = () => {
             ? 'Correct! Extra replay earned 🎉'
             : `${REPLAY_BONUS_STREAK} correct in a row 🎉 extra replay earned!`,
       };
-      setLevelUpNotices((prev) => [...prev, notice]);
+      setNotices((prev) => [...prev, notice]);
       //setTimeout(() => setMessage(''), 2500);
-      setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), 5000);
+      setTimeout(() => setNotices((prev) => prev.filter((n) => n.key !== notice.key)), 5000);
     }
   }, [player?.currentStreak]);
 
@@ -368,42 +394,11 @@ export const GamePage = () => {
     setReplayKey((prev) => prev + 1);
   };
 
-  const seenLevelUpIds = useRef(new Set());
   const submittedRoundRef = useRef(false);
-  useEffect(() => {
-    // The cursor is newest-first; replay oldest-first so the cap below keeps the newest.
-    [...levelUpEvents].reverse().forEach((event) => {
-      if (seenLevelUpIds.current.has(event._id)) return;
-      seenLevelUpIds.current.add(event._id);
-      if (!isInFeed(feedScope, playerId, event)) return;
-      pushNotice({
-        key: event._id,
-        text:
-          event.playerId === playerId
-            ? `You have leveled up to level ${event.level}`
-            : `${event.playerName} has reached level ${event.level}`,
-      });
-    });
-  }, [levelUpEvents]);
-
-  const seenSubmissionIds = useRef(new Set());
-
-  useEffect(() => {
-    submissionEvents.forEach((event) => {
-      if (event.playerId === playerId) return;
-      if (seenSubmissionIds.current.has(event._id)) return;
-
-      seenSubmissionIds.current.add(event._id);
-      // Only ever about other players, so the 'me' feed leaves these out.
-      if (feedScope !== 'everyone') return;
-
-      pushNotice(
-        { key: event._id, text: `${event.playerName} has submitted the correct sequence!` },
-        SUBMISSION_TOAST_MS
-      );
-    });
-  }, [submissionEvents, playerId]);
-
+  // The round the player is on now. A submit's result can arrive after the round it was
+  // for has already advanced (the last answer is what advances it).
+  const currentRoundIdRef = useRef(null);
+  currentRoundIdRef.current = player?.roundId ?? null;
   const handleColourClick = (colour) => {
     if (!tilesLive) return;
     if (!sequenceReady) return;
@@ -415,10 +410,10 @@ export const GamePage = () => {
     if (isBattleRoyale) return undefined; // battle royale is a free-for-all: no timer
     if (!round?._id || !playerId) return undefined;
     if (player?.eliminated || player?.gameFinished) return undefined;
-    if (roundDraftOpen) return undefined; // the clock starts once the draft closes
-
-    // One timer for the whole round; wrong guesses and lost lives do not reset it.
+    // One timer for the whole round; wrong guesses and lost lives do not reset it. It reads
+    // full while the draft is open, and starts counting once the draft closes.
     setSecondsLeft(ROUND_SECONDS);
+    if (roundDraftOpen) return undefined;
 
     const timeoutId = window.setTimeout(() => {
       if (player?.roundId !== round?._id || submittedRoundRef.current) {
@@ -484,12 +479,12 @@ export const GamePage = () => {
       text: `${reason} You now have ${lives} ${lives === 1 ? 'life' : 'lives'}.`,
     };
 
-    setLevelUpNotices((prev) => [...prev, notice]);
+    setNotices((prev) => [...prev, notice]);
     setLifeFlash(true);
     setTimeout(() => setLifeFlash(false), 1200);
 
     // remove the popup after 5 seconds
-    setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), 5000);
+    setTimeout(() => setNotices((prev) => prev.filter((n) => n.key !== notice.key)), 5000);
   };
 
   const handleSubmit = () => {
@@ -501,6 +496,7 @@ export const GamePage = () => {
       setMessage(`Choose ${sequence.length} colours before submitting.`);
       return;
     }
+    const submittedRoundId = player?.roundId;
     Meteor.call('players.submitSequence', playerId, attemptedSequence, (error, result) => {
       if (error) {
         console.error(error);
@@ -508,16 +504,19 @@ export const GamePage = () => {
         return;
       }
       if (result.success) {
-        submittedRoundRef.current = true;
         if (result.lifeAward) showLifeAward(result.lifeAward);
+        setCorrectGlow(true);
+        setTimeout(() => setCorrectGlow(false), 800);
+        // Already on the next round (Battle Royale, or the answer that advanced the round):
+        // its state is fresh, so leave it alone.
+        if (currentRoundIdRef.current !== submittedRoundId) return;
+        submittedRoundRef.current = true;
         if (isBattleRoyale) {
           setMessage('Correct! Moving to next round...');
         } else {
           setMessage('Correct sequence! Please wait for other players to finish.');
         }
         setCompletedRoundId(round._id);
-        setCorrectGlow(true);
-        setTimeout(() => setCorrectGlow(false), 800);
         setPlayerCanInput(false);
       } else {
         const remainingLives = result.remainingLives ?? (player?.lives ?? 3) - 1;
@@ -594,27 +593,68 @@ export const GamePage = () => {
     };
   }, [tilesLive, attemptedSequence, sequence, dialogOpen, canOpenHand]);
 
-  // One toast stack for every screen. Life awards and anything involving this player
-  // always show. With the 'everyone' feed, other players' notices are hidden under sm:
-  // a full lobby (~100 players) fires them constantly and on a phone they bury the game.
+  const feedButton = (
+    <button
+      type="button"
+      onClick={toggleFeed}
+      aria-expanded={isFeedOpen}
+      aria-controls="live-feed"
+      className="relative inline-flex min-h-11 items-center gap-2 rounded-full border border-hairline bg-surface px-4 py-3 font-outfit text-xs font-bold text-fg shadow-lg xs:text-sm"
+    >
+      {isFeedOpen ? 'Hide feed' : 'Feed'}
+      {unreadRows.length > 0 && (
+        <span
+          aria-label={`${unreadRows.length} new`}
+          className="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 font-mono text-[10px] font-bold text-bg"
+          style={{ background: unreadAimedAtMe ? TILE.pink : TILE.amber }}
+        >
+          {unreadRows.length > 99 ? '99+' : unreadRows.length}
+        </span>
+      )}
+    </button>
+  );
+
+  // Mirrors the leaderboard: a bottom sheet on phones, a drawer from the left above that.
+  const feedDrawer = (
+    <aside
+      id="live-feed"
+      className={`fixed bottom-6 left-6 right-6 z-30 transition-transform duration-300 ease-in-out xs:bottom-auto xs:right-auto xs:top-20 xs:w-[calc(100vw-3rem)] xs:max-w-[22rem] ${
+        isFeedOpen ? 'translate-y-0' : 'translate-y-[120%] xs:-translate-x-[120%] xs:translate-y-0'
+      }`}
+    >
+      <LiveFeedPanel
+        rows={feedRows}
+        scope={feedScope}
+        onScopeChange={setFeedScope}
+        onClose={() => setIsFeedOpen(false)}
+        className="max-h-[52vh] xs:max-h-[calc(100dvh-7rem)]"
+      />
+    </aside>
+  );
+
+  // One toast stack for every screen, centred under the top bar so it clears the live feed
+  // on the left and the leaderboard on the right. It only carries things about this
+  // player: cards played on or by them, life awards and the replay bonus. Everything
+  // about other players lives in the live feed.
   const renderNoticeStack = (top) => (
     <div
       style={{
         position: 'fixed',
         top: `${top}px`,
-        left: '18px',
+        left: '50%',
+        transform: 'translateX(-50%)',
         zIndex: 40,
         display: 'flex',
         flexDirection: 'column',
+        alignItems: 'center',
         gap: '10px',
         pointerEvents: 'none',
-        maxWidth: 'min(320px, calc(100vw - 36px))',
+        width: 'min(360px, calc(100vw - 48px))',
       }}
     >
-      {levelUpNotices.map((notice) => (
+      {notices.map((notice) => (
         <div
           key={notice.key}
-          className={notice.kind === 'life' || notice.personal || feedScope === 'me' ? '' : 'hidden sm:block'}
           style={{
             padding: '12px 14px',
             borderRadius: '14px',
@@ -686,7 +726,8 @@ export const GamePage = () => {
           title="Leave game?"
           message="You will stop spectating and return to the play screen. The remaining players can continue their round."
         />
-        <FeedScopeToggle scope={feedScope} onChange={setFeedScope} className="fixed right-6 top-5 z-50 xs:top-6" />
+        <div className="fixed left-6 top-5 z-50 xs:top-6">{feedButton}</div>
+        {feedDrawer}
         <div className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-[#1a0533] to-[#0d1b4b] px-4 py-10 text-center">
           <TileLattice opacity={0.06} />
           <main className="relative z-10 flex w-full max-w-lg flex-col items-center gap-5">
@@ -726,8 +767,7 @@ export const GamePage = () => {
               Leave game
             </button>
           </main>
-          <EliminationFeed gameId={gameId} scope={feedScope} viewerId={playerId} />
-          {renderNoticeStack(18)}
+          {renderNoticeStack(76)}
         </div>
       </>
     );
@@ -814,7 +854,6 @@ export const GamePage = () => {
           Powerup Gained: Slow Motion for one round!
         </div>
       )}
-      {/* Under the top bar, so it never covers the feed toggle. */}
       {renderNoticeStack(76)}
       <div
         className="relative flex shrink-0 justify-between"
@@ -832,243 +871,225 @@ export const GamePage = () => {
           >
             KIMPLY
           </span>
-          <FeedScopeToggle scope={feedScope} onChange={setFeedScope} />
+          {feedButton}
         </div>
       </div>
-      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-start overflow-y-auto px-6 pb-6 md:justify-center">
-        {isBattleRoyale && (
-          <div
-            style={{
-              marginBottom: '1dvh',
-              padding: 'clamp(3px, 0.7dvh, 8px) clamp(10px, 1.5vw, 18px)',
-              borderRadius: '8px',
-              backgroundColor: '#222',
-              border: '1px solid #ffd369',
-              color: '#ffd369',
-              fontWeight: 'bold',
-              fontSize: 'clamp(11px, 1.2vw, 18px)',
-              letterSpacing: '1px',
-              textAlign: 'center',
-            }}
-          >
-            BATTLE ROYALE
-          </div>
-        )}
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            justifyContent: 'flex-start',
-            gap: 'clamp(8px, 2.5vw, 16px)',
-            marginBottom: 'clamp(16px, 2.5dvh, 24px)',
-          }}
-        >
-          {Array.from({ length: heartCount }, (_, i) => i + 1).map((heart) => (
+      {/* Centred with an auto margin rather than justify-center: when the column is taller
+          than the screen (more hearts, a held card), justify-center pushes the overflow off
+          the top where it can not be scrolled to. my-auto falls back to top-aligned scrolling. */}
+      <div className="relative flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-6 pb-6">
+        <div className="flex w-full flex-col items-center md:my-auto">
+          {isBattleRoyale && (
             <div
-              key={heart}
               style={{
-                width: 'clamp(32px, 6dvh, 76px)',
-                height: 'clamp(32px, 6dvh, 76px)',
-                backgroundColor: heart <= (player?.lives ?? totalLives) ? '#e03030' : '#333',
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 'clamp(14px, 3.2dvh, 32px)',
-                boxShadow: heart <= (player?.lives ?? totalLives) ? '0 0 10px #e0303088' : 'none',
-                transform: lifeFlash && heart === (player?.lives ?? totalLives) ? 'scale(1.35)' : 'scale(1)',
-                transition: 'all 0.3s ease',
+                marginBottom: '1dvh',
+                padding: 'clamp(3px, 0.7dvh, 8px) clamp(10px, 1.5vw, 18px)',
+                borderRadius: '8px',
+                backgroundColor: '#222',
+                border: '1px solid #ffd369',
+                color: '#ffd369',
+                fontWeight: 'bold',
+                fontSize: 'clamp(11px, 1.2vw, 18px)',
+                letterSpacing: '1px',
+                textAlign: 'center',
               }}
             >
-              {'❤'}
+              BATTLE ROYALE
             </div>
-          ))}
-        </div>
-        {/* Show a warning when a Battle Royale player is on their final life */}
-        {isBattleRoyale && player?.lives === 1 && (
-          <div
-            style={{
-              marginBottom: '1dvh',
-              padding: 'clamp(3px, 0.7dvh, 8px) clamp(10px, 1.5vw, 18px)',
-              borderRadius: '8px',
-              backgroundColor: '#3a1f1f',
-              border: '1px solid #e03030',
-              color: '#ff6b6b',
-              fontWeight: 'bold',
-              fontSize: 'clamp(11px, 1.2vw, 18px)',
-              letterSpacing: '1px',
-              textAlign: 'center',
-            }}
-          >
-            FINAL LIFE
-          </div>
-        )}
-        <div style={{ width: '100%', maxWidth: 420, textAlign: 'center' }}>
-          <p
-            style={{
-              color: 'white',
-              marginBottom: '1dvh',
-              fontWeight: 'bold',
-              letterSpacing: '2px',
-              fontSize: 'clamp(16px, 1.2vw, 22px)',
-            }}
-          >
-            LEVEL {round.roundNumber ?? round.lengthOfSequence - 3}
-          </p>
+          )}
           <div
             style={{
               display: 'flex',
-              justifyContent: 'center',
-              gap: 'clamp(4px, 1.5vw, 10px)',
-              marginBottom: 'clamp(16px, 2dvh, 24px)',
+              flexWrap: 'wrap',
+              justifyContent: 'flex-start',
+              gap: 'clamp(8px, 2.5vw, 16px)',
+              marginBottom: 'clamp(16px, 2.5dvh, 24px)',
             }}
           >
-            {sequence.map((_, i) => (
+            {Array.from({ length: heartCount }, (_, i) => i + 1).map((heart) => (
               <div
-                key={i}
+                key={heart}
                 style={{
-                  width: 'clamp(10px, 2.8vw, 50px)',
-                  height: 'clamp(10px, 2.8vw, 50px)',
+                  width: 'clamp(32px, 6dvh, 76px)',
+                  height: 'clamp(32px, 6dvh, 76px)',
+                  backgroundColor: heart <= (player?.lives ?? totalLives) ? '#e03030' : '#333',
                   borderRadius: '50%',
-                  backgroundColor: i < attemptedSequence.length ? '#fff' : '#556',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 'clamp(14px, 3.2dvh, 32px)',
+                  boxShadow: heart <= (player?.lives ?? totalLives) ? '0 0 10px #e0303088' : 'none',
+                  transform: lifeFlash && heart === (player?.lives ?? totalLives) ? 'scale(1.35)' : 'scale(1)',
+                  transition: 'all 0.3s ease',
                 }}
-              />
+              >
+                {'❤'}
+              </div>
             ))}
           </div>
-          <ColourSequence
-            roundId={round._id}
-            sequence={draftOpen ? [] : sequence}
-            replayKey={replayKey}
-            autoPlay={
-              !(gameId && player?.roundId && localStorage.getItem(seqSeenKey(gameId, player.roundId, sequenceVersion)))
-            }
-            playerCanInput={tilesLive}
-            onSequenceComplete={() => {
-              playTurnStartSound();
-              setPlayerCanInput(true);
-              setMessage('Your turn. Repeat the sequence.');
-              if (gameId && player?.roundId) {
-                localStorage.setItem(seqSeenKey(gameId, player.roundId, sequenceVersion), '1');
-              }
-            }}
-            onColourClick={handleColourClick}
-            flashingSpeed={
-              player?.slowMotionActive
-                ? 'slow'
-                : room?.gameMode === 'custom'
-                  ? room.customSettings?.flashingSpeed
-                  : 'medium'
-            }
-          />
-          <p
-            style={{
-              color: 'white',
-              marginTop: '1.5dvh',
-              minHeight: '1.25em',
-              lineHeight: 1.25,
-              fontSize: 'clamp(12px, 1.2vw, 24px)',
-            }}
-          >
-            Selected: {attemptedSequence.length}/{sequence.length}
-          </p>
-          <p
-            style={{
-              color: '#ffd369',
-              marginTop: '0.8dvh',
-              minHeight: '1.25em',
-              lineHeight: 1.25,
-              fontSize: 'clamp(12px, 1.2vw, 20px)',
-            }}
-          >
-            {message}
-          </p>
-          {!isBattleRoyale && (
+          <div style={{ width: '100%', maxWidth: 420, textAlign: 'center' }}>
             <p
               style={{
-                color: secondsLeft <= 5 ? '#ff7a7a' : '#9ce8ff',
+                color: 'white',
+                marginBottom: '1dvh',
+                fontWeight: 'bold',
+                letterSpacing: '2px',
+                fontSize: 'clamp(16px, 1.2vw, 22px)',
+              }}
+            >
+              LEVEL {round.roundNumber ?? round.lengthOfSequence - 3}
+            </p>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'center',
+                gap: 'clamp(4px, 1.5vw, 10px)',
+                marginBottom: 'clamp(16px, 2dvh, 24px)',
+              }}
+            >
+              {sequence.map((_, i) => (
+                <div
+                  key={i}
+                  style={{
+                    width: 'clamp(10px, 2.8vw, 50px)',
+                    height: 'clamp(10px, 2.8vw, 50px)',
+                    borderRadius: '50%',
+                    backgroundColor: i < attemptedSequence.length ? '#fff' : '#556',
+                  }}
+                />
+              ))}
+            </div>
+            <ColourSequence
+              roundId={round._id}
+              sequence={draftOpen ? [] : sequence}
+              replayKey={replayKey}
+              autoPlay={!hasSeenSequence(gameId, player?.roundId, sequenceVersion)}
+              playerCanInput={tilesLive}
+              onSequenceComplete={() => {
+                playTurnStartSound();
+                setPlayerCanInput(true);
+                setMessage('Your turn. Repeat the sequence.');
+                markSequenceSeen(gameId, player?.roundId, sequenceVersion);
+              }}
+              onColourClick={handleColourClick}
+              flashingSpeed={
+                player?.slowMotionActive
+                  ? 'slow'
+                  : room?.gameMode === 'custom'
+                    ? room.customSettings?.flashingSpeed
+                    : 'medium'
+              }
+            />
+            <p
+              style={{
+                color: 'white',
+                marginTop: '1.5dvh',
+                minHeight: '1.25em',
+                lineHeight: 1.25,
+                fontSize: 'clamp(12px, 1.2vw, 24px)',
+              }}
+            >
+              Selected: {attemptedSequence.length}/{sequence.length}
+            </p>
+            <p
+              style={{
+                color: '#ffd369',
                 marginTop: '0.8dvh',
                 minHeight: '1.25em',
                 lineHeight: 1.25,
                 fontSize: 'clamp(12px, 1.2vw, 20px)',
-                fontWeight: 'bold',
-                letterSpacing: '1px',
               }}
             >
-              {`Time left: ${secondsLeft}s`}
+              {message}
             </p>
-          )}
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'center',
-              width: 'min(100%, 520px)',
-              marginInline: 'auto',
-              gap: 'clamp(8px, 3vw, 16px)',
-              marginTop: 'clamp(20px, 3dvh, 28px)',
-            }}
-          >
-            <ControlButton
-              label="CLEAR"
-              keyHint="Space"
-              onClick={handleClear}
-              enabled={tilesLive && attemptedSequence.length > 0}
-              enabledBackground="#444"
-              disabledBackground="#222"
-              disabledColour="#555"
-            />
-            <ControlButton
-              label="UNDO"
-              keyHint="Backspace"
-              onClick={handleUndo}
-              enabled={tilesLive && attemptedSequence.length > 0}
-              enabledBackground="#444"
-              disabledBackground="#222"
-              disabledColour="#555"
-            />
             {!isBattleRoyale && (
-              <ControlButton
-                label="REPLAY"
-                hint={`${replaysRemaining} LEFT`}
-                ariaLabel={`Replay sequence, ${replaysRemaining} left`}
-                onClick={handleReplay}
-                enabled={canReplay}
-                enabledBackground="#1a3a5c"
-                disabledBackground="#222"
-                enabledColour="#7CFFB2"
-                disabledColour="#555"
-                enabledBorder="1px solid #7CFFB2"
-                disabledBorder="1px solid #333"
-              />
+              <p
+                style={{
+                  color: secondsLeft <= 5 ? '#ff7a7a' : '#9ce8ff',
+                  marginTop: '0.8dvh',
+                  minHeight: '1.25em',
+                  lineHeight: 1.25,
+                  fontSize: 'clamp(12px, 1.2vw, 20px)',
+                  fontWeight: 'bold',
+                  letterSpacing: '1px',
+                }}
+              >
+                {`Time left: ${secondsLeft}s`}
+              </p>
             )}
-            <ControlButton
-              label="SUBMIT"
-              keyHint="Enter"
-              onClick={handleSubmit}
-              enabled={tilesLive && attemptedSequence.length === sequence.length}
-              enabledBackground="#666"
-              disabledBackground="#2a2a3a"
-              disabledColour="#444"
-            />
-          </div>
-          {hand.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setHandOpen(true)}
-              disabled={!canOpenHand}
-              aria-keyshortcuts="E"
-              className="mx-auto mt-4 inline-flex min-h-11 items-center gap-3 rounded-full border border-hairline bg-surface px-4 font-outfit text-xs font-bold uppercase tracking-[0.12em] text-fg transition-colors duration-[120ms] hover:bg-surface2 disabled:cursor-not-allowed disabled:opacity-50"
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'center',
+                width: 'min(100%, 520px)',
+                marginInline: 'auto',
+                gap: 'clamp(8px, 3vw, 16px)',
+                marginTop: 'clamp(20px, 3dvh, 28px)',
+              }}
             >
-              Play a card
-              <span className="font-mono text-[11px] font-semibold text-fg3">{hand.length} held</span>
-              <KeyHint>E</KeyHint>
-            </button>
-          )}
+              <ControlButton
+                label="CLEAR"
+                keyHint="Space"
+                onClick={handleClear}
+                enabled={tilesLive && attemptedSequence.length > 0}
+                enabledBackground="#444"
+                disabledBackground="#222"
+                disabledColour="#555"
+              />
+              <ControlButton
+                label="UNDO"
+                keyHint="Backspace"
+                onClick={handleUndo}
+                enabled={tilesLive && attemptedSequence.length > 0}
+                enabledBackground="#444"
+                disabledBackground="#222"
+                disabledColour="#555"
+              />
+              {!isBattleRoyale && (
+                <ControlButton
+                  label="REPLAY"
+                  hint={`${replaysRemaining} LEFT`}
+                  ariaLabel={`Replay sequence, ${replaysRemaining} left`}
+                  onClick={handleReplay}
+                  enabled={canReplay}
+                  enabledBackground="#1a3a5c"
+                  disabledBackground="#222"
+                  enabledColour="#7CFFB2"
+                  disabledColour="#555"
+                  enabledBorder="1px solid #7CFFB2"
+                  disabledBorder="1px solid #333"
+                />
+              )}
+              <ControlButton
+                label="SUBMIT"
+                keyHint="Enter"
+                onClick={handleSubmit}
+                enabled={tilesLive && attemptedSequence.length === sequence.length}
+                enabledBackground="#666"
+                disabledBackground="#2a2a3a"
+                disabledColour="#444"
+              />
+            </div>
+            {hand.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setHandOpen(true)}
+                disabled={!canOpenHand}
+                aria-keyshortcuts="E"
+                className="mx-auto mt-4 inline-flex min-h-11 items-center gap-3 rounded-full border border-hairline bg-surface px-4 font-outfit text-xs font-bold uppercase tracking-[0.12em] text-fg transition-colors duration-[120ms] hover:bg-surface2 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Play a card
+                <span className="font-mono text-[11px] font-semibold text-fg3">{hand.length} held</span>
+                <KeyHint>E</KeyHint>
+              </button>
+            )}
+          </div>
         </div>
-        <EliminationFeed gameId={gameId} scope={feedScope} viewerId={playerId} />
       </div>
+      {feedDrawer}
       <button
         type="button"
-        onClick={() => setIsLeaderboardOpen((open) => !open)}
+        onClick={toggleLeaderboard}
         aria-expanded={isLeaderboardOpen}
         className="fixed right-6 top-5 z-50 min-h-11 rounded-full border border-hairline bg-surface px-4 py-3 font-outfit text-xs font-bold text-fg shadow-lg xs:top-6 xs:text-sm"
       >

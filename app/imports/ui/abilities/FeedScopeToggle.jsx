@@ -32,19 +32,21 @@ const OPTIONS = [
   { value: 'everyone', label: 'All', title: "Show everyone's events" },
 ];
 
-export function FeedScopeToggle({ scope, onChange, className = '' }) {
+export function FeedScopeToggle({ scope, onChange, showLabel = true, className = '' }) {
   return (
     <div
       role="radiogroup"
       aria-label="Live feed"
       className={`inline-flex items-center rounded-full border border-hairline bg-surface ${className}`}
     >
-      <span
-        aria-hidden="true"
-        className="hidden pl-4 pr-2 font-mono text-[10px] uppercase tracking-[0.18em] text-fg3 xs:inline"
-      >
-        Feed
-      </span>
+      {showLabel && (
+        <span
+          aria-hidden="true"
+          className="hidden pl-4 pr-2 font-mono text-[10px] uppercase tracking-[0.18em] text-fg3 xs:inline"
+        >
+          Feed
+        </span>
+      )}
       {OPTIONS.map((option) => {
         const selected = scope === option.value;
         return (

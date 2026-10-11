@@ -76,6 +76,8 @@ export async function dealLevelUpDraft(playerId) {
 }
 
 async function recordAbilityEvent(actor, ability, outcome, target = null, extra = {}) {
+  // The round it happened in, so the live feed can show when someone came for you.
+  const round = await RoundsCollection.findOneAsync(actor.roundId, { fields: { roundNumber: 1, level: 1 } });
   await GameEventsCollection.insertAsync({
     gameId: actor.gameId,
     type: 'ability',
@@ -85,6 +87,7 @@ async function recordAbilityEvent(actor, ability, outcome, target = null, extra 
     playerName: actor.name,
     targetId: target?._id ?? null,
     targetName: target?.name ?? null,
+    round: round ? (round.roundNumber ?? round.level - 3) : null,
     createdAt: new Date(),
     ...extra,
   });
@@ -124,12 +127,13 @@ async function applyHostile(actor, type, targetId) {
 }
 
 // Close a standard round's draft and resolve every Steal and Strike in it at once.
-// Only the caller that flips draft.resolved does the work, so the server timer, a
-// client fallback and an early close can all race safely.
 export async function resolveRoundDraft(roundId) {
+  // Claim first, so the timer, a client fallback and an early close can race safely.
+  // draft.resolved only flips once every effect has landed: clients start the round on
+  // it, and must not see the round open while lives and feed rows are still changing.
   const claimed = await RoundsCollection.updateAsync(
-    { _id: roundId, 'draft.resolved': false },
-    { $set: { 'draft.resolved': true, 'draft.resolvedAt': new Date() } }
+    { _id: roundId, 'draft.resolved': false, 'draft.resolving': { $ne: true } },
+    { $set: { 'draft.resolving': true } }
   );
   if (!claimed) return false;
 
@@ -155,6 +159,11 @@ export async function resolveRoundDraft(roundId) {
   for (const pick of [...hostile.filter((p) => p.type === 'steal'), ...hostile.filter((p) => p.type === 'strike')]) {
     await applyHostile(pick.actor, pick.type, pick.targetId);
   }
+
+  await RoundsCollection.updateAsync(roundId, {
+    $set: { 'draft.resolved': true, 'draft.resolvedAt': new Date() },
+    $unset: { 'draft.resolving': '' },
+  });
 
   if (hostile.length) {
     await checkWinner(round.gameId, false);
@@ -192,6 +201,9 @@ async function assertTarget(player, targetId) {
 export async function settleDraft(player, type, targetId) {
   assertActive(player);
   const draft = player.secret?.draft;
+  if (draft && draft.roundId === player.roundId && (draft.status === 'picked' || draft.status === 'skipped')) {
+    throw new Meteor.Error('already-chosen', 'You have already chosen in this draft');
+  }
   if (!draft || draft.status !== 'open' || draft.roundId !== player.roundId) {
     throw new Meteor.Error('draft-closed', 'This draft has closed');
   }

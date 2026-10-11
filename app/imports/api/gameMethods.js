@@ -2,7 +2,6 @@ import { Meteor } from 'meteor/meteor';
 import { RoundsCollection } from './rounds';
 import { PlayersCollection } from './players';
 import { LeaderboardCollection } from './leaderboard';
-import { GameEventsCollection } from './gameEvents';
 import { RoomsCollection } from './rooms';
 import {
   advanceRoundIfReady,
@@ -263,16 +262,14 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         throw new Meteor.Error('round-not-found', 'Current round does not exist');
       }
 
-      // prevent duplicate advancement
-      if (currentRound.advanced) return;
-
-      // mark current round as completed
-      await RoundsCollection.updateAsync(currentRoundId, {
-        $set: {
-          advanced: true,
-          isCurrent: false,
-        },
-      });
+      // Claim the advance atomically. Two final answers landing together both pass a
+      // read-then-check, and each then inserted its own next round (D4). Only the call
+      // whose update flips `advanced` goes on to create the next round.
+      const claimed = await RoundsCollection.updateAsync(
+        { _id: currentRoundId, advanced: { $ne: true } },
+        { $set: { advanced: true, isCurrent: false } }
+      );
+      if (!claimed) return;
 
       // increase sequence size for next round
       const room = await RoomsCollection.findOneAsync({ pin: currentRound.gameId });
@@ -323,23 +320,6 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       );
 
       if (draft) await dealRoundDrafts(nextRoundId);
-
-      // announce the level-up for everyone who advanced
-      const movedPlayers = await PlayersCollection.find({
-        roundId: nextRoundId,
-        eliminated: false,
-      }).fetchAsync();
-
-      for (const player of movedPlayers) {
-        await GameEventsCollection.insertAsync({
-          gameId: currentRound.gameId,
-          type: 'level-up',
-          playerId: player._id,
-          playerName: player.name,
-          level: nextRoundNumber,
-          createdAt: new Date(),
-        });
-      }
 
       return nextRoundId;
     },
