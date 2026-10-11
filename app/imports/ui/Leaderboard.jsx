@@ -5,7 +5,7 @@ import { PlayersCollection } from '../api/players';
 import { RoundsCollection } from '../api/rounds';
 import { createLiveLeaderboardRows } from './leaderboardModels';
 
-export const Leaderboard = ({ gameId, currentPlayerId, className = 'max-h-[80vh]' }) => {
+export const Leaderboard = ({ gameId, currentPlayerId, className = 'max-h-[calc(100dvh-6rem)]' }) => {
   const { rows, ready } = useTracker(() => {
     const playersSub = Meteor.subscribe('players', gameId);
     const roundsSub = Meteor.subscribe('rounds', gameId);

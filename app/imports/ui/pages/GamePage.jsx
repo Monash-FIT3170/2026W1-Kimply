@@ -273,7 +273,13 @@ export const GamePage = () => {
 
   // Show the slow-motion powerup popup whenever the player picks it up
   useEffect(() => {
-    setShowPowerupPopup(!!player?.slowMotionActive);
+    if (!player?.slowMotionActive) {
+      setShowPowerupPopup(false);
+      return;
+    }
+    setShowPowerupPopup(true);
+    const t = setTimeout(() => setShowPowerupPopup(false), 3000);
+    return () => clearTimeout(t);
   }, [player?.slowMotionActive]);
 
   const handleReplay = () => {
@@ -308,7 +314,7 @@ export const GamePage = () => {
       // auto-dismiss like the elimination feed
       setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), LEVEL_UP_TOAST_MS);
     });
-  }, [levelUpEvents]);
+  }, [levelUpEvents, playerId]);
 
   const seenSubmissionIds = useRef(new Set());
 
@@ -722,7 +728,7 @@ export const GamePage = () => {
           KIMPLY
         </span>
       </div>
-      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-start overflow-y-auto px-6 pb-6 md:justify-center">
+      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-start overflow-y-auto px-6 pb-6 pt-[5dvh] md:justify-center md:pt-0">
         {isBattleRoyale && (
           <div
             style={{

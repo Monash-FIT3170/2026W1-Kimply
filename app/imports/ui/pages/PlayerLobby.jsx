@@ -127,7 +127,7 @@ function SharePanel({ link }) {
 function HostView({ room, playerName, playerId, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
   const joinLink = `${window.location.origin}/play/join?code=${room.pin}`;
-  const [editing, setEditing] = useState(true);
+  const [editing, setEditing] = useState(false);
   const [gameName, setGameName] = useState('');
   const trimmedGameName = gameName.trim();
   const hasGameName = trimmedGameName.length > 0;
@@ -160,9 +160,9 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
         <BackButton onClick={onBack} />
       </div>
 
-      <div className="relative flex flex-1 flex-col items-center justify-start gap-6 overflow-y-auto px-6 pb-8 pt-4 xs:justify-center xs:gap-7 xs:px-7 xs:pb-7 xs:pt-0">
+      <div className="relative flex flex-1 flex-col items-center gap-6 overflow-y-auto px-6 pb-8 pt-4 xs:gap-7 xs:px-7 xs:pb-7 xs:pt-0">
         {/* room code panel */}
-        <div className="relative flex w-full max-w-lg flex-col items-center gap-5 overflow-hidden rounded-[22px] border border-hairline bg-surface px-4 pb-6 pt-8 xs:gap-4 xs:px-6 xs:pb-5">
+        <div className="relative mt-auto flex w-full max-w-lg shrink-0 flex-col items-center gap-5 overflow-hidden rounded-[22px] border border-hairline bg-surface px-4 pb-6 pt-8 xs:gap-4 xs:px-6 xs:pb-5">
           {/* tile band */}
           <RainbowBar className="absolute left-0 right-0 top-0 h-1" />
 
@@ -219,9 +219,9 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
                 key={i}
                 className="relative flex items-center justify-center rounded-xl border border-hairline font-mono font-bold text-fg"
                 style={{
-                  width: 'clamp(48px, 13vw, 56px)',
-                  height: 'clamp(62px, 17vw, 72px)',
-                  fontSize: 'clamp(32px, 9vw, 42px)',
+                  width: 'clamp(40px, 13vw, 56px)',
+                  height: 'clamp(52px, 17vw, 72px)',
+                  fontSize: 'clamp(28px, 9vw, 42px)',
                   background: 'oklch(0.24 0.02 270)',
                 }}
               >
@@ -246,7 +246,7 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
         </div>
 
         {/* players */}
-        <div className="flex w-full max-w-lg flex-col gap-3">
+        <div className="flex w-full max-w-lg shrink-0 flex-col gap-3">
           <div className="flex items-center justify-between">
             <p className="font-outfit text-[13px] font-bold uppercase tracking-widest text-fg2">
               Players <span className="text-fg3">({players.length})</span>
@@ -256,7 +256,7 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
               Waiting for players
             </div>
           </div>
-          <div className="flex flex-col gap-2">
+          <div className="flex max-h-[40dvh] flex-col gap-2 overflow-y-auto pr-1">
             {players.map((p, i) => (
               <PlayerRow
                 key={p.id || i}
@@ -271,7 +271,7 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
         <button
           onClick={handleStart}
           disabled={players.length < 1}
-          className="w-full max-w-lg rounded-xl px-7 py-4 font-outfit text-sm font-extrabold uppercase tracking-[0.14em] transition-all"
+          className="mb-auto w-full max-w-lg shrink-0 rounded-xl px-7 py-4 font-outfit text-sm font-extrabold uppercase tracking-[0.14em] transition-all"
           style={{
             background: players.length >= 1 ? PRIMARY : `color-mix(in oklab, ${PRIMARY} 30%, oklch(0.14 0.02 270))`,
             color: 'oklch(0.14 0.02 270)',
