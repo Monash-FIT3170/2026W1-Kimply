@@ -20,7 +20,7 @@ import {
   MAX_LIVE_FEED_ITEMS,
   STARTING_REPLAYS,
   REPLAY_BONUS_STREAK,
-  STREAK_BONUS_LIFE_THRESHOLD
+  STREAK_BONUS_LIFE_THRESHOLD,
 } from '../../constants';
 
 const seqSeenKey = (gameId, roundId) => `seqSeen:${gameId}:${roundId}`;
@@ -197,6 +197,8 @@ export const GamePage = () => {
   // startingLives is copied into customSettings for every preset mode (easy=5, hard=1, ...),
   // not just 'custom', so size the lives track off customSettings regardless of gameMode.
   const totalLives = room?.customSettings?.startingLives ?? DEFAULT_STARTING_LIVES;
+  // Battle royale streaks can bank lives above the starting count, so grow the track to fit.
+  const heartCount = Math.max(totalLives, player?.lives ?? 0);
   const levelUpEvents = useTracker(() => {
     if (!gameId) return [];
     return GameEventsCollection.find({ gameId, type: 'level-up' }, { sort: { createdAt: -1 } }).fetch();
@@ -297,7 +299,7 @@ export const GamePage = () => {
             : `${event.playerName} has reached level ${event.level}`,
       };
 
-      // Cap for level feed but not for life bonuses 
+      // Cap for level feed but not for life bonuses
       setLevelUpNotices((prev) => {
         const lifeNotices = prev.filter((n) => n.kind === 'life');
         const others = [...prev.filter((n) => n.kind !== 'life'), notice].slice(-MAX_LIVE_FEED_ITEMS);
@@ -368,13 +370,13 @@ export const GamePage = () => {
     };
   }, [round?._id, playerId, isBattleRoyale, player?.eliminated, player?.gameFinished]);
 
-
   const showLifeAward = ({ streak, bonusRound, lives }) => {
-    const reason = streak && bonusRound
-      ? 'Streak reward + bonus round!'
-      : bonusRound
-      ? 'Bonus round reward!'
-      : `${STREAK_BONUS_LIFE_THRESHOLD} correct in a row!`;
+    const reason =
+      streak && bonusRound
+        ? 'Streak reward + bonus round!'
+        : bonusRound
+          ? 'Bonus round reward!'
+          : `${STREAK_BONUS_LIFE_THRESHOLD} correct in a row!`;
 
     const notice = {
       key: `life-${Date.now()}`,
@@ -387,10 +389,9 @@ export const GamePage = () => {
     setLifeFlash(true);
     setTimeout(() => setLifeFlash(false), 1200);
 
-    // remove the popup after 5 seconds 
+    // remove the popup after 5 seconds
     setTimeout(() => setLevelUpNotices((prev) => prev.filter((n) => n.key !== notice.key)), 5000);
   };
-
 
   const handleSubmit = () => {
     if (!playerId) {
@@ -484,7 +485,6 @@ export const GamePage = () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [playerCanInput, attemptedSequence, round]);
-
 
   // This is the toas stack, instead of defining it on all the screens can just be defined here.
   const noticeStack = (
@@ -744,12 +744,13 @@ export const GamePage = () => {
         <div
           style={{
             display: 'flex',
+            flexWrap: 'wrap',
             justifyContent: 'flex-start',
             gap: 'clamp(8px, 2.5vw, 16px)',
             marginBottom: 'clamp(16px, 2.5dvh, 24px)',
           }}
         >
-          {Array.from({ length: totalLives }, (_, i) => i + 1).map((heart) => (
+          {Array.from({ length: heartCount }, (_, i) => i + 1).map((heart) => (
             <div
               key={heart}
               style={{

@@ -20,6 +20,17 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-11 - A life for every streak of correct rounds
+
+Every `STREAK_BONUS_LIFE_THRESHOLD` (3) correct rounds in a row now earns a life, granted by `players.submitSequence` in `app/imports/api/gameMethods.js` and returned to the submitter as `lifeAward` (#116).
+`GamePage` shows it as a toast and a flash on the newest heart.
+
+Things that are not obvious from the diff:
+
+- **The cap depends on the mode.** Outside battle royale a streak only tops a player back up to the room's starting lives (`customSettings.startingLives`, else `DEFAULT_STARTING_LIVES`), so a player at full lives earns nothing and the next chance is the next multiple of the threshold. Battle royale has no cap, so a streak there banks lives above the start.
+- **The hearts row grows past the starting count.** It draws `max(startingLives, lives)` hearts and wraps, because a battle royale streak (and the round 7 bonus, which was never capped) can exceed the start.
+- **The streak earns a replay too.** With `REPLAY_BONUS_STREAK` at 1, the third correct round in a row pays out a replay and a life, each with its own toast.
+
 ## 2026-10-10 - Replay tunables moved to constants, bonus every correct round
 
 The replay button's two numbers now live in `app/imports/constants.js` next to the other gameplay tunables: `STARTING_REPLAYS` (1) and `REPLAY_BONUS_STREAK`, which drops from 3 to 1.

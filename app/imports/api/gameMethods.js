@@ -14,7 +14,7 @@ import {
   INITIAL_LEVEL,
   BONUS_LIFE_ROUND,
   DISCONNECT_GRACE_MS,
-  STREAK_BONUS_LIFE_THRESHOLD
+  STREAK_BONUS_LIFE_THRESHOLD,
 } from '../constants';
 
 // generate random colour sequence
@@ -326,21 +326,20 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         const longestStreak = Math.max(player.longestStreak ?? 0, currentStreak);
         const totalGuesses = (player.totalGuesses ?? 0) + 1;
         const correctGuesses = (player.correctGuesses ?? 0) + 1;
-        const room = await RoomsCollection.findOneAsync({ pin: player.gameId })
-
+        const room = await RoomsCollection.findOneAsync({ pin: player.gameId });
         const startingLives = room?.customSettings?.startingLives || DEFAULT_STARTING_LIVES;
 
-        // Adding a life after a streak of 2
-
-        const bonusLife = round.roundNumber === BONUS_LIFE_ROUND ? 1 : 0
-        const streakLife = currentStreak % STREAK_BONUS_LIFE_THRESHOLD  === 0 && (player.lives?? 0) + bonusLife < startingLives ? 1 : 0;
+        // Every STREAK_BONUS_LIFE_THRESHOLD correct rounds in a row earns a life. In battle
+        // royale a streak can bank lives above the starting count; every other mode only
+        // tops a player back up to the starting lives the room was created with.
+        const bonusLife = round.roundNumber === BONUS_LIFE_ROUND ? 1 : 0;
+        const streakReached = currentStreak % STREAK_BONUS_LIFE_THRESHOLD === 0;
+        const belowCap = isBattleRoyale || (player.lives ?? 0) + bonusLife < startingLives;
+        const streakLife = streakReached && belowCap ? 1 : 0;
         const lives = (player.lives ?? 0) + bonusLife + streakLife;
 
-        const lifeAward = bonusLife || streakLife ?
-        { streak: streakLife === 1, bonusRound: bonusLife === 1, lives}
-        : null;
-
-
+        const lifeAward =
+          bonusLife || streakLife ? { streak: streakLife === 1, bonusRound: bonusLife === 1, lives } : null;
 
         // mark player as completed
         await PlayersCollection.updateAsync(playerId, {
@@ -408,7 +407,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         const updatedRound = await RoundsCollection.findOneAsync(player.roundId);
         await advanceRoundIfReady(updatedRound);
 
-        return { success: true, sequenceComplete: true , lifeAward};
+        return { success: true, sequenceComplete: true, lifeAward };
       } else {
         // remove one life for wrong sequence
         const newLives = player.lives - 1;
@@ -541,7 +540,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
           completeRound: false,
           roundStatus: 'Eliminated',
           currentLevel: round?.level ?? round?.lengthOfSequence ?? player.currentLevel,
-          eliminatedRound: player.eliminatedRound ?? (round?.roundNumber ?? round?.lengthOfSequence - 3),
+          eliminatedRound: player.eliminatedRound ?? round?.roundNumber ?? round?.lengthOfSequence - 3,
           eliminatedAt: new Date(),
         },
       });
