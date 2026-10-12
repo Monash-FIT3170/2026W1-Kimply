@@ -254,6 +254,30 @@ The cost of leaving it is that every branch inherits the dirt, so no diff can be
 
 ---
 
+## D23 - Local hot reload cannot reach Rspack's WebSocket - **fixed 2026-10-12**
+
+The local app loaded on port 3000, but the browser's Rspack client repeatedly failed to connect to `ws://localhost:8080/ws`.
+The installed `@meteorjs/rspack` configuration starts the development server on port 8080, and the container was already listening on all interfaces at that port.
+`docker-compose.yml` published only port 3000, so a host request to port 8080 failed before reaching Rspack.
+
+**Fix (applied):** publish `8080:8080` alongside the existing backend mapping.
+Recreate the backend to apply the mapping; restarting an existing container does not change its published ports.
+`docs/dev-environment.md` records the two local ports and the verification procedure.
+The change applies only to local development, and the production compose file remains unchanged.
+
+## D22 - Battle Royale leaderboard stays at level 1 as players advance - **fixed 2026-10-12**
+
+The initial Battle Royale round stays `isCurrent: true` while players move independently to their own level rounds.
+`Leaderboard.jsx` selected that initial round, and `createLiveLeaderboardRows` assigned its `roundNumber` to every active player, ignoring their `currentLevel`.
+In room `8U5Z6`, three bot players reached sequence length 5 while the browser player remained at length 4, but the browser leaderboard showed level 1 for all four.
+The browser reproduction is saved at `docs/test-evidence/round-abilities/br-levels-before.png`.
+
+**Fix (applied):** `app/imports/ui/leaderboardModels.js` converts each active Battle Royale player's own sequence length to its displayed level (`currentLevel - 3`).
+An eliminated player's `eliminatedRound` is already a displayed level and is preserved.
+Standard modes continue to use the shared round's level.
+`app/tests/leaderboardModel.test.js` covers independent Battle Royale levels, elimination levels, and unchanged standard-mode behavior.
+The independent-level regression failed before the model change and passed afterward.
+
 ## D21 - A network blip removes a player from the game - **fixed 2026-10-11**
 
 When a player's connection drops, the `Meteor.onConnection` close handler in `gameMethods.js` marks them `connected: false` and removes them after `DISCONNECT_GRACE_MS` (15 s) unless they reconnect.

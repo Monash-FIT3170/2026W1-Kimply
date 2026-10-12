@@ -495,7 +495,7 @@ How to write and run them is the `test` skill. What exists today:
 | `abilityRules.test.js` | dealing, eligibility, Shield, hand expiry, caller binding |
 | `abilities.test.js` | draft dealing, resolution order, Shield, Steal and Strike outcomes, Free Pass, Reroll, Scramble, Jump, `rooms.setAbilities` |
 | `abilityFeed.test.js` | feed rows, scope filtering and the wording of ability notices |
-| `leaderboardModel.test.js` | live leaderboard row helpers in `leaderboardModels.js` |
+| `leaderboardModel.test.js` | live leaderboard row helpers in `leaderboardModels.js`; independent Battle Royale levels, recorded elimination levels, and shared standard-round levels |
 | `leaveGame.test.js` | spectator departure retains their result and allows the game to finish |
 
 **Not covered:** any authorization case, any concurrency or race scenario, `rooms.start`, `rooms.disconnect`, `rooms.updateGameName`, `rooms.reconnect`.
@@ -520,8 +520,9 @@ One line each, so a review can cite an ID without opening anything.
 | D11 | root `package-lock.json` | Desynced against an empty root `package.json`, so `npm ci` at the repo root fails |
 | D12 | `ColourSequence.jsx:80-92` | A new `AudioContext` per tile click, never closed |
 | D14 | repo-wide | `npm run format:check` fails on `main`. Needs one dedicated formatting commit before it can gate CI |
+| D23 | `docker-compose.yml` | Fixed 2026-10-12: local Rspack hot reload needs the backend's published port 8080 alongside the app on 3000 |
 
-Fixed and kept for history in the register: D1, D2, D9, D10, D15, D16, D17, D18, D19, D20, D21.
+Fixed and kept for history in the register: D1, D2, D9, D10, D15, D16, D17, D18, D19, D20, D21, D22, D23.
 
 ### Not a defect, so nobody chases it again
 

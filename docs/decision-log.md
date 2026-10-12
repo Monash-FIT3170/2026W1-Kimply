@@ -20,6 +20,26 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-12 - Local Docker hot reload exposes Rspack's development port
+
+`docker-compose.yml` now publishes backend port 8080 alongside Meteor's app port 3000 (D23).
+Rspack was already listening on all container interfaces at port 8080, but the browser's separate hot reload WebSocket could not reach it through Docker.
+Reproduced during browser playtesting: the game loaded while the browser logged repeated WebSocket connection failures, and a host request to port 8080 failed.
+The mapping requires backend recreation rather than a container restart; it does not change production networking.
+`docs/dev-environment.md` records the local ports and verification procedure, and `AGENTS.md` and `docs/defect-register.md` record the resolved defect.
+
+## 2026-10-12 - Battle Royale leaderboard follows each player's level
+
+The live leaderboard in `app/imports/ui/leaderboardModels.js` now derives each active Battle Royale player's displayed level from their own `currentLevel`.
+The shared initial round remains current while those players advance independently, so using its `roundNumber` left every active row at level 1 (D22).
+The internal sequence length 4 maps to displayed level 1; `eliminatedRound` already stores a displayed level and must not be converted again.
+Standard modes retain the shared round's level, including Easy mode.
+
+Reproduced in a browser with three real DDP bot players advancing while the browser player remained on the initial level.
+`app/tests/leaderboardModel.test.js` adds regressions for independent levels, recorded elimination levels, and standard players with stale `currentLevel`.
+The independent-level regression failed against the original model and passed after the fix.
+`AGENTS.md` and `docs/defect-register.md` record the coverage and resolved defect.
+
 ## 2026-10-11 - Host lobby: only the player list scrolls
 
 The host lobby in `app/imports/ui/pages/PlayerLobby.jsx` now keeps the room panel and the Start button at full size and scrolls only the player list (#143).

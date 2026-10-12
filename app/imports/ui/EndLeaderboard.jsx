@@ -21,6 +21,9 @@ function accuracyPercent(player) {
   return Math.round((player.correctGuesses / player.totalGuesses) * 100);
 }
 
+const RESULTS_GRID =
+  'grid grid-cols-[2rem_minmax(0,1fr)_4rem_2.5rem_3rem] items-center gap-x-2 px-3 xs:grid-cols-[2rem_minmax(0,1fr)_5rem_3rem_3.5rem] xs:gap-x-3';
+
 export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
   const navigate = useNavigate();
 
@@ -221,23 +224,16 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
         </div>
 
         <div className="flex w-full max-w-md flex-col gap-2">
-          {/* header */}
-          <div className="mb-1 flex px-3" style={{ animation: 'rowSlideIn 0.45s ease 3.5s both' }}>
-            <span className="w-12 font-mono text-[11px] uppercase tracking-widest" style={{ color: FG2 }}>
-              Rank
-            </span>
-            <span className="flex-1 font-mono text-[11px] uppercase tracking-widest" style={{ color: FG2 }}>
-              Player
-            </span>
-            <span className="w-24 text-right font-mono text-[11px] uppercase tracking-widest" style={{ color: FG2 }}>
-              Score
-            </span>
-            <span className="w-24 text-right font-mono text-[11px] uppercase tracking-widest" style={{ color: FG2 }}>
-              Streak
-            </span>
-            <span className="w-20 text-right font-mono text-[11px] uppercase tracking-widest" style={{ color: FG2 }}>
-              Acc
-            </span>
+          {/* Use the same tracks and border inset as the result rows. */}
+          <div
+            className={`${RESULTS_GRID} mb-1 border border-transparent font-mono text-[10px] uppercase tracking-wide xs:text-[11px] xs:tracking-widest`}
+            style={{ color: FG2, animation: 'rowSlideIn 0.45s ease 3.5s both' }}
+          >
+            <span>Rank</span>
+            <span>Player</span>
+            <span className="text-right">Score</span>
+            <span className="text-right">Streak</span>
+            <span className="text-right">Acc</span>
           </div>
 
           {sorted.map((player, index) => {
@@ -251,7 +247,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
             return (
               <div
                 key={player.name}
-                className="flex items-center gap-3 rounded-xl px-3 py-3"
+                className={`${RESULTS_GRID} rounded-xl py-3`}
                 style={{
                   animation: `scoreboardRowIn 0.55s cubic-bezier(0.22,1,0.36,1) ${rowDelay}s both`,
                   background: medal
@@ -269,46 +265,56 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
                   boxShadow: isCurrentPlayer ? `0 0 22px color-mix(in oklab, ${PRIMARY} 18%, transparent)` : 'none',
                 }}
               >
-                <span className="w-12 shrink-0 font-outfit text-sm font-extrabold" style={{ color: rowColor }}>
+                <span className="font-outfit text-sm font-extrabold" style={{ color: rowColor }}>
                   {tied ? '=' : ''}
                   {rank + 1}
                 </span>
 
-                <Avatar letter={player.name[0]} color={avatarColor(player.name)} size={32} />
-
-                <span className="flex-1 font-outfit text-[15px] font-semibold" style={{ color: rowColor }}>
-                  {player.name}
-                  {rank === 0 && (
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className="hidden shrink-0 xs:block">
+                    <Avatar letter={player.name[0]} color={avatarColor(player.name)} size={32} />
+                  </div>
+                  <div className="min-w-0 flex-1">
                     <span
-                      className="ml-2 font-mono text-[10px] uppercase tracking-widest"
-                      style={{ color: PRIMARY, animation: 'winnerPulse 1.5s ease-in-out infinite' }}
+                      className="block truncate font-outfit text-[13px] font-semibold xs:text-[15px]"
+                      style={{ color: rowColor }}
+                      title={player.name}
                     >
-                      Winner
+                      {player.name}
                     </span>
-                  )}
-                  {isCurrentPlayer && (
-                    <span
-                      className="ml-2 rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest"
-                      style={{
-                        color: PRIMARY,
-                        background: `color-mix(in oklab, ${PRIMARY} 16%, transparent)`,
-                        border: `1px solid color-mix(in oklab, ${PRIMARY} 38%, transparent)`,
-                      }}
-                    >
-                      You
-                    </span>
-                  )}
-                </span>
+                    {(rank === 0 || isCurrentPlayer) && (
+                      <div className="mt-1 flex items-center gap-1 font-mono text-[9px] uppercase tracking-wide xs:text-[10px]">
+                        {rank === 0 && (
+                          <span style={{ color: PRIMARY, animation: 'winnerPulse 1.5s ease-in-out infinite' }}>
+                            Winner
+                          </span>
+                        )}
+                        {isCurrentPlayer && (
+                          <span
+                            className="rounded-full px-1.5 py-0.5"
+                            style={{
+                              color: PRIMARY,
+                              background: `color-mix(in oklab, ${PRIMARY} 16%, transparent)`,
+                              border: `1px solid color-mix(in oklab, ${PRIMARY} 38%, transparent)`,
+                            }}
+                          >
+                            You
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
 
-                <span className="w-24 text-right font-mono text-sm" style={{ color: FG2 }}>
+                <span className="whitespace-nowrap text-right font-mono text-xs xs:text-sm" style={{ color: FG2 }}>
                   {player.isWinner ? `Won Rd ${playerScore(player)}` : `Rd ${playerScore(player)}`}
                 </span>
 
-                <span className="w-24 text-right font-mono text-sm" style={{ color: FG2 }}>
+                <span className="whitespace-nowrap text-right font-mono text-xs xs:text-sm" style={{ color: FG2 }}>
                   {player.longestStreak}
                 </span>
 
-                <span className="w-20 text-right font-mono text-sm" style={{ color: FG2 }}>
+                <span className="whitespace-nowrap text-right font-mono text-xs xs:text-sm" style={{ color: FG2 }}>
                   {accuracyPercent(player)}%
                 </span>
               </div>
