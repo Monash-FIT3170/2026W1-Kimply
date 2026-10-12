@@ -12,7 +12,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { TILE, TileLattice } from '../components/design';
 import { ConfirmationPopup } from '../components/ConfirmationPopup.jsx';
 import { useSessionResuming, useSignedInAccount } from '../accountSession';
-import { playableHand } from '../../api/abilityRules';
+import { playableHand, playbackFor } from '../../api/abilityRules';
 import { useFeedScope } from '../abilities/FeedScopeToggle.jsx';
 import { LiveFeedPanel, useLiveFeed } from '../abilities/LiveFeed.jsx';
 import { DraftOverlay } from '../abilities/DraftOverlay.jsx';
@@ -123,7 +123,6 @@ export const GamePage = () => {
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(leaderboardOpenByDefault);
   const [isFeedOpen, setIsFeedOpen] = useState(feedOpenByDefault);
   const [feedSeenAt, setFeedSeenAt] = useState(() => new Date());
-  const [showPowerupPopup, setShowPowerupPopup] = useState(false);
   const [completedRoundId, setCompletedRoundId] = useState(null);
   const [handOpen, setHandOpen] = useState(false);
   const [expiredDraftKey, setExpiredDraftKey] = useState(null);
@@ -246,6 +245,8 @@ export const GamePage = () => {
   const sequenceReady = Boolean(ownSequence && round && ownSequence.roundId === round._id);
   const sequence = sequenceReady ? ownSequence.colours : [];
   const sequenceVersion = sequenceReady ? ownSequence.version : null;
+  // Slo-Mo, 2x Speed or Lights Out someone has aimed at this player for this round.
+  const playback = playbackFor(player);
 
   // Standard rounds open with a shared draft on the round. Battle Royale deals each
   // player their own when they level up.
@@ -380,11 +381,6 @@ export const GamePage = () => {
       setTimeout(() => setNotices((prev) => prev.filter((n) => n.key !== notice.key)), 5000);
     }
   }, [player?.currentStreak]);
-
-  // Show the slow-motion powerup popup whenever the player picks it up
-  useEffect(() => {
-    setShowPowerupPopup(!!player?.slowMotionActive);
-  }, [player?.slowMotionActive]);
 
   const handleReplay = () => {
     if (!canReplay) return;
@@ -836,24 +832,6 @@ export const GamePage = () => {
           onClose={() => setHandOpen(false)}
         />
       )}
-      {showPowerupPopup && (
-        <div
-          style={{
-            position: 'fixed',
-            top: '20px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            background: '#0a84ff',
-            color: 'white',
-            padding: '14px 28px',
-            borderRadius: '12px',
-            fontWeight: 'bold',
-            zIndex: 1000,
-          }}
-        >
-          Powerup Gained: Slow Motion for one round!
-        </div>
-      )}
       {renderNoticeStack(76)}
       <div
         className="relative flex shrink-0 justify-between"
@@ -972,13 +950,9 @@ export const GamePage = () => {
                 markSequenceSeen(gameId, player?.roundId, sequenceVersion);
               }}
               onColourClick={handleColourClick}
-              flashingSpeed={
-                player?.slowMotionActive
-                  ? 'slow'
-                  : room?.gameMode === 'custom'
-                    ? room.customSettings?.flashingSpeed
-                    : 'medium'
-              }
+              flashingSpeed={room?.gameMode === 'custom' ? room.customSettings?.flashingSpeed : 'medium'}
+              speed={playback.speed}
+              lightsOut={playback.lightsOut}
             />
             <p
               style={{

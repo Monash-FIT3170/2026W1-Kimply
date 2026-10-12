@@ -91,7 +91,6 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         roundStatus: 'Playing',
         gameFinished: false,
         isBattleRoyale,
-        slowMotionActive: false,
         eliminatedAt: null,
         connectionId,
         connected: true,
@@ -296,8 +295,6 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         ...(draft ? { draft } : {}),
       });
 
-      const grantsSlowMotion = currentRound.roundNumber === 5;
-
       // move active players into next round
       await PlayersCollection.updateAsync(
         {
@@ -310,7 +307,6 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
             completeRound: false,
             roundStatus: 'Playing',
             attemptedSequence: [],
-            slowMotionActive: grantsSlowMotion,
             'secret.sequence': sequenceState(nextRoundId, nextSequence),
           },
           // Reroll and Scramble only last the round they were dealt for.

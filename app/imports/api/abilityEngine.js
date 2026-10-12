@@ -93,9 +93,28 @@ async function recordAbilityEvent(actor, ability, outcome, target = null, extra 
   });
 }
 
-// Steal or Strike. Reads the target fresh, so hits that land in the same
-// resolution stack.
-async function applyHostile(actor, type, targetId) {
+// Slo-Mo, 2x Speed or Lights Out. A target carries at most one of each kind (speed,
+// lights) per round, so the first to land wins and a second one misses. The guard is
+// in the update filter, so two Battle Royale picks racing for one target can not both land.
+async function applyPlayback(actor, type, target, { pending }) {
+  const { kind, value } = ABILITIES[type].playback;
+  const field = `secret.playback.${kind}`;
+  const roundId = pending ? null : target.roundId;
+  const free = pending
+    ? { $or: [{ [field]: { $exists: false } }, { [`${field}.roundId`]: { $ne: null } }] }
+    : { [`${field}.roundId`]: { $ne: roundId } };
+  const effect = { roundId, by: actor._id, ...(value ? { value } : {}) };
+  const landed = await PlayersCollection.updateAsync(
+    { _id: target._id, eliminated: false, ...free },
+    { $set: { [field]: effect } }
+  );
+  await recordAbilityEvent(actor, type, landed ? 'hit' : 'failed', target, pending ? { pending: true } : {});
+}
+
+// A card that lands on another player before the round: Steal, Strike or one of the
+// playback cards. Reads the target fresh, so hits that land in the same resolution stack.
+// In Battle Royale a playback card is pending: it waits for the target's next level.
+async function applyHostile(actor, type, targetId, { pending = false } = {}) {
   const target = await PlayersCollection.findOneAsync(targetId);
   if (!target || target.eliminated || target.gameFinished) {
     await recordAbilityEvent(actor, type, 'failed', target);
@@ -103,6 +122,11 @@ async function applyHostile(actor, type, targetId) {
   }
   if (isShielded(target)) {
     await recordAbilityEvent(actor, type, 'blocked', target);
+    return;
+  }
+
+  if (ABILITIES[type].playback) {
+    await applyPlayback(actor, type, target, { pending });
     return;
   }
 
@@ -151,12 +175,14 @@ export async function resolveRoundDraft(roundId) {
   }).fetchAsync();
   const hostile = pickers
     .map((player) => ({ actor: player, ...player.secret.draft.pick }))
-    .filter((pick) => pick.type === 'steal' || pick.type === 'strike')
+    .filter((pick) => landsBeforeRound(pick.type))
     .sort((a, b) => a.pickedAt - b.pickedAt);
 
   // Every Steal before any Strike: a Steal is judged on the lives a player went into
   // the round with, and an actor struck out in this same resolution still lands theirs.
-  for (const pick of [...hostile.filter((p) => p.type === 'steal'), ...hostile.filter((p) => p.type === 'strike')]) {
+  // Playback cards go last, so one aimed at a player struck out here misses.
+  const order = (type) => (type === 'steal' ? 0 : type === 'strike' ? 1 : 2);
+  for (const pick of [...hostile].sort((a, b) => order(a.type) - order(b.type))) {
     await applyHostile(pick.actor, pick.type, pick.targetId);
   }
 
@@ -170,6 +196,12 @@ export async function resolveRoundDraft(roundId) {
     await advanceRoundIfReady(await RoundsCollection.findOneAsync(roundId));
   }
   return true;
+}
+
+// Cards that land on another player as soon as the draft settles them.
+function landsBeforeRound(type) {
+  const ability = ABILITIES[type];
+  return Boolean(ability) && ability.timing === 'pre' && ability.hostile;
 }
 
 async function draftIsSettled(roundId) {
@@ -231,9 +263,10 @@ export async function settleDraft(player, type, targetId) {
 
   const context = await gameContext(player.gameId);
   if (context.isBattleRoyale) {
-    // No shared round to wait for: a Steal or Strike lands as soon as it is picked.
-    if (type === 'steal' || type === 'strike') {
-      await applyHostile(player, type, targetId);
+    // No shared round to wait for: a hostile card lands as soon as it is picked. A
+    // playback card waits for the target's next level, since this one is under way.
+    if (landsBeforeRound(type)) {
+      await applyHostile(player, type, targetId, { pending: true });
       await checkWinner(player.gameId, true);
     }
   } else if (await draftIsSettled(player.roundId)) {

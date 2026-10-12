@@ -6,6 +6,7 @@ import { PlayersCollection } from '../imports/api/players';
 import { RoomsCollection } from '../imports/api/rooms';
 import { GameEventsCollection } from '../imports/api/gameEvents';
 import { LeaderboardCollection } from '../imports/api/leaderboard';
+import { playbackFor } from '../imports/api/abilityRules';
 
 const GAME = 'ABL01';
 const SEQUENCE = ['red', 'blue', 'green', 'yellow'];
@@ -485,6 +486,121 @@ if (Meteor.isServer) {
         assert.strictEqual(a.secret.draft.roundId, a.roundId);
         assert.ok(!a.secret.draft.offered.includes('steal'), 'nobody has a spare life to steal');
         assert.strictEqual(a.secret.sequence.colours.length, 5);
+      });
+    });
+
+    describe('playback cards', function () {
+      const PLAYBACK_OFFER = ['slowMo', 'fastForward', 'lightsOut'];
+      const playbackOf = async (id) => playbackFor(await PlayersCollection.findOneAsync(id));
+
+      it('lands Slo-Mo on the target when the draft closes, for that round only', async function () {
+        const { roundId, ids } = await setupGame();
+        await openDraft(roundId, { [ids.A]: PLAYBACK_OFFER, [ids.B]: PLAYBACK_OFFER, [ids.C]: PLAYBACK_OFFER });
+
+        await Meteor.callAsync('abilities.pick', ids.A, 'slowMo', ids.B);
+        assert.deepStrictEqual(
+          await playbackOf(ids.B),
+          { speed: null, lightsOut: false },
+          'not before the draft closes'
+        );
+        await Meteor.callAsync('abilities.skip', ids.B);
+        await Meteor.callAsync('abilities.skip', ids.C);
+
+        assert.deepStrictEqual(await playbackOf(ids.B), { speed: 'slow', lightsOut: false });
+        assert.deepStrictEqual(await playbackOf(ids.A), { speed: null, lightsOut: false });
+        const [event] = await abilityEvents();
+        assert.strictEqual(event.ability, 'slowMo');
+        assert.strictEqual(event.outcome, 'hit');
+        assert.strictEqual(event.targetId, ids.B);
+
+        await Meteor.callAsync('rounds.advance', roundId);
+        assert.deepStrictEqual(await playbackOf(ids.B), { speed: null, lightsOut: false }, 'lapses next round');
+      });
+
+      it('stacks Lights Out with a speed change, but misses with a second speed change', async function () {
+        const { roundId, ids } = await setupGame({ lives: [3, 3, 3, 3] });
+        await openDraft(roundId, {
+          [ids.A]: PLAYBACK_OFFER,
+          [ids.B]: PLAYBACK_OFFER,
+          [ids.C]: PLAYBACK_OFFER,
+          [ids.D]: PLAYBACK_OFFER,
+        });
+
+        await Meteor.callAsync('abilities.pick', ids.A, 'fastForward', ids.D);
+        await Meteor.callAsync('abilities.pick', ids.B, 'slowMo', ids.D);
+        await Meteor.callAsync('abilities.pick', ids.C, 'lightsOut', ids.D);
+        await Meteor.callAsync('abilities.skip', ids.D);
+
+        assert.deepStrictEqual(await playbackOf(ids.D), { speed: 'fast', lightsOut: true });
+        const outcomes = Object.fromEntries((await abilityEvents()).map((e) => [e.ability, e.outcome]));
+        assert.deepStrictEqual(outcomes, { fastForward: 'hit', slowMo: 'failed', lightsOut: 'hit' });
+      });
+
+      it('is blocked by a Shield', async function () {
+        const { roundId, ids } = await setupGame();
+        await openDraft(roundId, {
+          [ids.A]: PLAYBACK_OFFER,
+          [ids.B]: ['shield', 'strike', 'reroll'],
+          [ids.C]: PLAYBACK_OFFER,
+        });
+
+        await Meteor.callAsync('abilities.pick', ids.B, 'shield');
+        await Meteor.callAsync('abilities.pick', ids.A, 'lightsOut', ids.B);
+        await Meteor.callAsync('abilities.pick', ids.C, 'slowMo', ids.B);
+
+        assert.deepStrictEqual(await playbackOf(ids.B), { speed: null, lightsOut: false });
+        assert.deepStrictEqual(
+          (await abilityEvents()).map((e) => e.outcome),
+          ['blocked', 'blocked']
+        );
+      });
+
+      it('misses a player struck out in the same draft', async function () {
+        const { roundId, ids } = await setupGame({ lives: [3, 1, 3] });
+        await openDraft(roundId, {
+          [ids.A]: PLAYBACK_OFFER,
+          [ids.B]: PLAYBACK_OFFER,
+          [ids.C]: ['strike', 'shield', 'reroll'],
+        });
+
+        await Meteor.callAsync('abilities.pick', ids.A, 'slowMo', ids.B);
+        await Meteor.callAsync('abilities.pick', ids.C, 'strike', ids.B);
+        await Meteor.callAsync('abilities.skip', ids.B);
+
+        const outcomes = Object.fromEntries((await abilityEvents()).map((e) => [e.ability, e.outcome]));
+        assert.deepStrictEqual(outcomes, { strike: 'eliminated', slowMo: 'failed' });
+      });
+
+      it('waits for the target next level in Battle Royale', async function () {
+        const { roundId, ids } = await setupGame({ gameMode: 'battle_royale', lives: [1, 1], startingLives: 1 });
+        await PlayersCollection.updateAsync(ids.A, {
+          $set: {
+            'secret.draft': {
+              roundId,
+              offered: PLAYBACK_OFFER,
+              endsAt: new Date(Date.now() + 10000),
+              status: 'open',
+              pick: null,
+            },
+          },
+        });
+
+        await Meteor.callAsync('abilities.pick', ids.A, 'lightsOut', ids.B);
+
+        assert.deepStrictEqual(
+          await playbackOf(ids.B),
+          { speed: null, lightsOut: false },
+          'not on the level under way'
+        );
+        const [event] = await abilityEvents();
+        assert.strictEqual(event.outcome, 'hit');
+        assert.strictEqual(event.pending, true);
+
+        await Meteor.callAsync('players.submitSequence', ids.B, SEQUENCE);
+
+        const b = await PlayersCollection.findOneAsync(ids.B);
+        assert.strictEqual(b.currentLevel, 5);
+        assert.deepStrictEqual(playbackFor(b), { speed: null, lightsOut: true });
       });
     });
 

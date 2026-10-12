@@ -64,6 +64,30 @@ describe('ability feed', function () {
       assert.strictEqual(describeAbilityEvent(jump, 'zoe'), 'Ian jumped from level 2 to level 6.');
     });
 
+    it('describes Slo-Mo, 2x Speed and Lights Out for each reader', function () {
+      const slowMo = event({ ability: 'slowMo', outcome: 'hit' });
+      assert.strictEqual(describeAbilityEvent(slowMo, 'ian'), "You slowed Sam's sequence.");
+      assert.strictEqual(describeAbilityEvent(slowMo, 'sam'), 'Ian slowed your sequence.');
+      assert.strictEqual(describeAbilityEvent(slowMo, 'zoe'), "Ian slowed Sam's sequence.");
+      const fast = event({ ability: 'fastForward', outcome: 'hit' });
+      assert.strictEqual(describeAbilityEvent(fast, 'sam'), 'Ian sped up your sequence.');
+      const lights = event({ ability: 'lightsOut', outcome: 'hit' });
+      assert.strictEqual(describeAbilityEvent(lights, 'sam'), 'Ian turned your lights out.');
+      assert.strictEqual(describeAbilityEvent(lights, 'ian'), "You turned the lights out on Sam's sequence.");
+    });
+
+    it('says when a playback card missed or waits for the next level', function () {
+      const missed = event({ ability: 'fastForward', outcome: 'failed' });
+      assert.strictEqual(describeAbilityEvent(missed, 'ian'), 'Your 2x Speed on Sam missed.');
+      assert.strictEqual(describeAbilityEvent(missed, 'sam'), "Ian's 2x Speed missed you.");
+      const pending = event({ ability: 'slowMo', outcome: 'hit', pending: true });
+      assert.strictEqual(describeAbilityEvent(pending, 'sam'), 'Ian slowed your next level.');
+      const pendingLights = event({ ability: 'lightsOut', outcome: 'hit', pending: true });
+      assert.strictEqual(describeAbilityEvent(pendingLights, 'sam'), 'Ian turned your lights out for your next level.');
+      const blocked = event({ ability: 'lightsOut', outcome: 'blocked' });
+      assert.strictEqual(describeAbilityEvent(blocked, 'ian'), "Sam's Shield blocked your Lights Out.");
+    });
+
     it('uses a bare apostrophe after a name ending in s', function () {
       const scramble = event({ ability: 'scramble', outcome: 'hit', targetName: 'Chris' });
       assert.strictEqual(describeAbilityEvent(scramble, 'ian'), "You scrambled Chris' sequence.");

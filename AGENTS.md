@@ -10,7 +10,7 @@ Shared guidance for any coding agent working in this repository (Cursor, Claude 
 > If you change any of those things, update the matching table before you finish, and add an entry to [docs/decision-log.md](docs/decision-log.md) in the same change.
 > See [Maintaining this file](#maintaining-this-file) at the bottom.
 
-**Last verified against the codebase:** 2026-10-11
+**Last verified against the codebase:** 2026-10-12
 
 ---
 
@@ -180,7 +180,7 @@ app/
 │   │   ├── gameEngine.js     # Server helpers shared by the game and ability methods (winner, advance, lives)
 │   │   ├── abilities.js      # abilities.* methods (connection-bound)
 │   │   ├── abilityEngine.js  # Dealing, resolving and playing ability cards (server)
-│   │   ├── abilityRules.js   # Pure card catalogue and rules, shared with the client
+│   │   ├── abilityRules.js   # Pure card catalogue and rules (incl. playback effects), shared with the client
 │   │   ├── playerAccounts.js # PlayerAccountsCollection + register/signIn/googleSignIn/resume/signOut
 │   │   ├── googleAuth.js     # GOOGLE_CLIENT_ID + Google ID-token verification (server use only)
 │   │   └── sequence.js       # COLOURS + generateSequence
@@ -271,10 +271,15 @@ Each definition is wrapped in a `global._<Name>Collection` guard so it survives 
     draft?: { roundId, offered: [3 types], endsAt, status: 'open'|'picked'|'skipped'|'expired', pick },
     hand: [{ id, type, roundId }],              // held cards; Free Pass and Jump outlive their round
     shieldRoundId?,                             // shielded while it equals roundId
+    playback?: {                                // Slo-Mo / 2x Speed / Lights Out aimed at this player
+      speed?: { roundId, value: 'slow'|'fast', by },
+      lightsOut?: { roundId, by },
+    },
   } }
 ```
 `secret` is hidden state. It is excluded from `players` and `eliminations` and reaches only its owner, through `players.secret`.
 `'Passed'` means the round was cleared with a Free Pass.
+A `playback` effect holds while its `roundId` equals the player's `roundId`, so it lapses on its own. `roundId: null` is a Battle Royale effect waiting for the target's next level; `moveToLevel` binds it.
 `roundStatus` is public, summary-only state for the live round UI. It must never
 contain a sequence, attempted colour, or answer detail.
 
@@ -403,9 +408,10 @@ Shared helpers live in `gameEngine.js`: `checkWinner`, `advanceRoundIfReady`, `g
 
 ### Abilities (`imports/api/abilities.js`)
 
-From round 2 of a standard game, each surviving player is dealt 3 of Steal, Strike, Shield, Free Pass, Reroll and Scramble, and picks 1 or skips within `DRAFT_SECONDS`.
+From round 2 of a standard game, each surviving player is dealt 3 of Steal, Strike, Shield, Slo-Mo, 2x Speed, Lights Out, Free Pass, Reroll and Scramble, and picks 1 or skips within `DRAFT_SECONDS`.
 Battle Royale players draft on every level-up instead, Jump is added, and Steal is only dealt when the room starts players on more than 1 life.
-Steal, Strike and Shield resolve when the draft closes (all at once: Steals, then Strikes; Shields block both, and Scramble). In Battle Royale they resolve on pick.
+Steal, Strike, Shield and the playback cards resolve when the draft closes (all at once: Steals, then Strikes, then playback cards; Shields block all of them, and Scramble). In Battle Royale they resolve on pick, and a playback card waits for the target's next level.
+Slo-Mo and 2x Speed halve or double the target's playback speed for the round, replays included; Lights Out fades their board to dark and back all round. A target takes at most one speed change and one Lights Out per round: the first to land wins and a second misses.
 Free Pass and Jump stay in the hand until played; Reroll and Scramble expire with their round.
 The rules and copy live in `abilityRules.js`; the server work in `abilityEngine.js`.
 
@@ -492,9 +498,9 @@ How to write and run them is the `test` skill. What exists today:
 | `uiHelpers.test.js` | `roomCode.js`, `keyboard.js`, and `savedUsername.js` pure helpers |
 | `sequence.test.js` | `imports/api/sequence.js` |
 | `publications.test.js` | scoped pubs; no `sequence` on `rounds`; no `attemptedSequence` or `secret` on `players` / `eliminations`; `players.secret` is connection-bound; `gameFeed` |
-| `abilityRules.test.js` | dealing, eligibility, Shield, hand expiry, caller binding |
-| `abilities.test.js` | draft dealing, resolution order, Shield, Steal and Strike outcomes, Free Pass, Reroll, Scramble, Jump, `rooms.setAbilities` |
-| `abilityFeed.test.js` | feed rows, scope filtering and the wording of ability notices |
+| `abilityRules.test.js` | dealing, eligibility, Shield, hand expiry, caller binding, `playbackFor` and `playbackTiming` |
+| `abilities.test.js` | draft dealing, resolution order, Shield, Steal and Strike outcomes, Slo-Mo / 2x Speed / Lights Out landing, stacking, lapsing and Battle Royale pending, Free Pass, Reroll, Scramble, Jump, `rooms.setAbilities` |
+| `abilityFeed.test.js` | feed rows, scope filtering and the wording of ability notices, playback cards included |
 | `leaderboardModel.test.js` | live leaderboard row helpers in `leaderboardModels.js`; independent Battle Royale levels, recorded elimination levels, and shared standard-round levels |
 | `leaveGame.test.js` | spectator departure retains their result and allows the game to finish |
 

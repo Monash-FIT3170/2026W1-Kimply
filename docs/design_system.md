@@ -2,7 +2,7 @@
 
 Multiplayer memory challenge. This document is the single source of truth for how Kimply looks, sounds, and behaves. Check here before designing or building anything new.
 
-**Status:** v0.3 · Active
+**Status:** v0.5 · Active
 **Owner:** Design
 
 ---
@@ -210,7 +210,23 @@ Motion conveys state. It does not decorate.
   50%, 100% { opacity: 0; }
 }
 /* Active text input — 1s steps(2) infinite */
+
+@keyframes lightsOut {
+  0%, 15%   { opacity: 0; }
+  45%, 65%  { opacity: 0.97; }
+  95%, 100% { opacity: 0; }
+}
+/* Lights Out ability: a --bg overlay over the tile grid — 2600ms ease-in-out infinite */
 ```
+
+`lightsOut` is the one animation that hides state on purpose: it is a hostile card's effect, not decoration.
+It starts lit so the first flash is always seen, and its period is not a multiple of any flash and gap, so a replay loses different flashes.
+The overlay sits 4px outside the grid with no feathered edge, and lit tiles drop their outer glow while it runs, so the instruction line and the `Selected` count above and below stay readable.
+
+### Playback effect chip
+
+When Slo-Mo, 2x Speed or Lights Out has landed on a player, the instruction line above the tiles gains a pulse-meta chip per effect (`SLO-MO`, `2X SPEED`, `LIGHTS OUT`): Mono 600 11px uppercase in `--tile-violet` with a pulsing 6px dot.
+Below `xs` the chips take their own centred line under the instruction, because they do not fit beside it; from `xs` up they sit inline after it.
 
 ---
 
@@ -275,7 +291,7 @@ A key hint (`1`, `2`, `3`) sits top right. Hover and focus lift 2px and turn the
 | Accent | Cards | Meaning |
 |---|---|---|
 | `--tile-pink` | Steal, Strike | Hurts another player |
-| `--tile-violet` | Scramble, Jump | Changes someone's sequence or level |
+| `--tile-violet` | Scramble, Slo-Mo, 2x Speed, Lights Out, Jump | Changes someone's sequence, its playback, or a level |
 | `--tile-teal` | Shield | Protection |
 | `--tile-amber` | Free Pass, Reroll | Helps yourself |
 
@@ -451,3 +467,4 @@ The system grows by addition, not by drift.
 | v0.2 | 2026-09-21 | Spacing scale gains a phone screen-edge value (`--s-5`, 24px); breakpoint table gains a screen-edge column, the `min(100%, ...)` grid-track rule, and the `xs` (481px) Tailwind boundary. |
 | v0.3 | 2026-09-22 | Adds the Third-party sign-in pattern for Google sign-in on the Account page. |
 | v0.4 | 2026-10-11 | Adds the Ability card, Key hint, Segmented toggle and Switch components, and the Ability draft, Target picker and Live feed patterns, for round abilities. |
+| v0.5 | 2026-10-12 | Adds the `lightsOut` animation and the Playback effect chip for the Slo-Mo, 2x Speed and Lights Out abilities. |

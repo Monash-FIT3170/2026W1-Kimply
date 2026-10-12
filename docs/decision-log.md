@@ -20,6 +20,21 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-12 - Slo-Mo, 2x Speed and Lights Out abilities; round-6 Slow Motion removed
+
+Three hostile pre-round cards change how another player's sequence plays back: Slo-Mo (half speed), 2x Speed (double speed, floored at `MIN_FLASH_MS` / `MIN_GAP_MS` so a fast room stays watchable) and Lights Out (the board fades to dark and back all round).
+They are picked in the draft like Strike, so they land before the target's first watch and last for every replay that round. Shield blocks them.
+The effect lives in `players.secret.playback`, keyed by `roundId` like `shieldRoundId`, so nothing has to clear it: a new round or level makes it stale.
+A target takes one speed change and one Lights Out per round. The guard is in the update filter, not a read-then-write, so racing Battle Royale picks can not both land.
+In a standard draft playback cards resolve after Steals and Strikes, so one aimed at a player struck out in the same draft misses.
+In Battle Royale a pick resolves immediately but the target's current level is already playing, so it is stored with `roundId: null` and `moveToLevel` binds it to their next level in the same write that moves them.
+`ColourSequence` reads its timing on every flash, because the effect reaches the client on `players.secret` and can arrive a beat after `rounds.draft.resolved` opens playback.
+Lights Out's period (2600ms) is deliberately not a multiple of any flash and gap, so a replay loses different flashes to the dark and replays stay worth using.
+
+The hidden round-6 Slow Motion powerup (`slowMotionActive`, set for everyone by `rounds.advance` and shown as a raw blue popup) is gone, so "slow" only ever means someone played Slo-Mo on you.
+
+Files: `app/imports/api/abilityRules.js`, `abilityEngine.js`, `gameEngine.js`, `gameMethods.js`, `app/imports/constants.js`, `app/imports/ui/ColourSequence.jsx`, `pages/GamePage.jsx`, `abilities/abilityFeed.js`, `styles.css`, and their tests. `docs/design_system.md` v0.5 adds the `lightsOut` animation and the playback effect chip.
+
 ## 2026-10-12 - Local Docker hot reload exposes Rspack's development port
 
 `docker-compose.yml` now publishes backend port 8080 alongside Meteor's app port 3000 (D23).

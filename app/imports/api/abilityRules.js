@@ -1,9 +1,17 @@
 // Pure ability rules shared by the server and the client. No database access here.
-import { ABILITY_CARDS_OFFERED, ABILITY_WEIGHTS } from '../constants';
+import {
+  ABILITY_CARDS_OFFERED,
+  ABILITY_WEIGHTS,
+  FLASH_SPEEDS,
+  MIN_FLASH_MS,
+  MIN_GAP_MS,
+  PLAYBACK_SPEED_FACTORS,
+} from '../constants';
 
 // timing 'pre': resolved when the draft closes (on pick in Battle Royale).
 // timing 'in': held in the hand and played during a round.
 // kept: survives the end of the round until it is played.
+// playback: changes how the target's sequence plays back for a round (secret.playback).
 export const ABILITIES = {
   steal: {
     label: 'Steal',
@@ -28,6 +36,33 @@ export const ABILITIES = {
     hostile: false,
     kept: false,
     description: 'Block every card aimed at you this round. If nobody comes for you, it blocks nothing.',
+  },
+  slowMo: {
+    label: 'Slo-Mo',
+    timing: 'pre',
+    targeted: true,
+    hostile: true,
+    kept: false,
+    playback: { kind: 'speed', value: 'slow' },
+    description: "Play another player's sequence at half speed this round. Every replay drags too.",
+  },
+  fastForward: {
+    label: '2x Speed',
+    timing: 'pre',
+    targeted: true,
+    hostile: true,
+    kept: false,
+    playback: { kind: 'speed', value: 'fast' },
+    description: "Play another player's sequence at double speed this round. Blink and it is gone.",
+  },
+  lightsOut: {
+    label: 'Lights Out',
+    timing: 'pre',
+    targeted: true,
+    hostile: true,
+    kept: false,
+    playback: { kind: 'lightsOut' },
+    description: "Another player's board fades to dark and back all round. Some flashes land in the dark.",
   },
   freePass: {
     label: 'Free Pass',
@@ -99,6 +134,31 @@ export function dealCards(options = {}, rng = Math.random, count = ABILITY_CARDS
 export function isShielded(player) {
   const shieldRoundId = player?.secret?.shieldRoundId;
   return Boolean(shieldRoundId) && shieldRoundId === player.roundId;
+}
+
+// What Slo-Mo, 2x Speed and Lights Out have done to a player's playback this round.
+// Like a Shield, an effect holds only while its roundId is the player's round, so it
+// lapses on its own when the round or level moves on. A null roundId is a Battle Royale
+// effect still waiting for the target's next level.
+export function playbackFor(player) {
+  const playback = player?.secret?.playback ?? {};
+  const roundId = player?.roundId;
+  const active = (effect) => Boolean(roundId) && effect?.roundId === roundId;
+  return {
+    speed: active(playback.speed) ? playback.speed.value : null,
+    lightsOut: active(playback.lightsOut),
+  };
+}
+
+// The flash and gap lengths for a room's playback speed under a speed effect.
+export function playbackTiming(flashingSpeed = 'medium', speed = null) {
+  const base = FLASH_SPEEDS[flashingSpeed] ?? FLASH_SPEEDS.medium;
+  const factor = PLAYBACK_SPEED_FACTORS[speed];
+  if (!factor) return base;
+  return {
+    flash: Math.max(MIN_FLASH_MS, Math.round(base.flash * factor)),
+    gap: Math.max(MIN_GAP_MS, Math.round(base.gap * factor)),
+  };
 }
 
 // Ability methods only act for the connection that owns the player. A server-side

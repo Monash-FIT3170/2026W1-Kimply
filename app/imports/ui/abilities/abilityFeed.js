@@ -7,6 +7,9 @@ export const ABILITY_ACCENTS = {
   steal: 'pink',
   strike: 'pink',
   scramble: 'violet',
+  slowMo: 'violet',
+  fastForward: 'violet',
+  lightsOut: 'violet',
   shield: 'teal',
   freePass: 'amber',
   reroll: 'amber',
@@ -71,6 +74,24 @@ export function describeAbilityEvent(event, viewerId) {
     case 'scramble':
       if (targetIsMe) return `${event.playerName} scrambled your sequence. Watch the new one.`;
       return `${actor} scrambled ${possessive(event.targetName)} sequence.`;
+    case 'slowMo':
+    case 'fastForward':
+    case 'lightsOut': {
+      if (event.outcome === 'failed') {
+        if (actorIsMe) return `Your ${card} on ${event.targetName} missed.`;
+        if (targetIsMe) return `${possessive(event.playerName)} ${card} missed you.`;
+        return `${possessive(event.playerName)} ${card} on ${event.targetName} missed.`;
+      }
+      const when = event.pending ? 'next level' : 'sequence';
+      if (event.ability === 'lightsOut') {
+        if (targetIsMe)
+          return `${event.playerName} turned your lights out${event.pending ? ' for your next level' : ''}.`;
+        return `${actor} turned the lights out on ${possessive(event.targetName)} ${when}.`;
+      }
+      const verb = event.ability === 'slowMo' ? 'slowed' : 'sped up';
+      if (targetIsMe) return `${event.playerName} ${verb} your ${when}.`;
+      return `${actor} ${verb} ${possessive(event.targetName)} ${when}.`;
+    }
     case 'freePass':
       return actorIsMe ? 'Free Pass played. Round cleared.' : `${event.playerName} played a Free Pass.`;
     case 'reroll':
