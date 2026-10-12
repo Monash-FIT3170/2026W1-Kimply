@@ -81,7 +81,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
 
   if (players.length === 0) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-bg text-fg">
+      <div className="flex h-full items-center justify-center bg-bg text-fg">
         <p className="font-mono text-sm uppercase tracking-widest">No leaderboard results yet</p>
       </div>
     );
@@ -89,7 +89,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
 
   return (
     <div
-      className="relative flex min-h-screen w-full flex-col"
+      className="relative flex h-full w-full flex-col overflow-hidden"
       style={{ background: BG, color: 'oklch(0.93 0.01 270)' }}
     >
       <div className="pointer-events-none fixed inset-0" style={{ zIndex: 0 }}>
@@ -104,7 +104,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
         <TopBar onBack={() => navigate('/play')} />
       </div>
 
-      <div className="relative z-10 flex flex-1 flex-col items-center px-6 pb-10 xs:px-7 xs:pb-12">
+      <div className="relative z-10 flex flex-1 flex-col items-center overflow-y-auto px-6 pb-10 xs:px-7 xs:pb-12">
         <div
           className="mb-7 flex flex-col items-center text-center"
           style={{ animation: 'leaderboardTitleIn 0.7s ease both' }}
@@ -259,7 +259,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
                     isCurrentPlayer
                       ? `color-mix(in oklab, ${PRIMARY} 48%, transparent)`
                       : medal
-                        ? `color-mix(in oklab, ${medal.color} 30%, transparent)`
+                        ? `color-mix(in oklab, ${medal.color} ${rank === 0 ? 60 : 30}%, transparent)`
                         : `color-mix(in oklab, white 8%, transparent)`
                   }`,
                   boxShadow: isCurrentPlayer ? `0 0 22px color-mix(in oklab, ${PRIMARY} 18%, transparent)` : 'none',
@@ -282,25 +282,18 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
                     >
                       {player.name}
                     </span>
-                    {(rank === 0 || isCurrentPlayer) && (
+                    {isCurrentPlayer && (
                       <div className="mt-1 flex items-center gap-1 font-mono text-[9px] uppercase tracking-wide xs:text-[10px]">
-                        {rank === 0 && (
-                          <span style={{ color: PRIMARY, animation: 'winnerPulse 1.5s ease-in-out infinite' }}>
-                            Winner
-                          </span>
-                        )}
-                        {isCurrentPlayer && (
-                          <span
-                            className="rounded-full px-1.5 py-0.5"
-                            style={{
-                              color: PRIMARY,
-                              background: `color-mix(in oklab, ${PRIMARY} 16%, transparent)`,
-                              border: `1px solid color-mix(in oklab, ${PRIMARY} 38%, transparent)`,
-                            }}
-                          >
-                            You
-                          </span>
-                        )}
+                        <span
+                          className="rounded-full px-1.5 py-0.5"
+                          style={{
+                            color: PRIMARY,
+                            background: `color-mix(in oklab, ${PRIMARY} 16%, transparent)`,
+                            border: `1px solid color-mix(in oklab, ${PRIMARY} 38%, transparent)`,
+                          }}
+                        >
+                          You
+                        </span>
                       </div>
                     )}
                   </div>

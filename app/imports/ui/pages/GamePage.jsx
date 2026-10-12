@@ -855,7 +855,7 @@ export const GamePage = () => {
       {/* Centred with an auto margin rather than justify-center: when the column is taller
           than the screen (more hearts, a held card), justify-center pushes the overflow off
           the top where it can not be scrolled to. my-auto falls back to top-aligned scrolling. */}
-      <div className="relative flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-6 pb-6">
+      <div className="relative flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-6 pb-6 pt-[5dvh] md:pt-0">
         <div className="flex w-full flex-col items-center md:my-auto">
           {isBattleRoyale && (
             <div

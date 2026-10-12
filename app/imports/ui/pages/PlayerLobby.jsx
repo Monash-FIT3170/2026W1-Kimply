@@ -145,7 +145,7 @@ function SharePanel({ link }) {
 function HostView({ room, playerName, playerId, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
   const joinLink = `${window.location.origin}/play/join?code=${room.pin}`;
-  const [editing, setEditing] = useState(true);
+  const [editing, setEditing] = useState(false);
   const [gameName, setGameName] = useState('');
   const trimmedGameName = gameName.trim();
   const hasGameName = trimmedGameName.length > 0;
