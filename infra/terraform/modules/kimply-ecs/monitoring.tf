@@ -241,6 +241,9 @@ resource "aws_synthetics_canary" "ready" {
 
 # Two consecutive failed runs, so one dropped probe does not roll back a deploy.
 # Missing data (canary stopped) is not a failure.
+# ECS also bakes every deployment against this alarm for period x evaluation
+# periods (30 minutes at a 15-minute canary), so ROLLOUT_TIMEOUT in
+# deploy/ecs-deploy.sh has to cover it (#146).
 resource "aws_cloudwatch_metric_alarm" "canary" {
   alarm_name          = "${var.name}-canary"
   alarm_description   = "Kimply readiness or apex redirect failing from outside. Also rolls back an in-progress ECS deployment."

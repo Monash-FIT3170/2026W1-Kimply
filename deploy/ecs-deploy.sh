@@ -27,7 +27,7 @@
 #   TASK_DEF_TEMPLATE  infra/ecs/task-definition.prod.json
 #   SERVICE_URL        https://www.kimply.online
 #   LOG_GROUP          /ecs/<ECS_CLUSTER>
-#   ROLLOUT_TIMEOUT    seconds to wait for the rollout, default 1800
+#   ROLLOUT_TIMEOUT    seconds to wait for the rollout, default 2700
 #
 # Exit codes:
 #   0  deployed, rollout COMPLETED, public readiness probe passed
@@ -45,7 +45,14 @@ ECR_REPOSITORY="${ECR_REPOSITORY:-kimply}"
 TASK_DEF_TEMPLATE="${TASK_DEF_TEMPLATE:-$REPO_ROOT/infra/ecs/task-definition.prod.json}"
 SERVICE_URL="${SERVICE_URL:-https://www.kimply.online}"
 LOG_GROUP="${LOG_GROUP:-/ecs/$ECS_CLUSTER}"
-ROLLOUT_TIMEOUT="${ROLLOUT_TIMEOUT:-1800}"
+# The rollout wait must cover task start-up plus the alarm bake (D31): with
+# alarms on, ECS holds a rolling deployment IN_PROGRESS for the canary alarm's
+# period x evaluation periods after the new tasks are healthy. A 15-minute canary
+# is 900s x 2, so rollouts complete about 33 minutes after update-service. 1800
+# could never see that outcome (#146). It must also end inside the GitHub OIDC
+# session (1 hour), which still has to cover the readiness probe afterwards.
+# Change canary_rate_minutes in infra/terraform and this moves with it.
+ROLLOUT_TIMEOUT="${ROLLOUT_TIMEOUT:-2700}"
 # LOG_GROUP is exported so scripts/health-check.sh can name it when it fails.
 export AWS_REGION LOG_GROUP
 
@@ -200,6 +207,7 @@ while :; do
     if [[ "$state" == "IN_PROGRESS" && "$baking_noted" == false ]] \
        && awk '/^ *PRIMARY /{split($4, c, "/"); if (c[1] == c[2] && c[1] + 0 > 0) ok = 1} END{exit !ok}' <<< "$block"; then
       log "new revision is running; ECS is now baking the deployment against the canary alarm"
+      log "the bake lasts the alarm's period x evaluation periods, 30 minutes for a 15-minute canary"
       baking_noted=true
     fi
   elif (( now - last_heartbeat >= 60 )); then
