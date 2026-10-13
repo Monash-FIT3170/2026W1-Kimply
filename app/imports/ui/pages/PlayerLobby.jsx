@@ -3,6 +3,7 @@ import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { Meteor } from 'meteor/meteor';
 import { useSubscribe, useTracker } from 'meteor/react-meteor-data';
 import { RoomsCollection } from '/imports/api/rooms';
+import { AbilitiesChip, AbilitiesSwitch } from '../abilities/LobbyAbilities.jsx';
 import { ConfirmationPopup } from '../components/ConfirmationPopup';
 import {
   PRIMARY,
@@ -32,9 +33,13 @@ function getGameModeColor(mode) {
   return colors[mode] || 'oklch(0.60 0.20 270)';
 }
 
+function getGameModeName(mode) {
+  if (mode === 'battle_royale') return 'Battle Royale';
+  return `${(mode || 'default').charAt(0).toUpperCase()}${(mode || 'default').slice(1)}`;
+}
+
 function getGameModeLabel(mode) {
-  if (mode === 'battle_royale') return 'Battle Royale Mode';
-  return `${(mode || 'default').charAt(0).toUpperCase()}${(mode || 'default').slice(1)} Mode`;
+  return `${getGameModeName(mode)} Mode`;
 }
 
 function BackButton({ onClick }) {
@@ -51,14 +56,27 @@ function BackButton({ onClick }) {
 function PlayerRow({ player, isYou, onKick }) {
   const color = avatarColor(player.name);
   return (
-    <div className="flex min-h-11 items-center gap-3 rounded-xl border border-hairline bg-surface px-3.5 py-3">
-      <Avatar letter={player.name[0]?.toUpperCase()} color={color} size={32} />
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-outfit text-sm font-semibold text-fg">
-          {player.name}
-          {isYou && <span className="ml-1.5 font-medium text-fg3">· you</span>}
-        </div>
-        <div className="font-mono text-[9px] uppercase tracking-widest text-fg3">Player</div>
+    // Fixed height so rows with a kick button match the host's own row. The kick button's
+    // touch target already carries its own space, so those rows need less right padding.
+    // Your own row is tinted like the leaderboards do, since in a narrow grid card the
+    // "· you" suffix can truncate away.
+    <div
+      className={`flex h-[52px] shrink-0 items-center gap-3 rounded-xl border border-hairline bg-surface pl-3.5 xs:h-12 ${
+        onKick ? 'pr-1 xs:pr-2' : 'pr-3.5'
+      }`}
+      style={
+        isYou
+          ? {
+              background: `color-mix(in oklab, ${PRIMARY} 10%, oklch(0.20 0.02 270))`,
+              borderColor: `color-mix(in oklab, ${PRIMARY} 48%, transparent)`,
+            }
+          : undefined
+      }
+    >
+      <Avatar letter={player.name[0]?.toUpperCase()} color={color} size={28} />
+      <div className="min-w-0 flex-1 truncate font-outfit text-sm font-semibold text-fg">
+        {player.name}
+        {isYou && <span className="ml-1.5 font-medium text-fg3">· you</span>}
       </div>
       {onKick ? (
         <button
@@ -89,8 +107,8 @@ function SharePanel({ link }) {
     setTimeout(() => setCopied(false), 2000);
   };
   return (
-    <div className="flex w-full flex-col items-stretch gap-3 rounded-xl border border-hairline bg-surface px-4 py-3 xs:flex-row xs:items-center xs:gap-2 xs:px-3">
-      <span className="flex-1 select-all truncate font-mono text-[11px] text-fg3">{link}</span>
+    <div className="flex w-full items-center gap-2 rounded-xl border border-hairline bg-surface py-1.5 pl-3 pr-1.5">
+      <span className="min-w-0 flex-1 select-all truncate font-mono text-[11px] text-fg3">{link}</span>
       <button
         onClick={copy}
         className="inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg border px-3 py-2 font-outfit text-[11px] font-semibold uppercase tracking-wider transition-all xs:min-h-0 xs:py-1.5"
@@ -160,15 +178,21 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
         <BackButton onClick={onBack} />
       </div>
 
-      <div className="relative flex flex-1 flex-col items-center gap-6 overflow-y-auto px-6 pb-8 pt-4 xs:gap-7 xs:px-7 xs:pb-7 xs:pt-0">
+      {/* The room panel and Start button keep their size; only the player list scrolls, so a
+          full lobby never squashes the room code. Auto margins centre the group when it fits;
+          justify-center would push the top out of reach once it overflows. The outer scroll is
+          a fallback for screens too short to fit the panel plus a minimum list height.
+          From lg up it becomes a full-screen grid: panel and Start in a left column, and the
+          players filling the rest of the screen. */}
+      <div className="relative flex min-h-0 flex-1 flex-col items-center gap-4 overflow-y-auto px-4 pb-6 pt-2 xs:gap-5 xs:px-7 lg:grid lg:grid-cols-[26rem_minmax(0,1fr)] lg:grid-rows-[auto_auto_minmax(0,1fr)] lg:items-start lg:gap-x-10 lg:gap-y-5 lg:px-10 lg:pb-10">
         {/* room code panel */}
-        <div className="relative mt-auto flex w-full max-w-lg shrink-0 flex-col items-center gap-5 overflow-hidden rounded-[22px] border border-hairline bg-surface px-4 pb-6 pt-8 xs:gap-4 xs:px-6 xs:pb-5">
+        <div className="relative mt-auto flex w-full max-w-lg shrink-0 flex-col items-center gap-4 overflow-hidden rounded-[22px] border border-hairline bg-surface px-4 pb-5 pt-6 xs:px-6 lg:col-start-1 lg:row-start-1 lg:mt-0">
           {/* tile band */}
           <RainbowBar className="absolute left-0 right-0 top-0 h-1" />
 
           {/* Game Name */}
-          <div className="flex w-full flex-col items-center gap-2 xs:w-auto xs:flex-row xs:gap-1">
-            <p className="height-[32px] shrink-0 whitespace-nowrap text-center font-mono text-[11px] uppercase leading-none tracking-[0.16em] text-fg3">
+          <div className="flex min-h-11 w-full min-w-0 items-center justify-center gap-2 xs:min-h-8 xs:gap-1">
+            <p className="shrink-0 whitespace-nowrap font-mono text-[11px] uppercase leading-none tracking-[0.16em] text-fg3">
               Game Name:{' '}
             </p>
 
@@ -181,17 +205,18 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
                 onKeyDown={(e) => e.key === 'Enter' && saveGameName()}
                 placeholder={`Game${room.pin}`}
                 maxLength={30}
-                className="w-full max-w-[14rem] rounded-[12px] border border-hairline bg-surface px-3 py-2 text-center font-outfit text-base font-semibold text-fg outline-none placeholder:text-fg3 xs:w-48 xs:py-1"
+                className="w-40 min-w-0 rounded-[12px] border border-hairline bg-surface px-3 py-1.5 text-center font-outfit text-base font-semibold text-fg outline-none placeholder:text-fg3 xs:w-48 xs:py-1"
                 style={{ caretColor: PRIMARY }}
               />
             ) : (
-              <div className="flex w-full flex-col items-center gap-2 xs:w-auto xs:flex-row xs:gap-1">
-                <span className="font-outfit text-base font-semibold text-fg">
+              <div className="flex min-w-0 items-center gap-1">
+                <span className="truncate font-outfit text-base font-semibold text-fg">
                   {hasGameName ? trimmedGameName : `Game${room.pin}`}
                 </span>
                 <button
                   onClick={() => setEditing(true)}
-                  className="inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent text-fg2 xs:h-8 xs:w-8"
+                  aria-label="Rename game"
+                  className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent text-fg2 xs:h-8 xs:w-8"
                 >
                   <PencilIcon size={14} />
                 </button>
@@ -199,16 +224,17 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
             )}
           </div>
 
-          {/* Game Mode Badge */}
-          <div
-            className="flex items-center gap-2 rounded-full px-4 py-2"
-            style={{ background: getGameModeColor(gameMode) }}
-          >
-            <span className="font-outfit text-sm font-semibold text-bg">
-              {gameMode === 'battle_royale'
-                ? 'Battle Royale Mode'
-                : gameMode.charAt(0).toUpperCase() + gameMode.slice(1) + ' Mode'}
-            </span>
+          {/* Game mode and abilities share a row */}
+          <div className="flex flex-wrap items-start justify-center gap-2">
+            <div
+              className="flex min-h-11 items-center rounded-full px-4"
+              style={{ background: getGameModeColor(gameMode) }}
+            >
+              <span className="whitespace-nowrap font-outfit text-sm font-semibold text-bg">
+                {getGameModeName(gameMode)}
+              </span>
+            </div>
+            <AbilitiesSwitch pin={room.pin} enabled={room.abilitiesEnabled === true} />
           </div>
 
           <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-fg3">Your Room Code</p>
@@ -219,9 +245,9 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
                 key={i}
                 className="relative flex items-center justify-center rounded-xl border border-hairline font-mono font-bold text-fg"
                 style={{
-                  width: 'clamp(40px, 13vw, 56px)',
-                  height: 'clamp(52px, 17vw, 72px)',
-                  fontSize: 'clamp(28px, 9vw, 42px)',
+                  width: 'clamp(40px, 12vw, 48px)',
+                  height: 'clamp(52px, 15vw, 60px)',
+                  fontSize: 'clamp(28px, 8vw, 34px)',
                   background: 'oklch(0.24 0.02 270)',
                 }}
               >
@@ -239,15 +265,17 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
             ))}
           </div>
 
-          <div className="mt-1 w-full">
+          <div className="w-full">
             <p className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-fg3">Invite link</p>
             <SharePanel link={joinLink} />
           </div>
         </div>
 
         {/* players */}
-        <div className="flex w-full max-w-lg shrink-0 flex-col gap-3">
-          <div className="flex items-center justify-between">
+        {/* min-h is the heading plus one row: the list gives up space before the panel does,
+            but never disappears entirely */}
+        <div className="flex min-h-[4.75rem] w-full max-w-lg flex-col gap-3 lg:col-start-2 lg:row-span-3 lg:row-start-1 lg:h-full lg:max-w-none">
+          <div className="flex shrink-0 items-center justify-between">
             <p className="font-outfit text-[13px] font-bold uppercase tracking-widest text-fg2">
               Players <span className="text-fg3">({players.length})</span>
             </p>
@@ -256,7 +284,7 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
               Waiting for players
             </div>
           </div>
-          <div className="flex max-h-[40dvh] flex-col gap-2 overflow-y-auto pr-1">
+          <div className="-mr-1.5 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1.5 lg:grid lg:grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] lg:content-start lg:gap-3">
             {players.map((p, i) => (
               <PlayerRow
                 key={p.id || i}
@@ -271,7 +299,7 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
         <button
           onClick={handleStart}
           disabled={players.length < 1}
-          className="mb-auto w-full max-w-lg shrink-0 rounded-xl px-7 py-4 font-outfit text-sm font-extrabold uppercase tracking-[0.14em] transition-all"
+          className="mb-auto w-full max-w-lg shrink-0 rounded-xl px-7 py-4 font-outfit text-sm font-extrabold uppercase tracking-[0.14em] transition-all lg:col-start-1 lg:row-start-2 lg:mb-0"
           style={{
             background: players.length >= 1 ? PRIMARY : `color-mix(in oklab, ${PRIMARY} 30%, oklch(0.14 0.02 270))`,
             color: 'oklch(0.14 0.02 270)',
@@ -326,8 +354,10 @@ function JoinedView({ room, playerName, playerId, onBack, navigate, gameMode, cu
         <BackButton onClick={onBack} />
       </div>
 
-      <div className="relative flex flex-1 flex-col items-center overflow-y-auto px-6 pb-8 pt-4 xs:px-7 xs:pt-0">
-        <div className="flex w-full max-w-2xl flex-1 flex-col gap-5 xs:gap-4">
+      {/* The title, mode and waiting line stay put and only the player grid scrolls, so a
+          big lobby never pushes them away. From lg up the view uses the full width. */}
+      <div className="relative flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-6 pb-8 pt-4 xs:px-7 xs:pt-0 lg:px-10">
+        <div className="flex min-h-0 w-full max-w-2xl flex-1 flex-col gap-5 xs:gap-4 lg:max-w-none">
           {/* title row */}
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <div>
@@ -343,11 +373,14 @@ function JoinedView({ room, playerName, playerId, onBack, navigate, gameMode, cu
           </div>
 
           {/* Game Mode Badge */}
-          <div
-            className="flex w-fit items-center gap-2 rounded-full px-4 py-2"
-            style={{ background: getGameModeColor(selectedGameMode) }}
-          >
-            <span className="font-outfit text-sm font-semibold text-bg">{getGameModeLabel(selectedGameMode)}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              className="flex w-fit items-center gap-2 rounded-full px-4 py-2"
+              style={{ background: getGameModeColor(selectedGameMode) }}
+            >
+              <span className="font-outfit text-sm font-semibold text-bg">{getGameModeLabel(selectedGameMode)}</span>
+            </div>
+            <AbilitiesChip enabled={room.abilitiesEnabled === true} />
           </div>
           <div className="flex items-center justify-between">
             <p className="font-outfit text-sm font-bold uppercase tracking-widest text-fg2">
@@ -360,8 +393,8 @@ function JoinedView({ room, playerName, playerId, onBack, navigate, gameMode, cu
 
           {/* players grid */}
           <div
-            className="grid gap-3"
-            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))' }}
+            className="-mr-1.5 grid min-h-12 shrink content-start gap-3 overflow-y-auto pr-1.5"
+            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 12rem), 1fr))' }}
           >
             {players.map((p, i) => (
               <PlayerRow key={p.id || i} player={p} isYou={p.name === playerName} />

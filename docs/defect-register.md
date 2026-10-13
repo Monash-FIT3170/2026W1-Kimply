@@ -85,12 +85,15 @@ This preserves anonymous play exactly as designed.
 
 Meteor's single-threaded event loop currently serialises many of these by accident, which is why they have not been noticed. They become much more likely with concurrent submissions, and much worse if a second replica is ever added.
 
-### Double round advance
+### Double round advance - **fixed 2026-10-11**
 `gameMethods.js:220 -> 227 -> 230` reads `currentRound`, checks `if (currentRound.advanced) return`, then sets `advanced: true`. Not atomic.
 Two concurrent submissions that both satisfy `allFinished` can both pass the guard and create **two `isCurrent: true` rounds** for one game, splitting the player set.
 The `advanced` flag is checked in three separate places (`:79`, `:206`, `:227`), all on stale snapshots.
 
 **Fix:** conditional update, `updateAsync({ _id, advanced: false }, { $set: { advanced: true } })`, and only proceed if `matchedCount === 1`.
+
+**Fixed 2026-10-11:** reproduced live while testing abilities with bots. Two final answers for round 5 landed 3ms apart and produced two round-6 documents; the orphan stayed `isCurrent: true`, so the live leaderboard read the wrong level from it.
+`rounds.advance` now claims the round with `updateAsync({ _id, advanced: { $ne: true } }, { $set: { advanced: true, isCurrent: false } })` and returns unless that update matched, so only one caller inserts the next round. `roundAdvance.test.js` fires two advances at once.
 
 ### Double winner
 `checkWinner` at `gameMethods.js:14 -> 22` fetches all players, computes `active.length === 1`, then writes `winner: true`.
@@ -99,11 +102,13 @@ The `active.length === 0` branch at `:39-53` uses a `{ multi: true }` update and
 
 **Fix:** `findOneAndUpdate` with the expected precondition in the selector.
 
-### Life deduction loses a life
+### Life deduction loses a life - **fixed 2026-10-11**
 `gameMethods.js:162` computes `const newLives = player.lives - 1` from a document read at `:124`, then writes `$set: { lives: newLives }` at `:171`.
 Two concurrent wrong submissions both read `lives: 3` and both write `lives: 2`, so one life is silently lost.
 
 **Fix:** `$inc: { lives: -1 }`. This is a one-line change and the cheapest win in this section.
+
+**Fixed 2026-10-11:** wrong answers, turn timeouts and Strikes go through `loseLife` in `gameEngine.js`, a guarded `$inc: { lives: -1 }` followed by an elimination check; Steal and the round-7 bonus use `$inc` too.
 
 ### Duplicate player names
 `rooms.js:113 -> 118` checks name uniqueness against a snapshot, then `$push`es.
@@ -248,6 +253,50 @@ The cost of leaving it is that every branch inherits the dirt, so no diff can be
 **Fix:** one dedicated commit that runs `meteor npm run format` and changes nothing else, so it can be reviewed as a no-op and skipped in `git blame`.
 
 ---
+
+## D23 - Local hot reload cannot reach Rspack's WebSocket - **fixed 2026-10-12**
+
+The local app loaded on port 3000, but the browser's Rspack client repeatedly failed to connect to `ws://localhost:8080/ws`.
+The installed `@meteorjs/rspack` configuration starts the development server on port 8080, and the container was already listening on all interfaces at that port.
+`docker-compose.yml` published only port 3000, so a host request to port 8080 failed before reaching Rspack.
+
+**Fix (applied):** publish `8080:8080` alongside the existing backend mapping.
+Recreate the backend to apply the mapping; restarting an existing container does not change its published ports.
+`docs/dev-environment.md` records the two local ports and the verification procedure.
+The change applies only to local development, and the production compose file remains unchanged.
+
+## D22 - Battle Royale leaderboard stays at level 1 as players advance - **fixed 2026-10-12**
+
+The initial Battle Royale round stays `isCurrent: true` while players move independently to their own level rounds.
+`Leaderboard.jsx` selected that initial round, and `createLiveLeaderboardRows` assigned its `roundNumber` to every active player, ignoring their `currentLevel`.
+In room `8U5Z6`, three bot players reached sequence length 5 while the browser player remained at length 4, but the browser leaderboard showed level 1 for all four.
+The browser reproduction is saved at `docs/test-evidence/round-abilities/br-levels-before.png`.
+
+**Fix (applied):** `app/imports/ui/leaderboardModels.js` converts each active Battle Royale player's own sequence length to its displayed level (`currentLevel - 3`).
+An eliminated player's `eliminatedRound` is already a displayed level and is preserved.
+Standard modes continue to use the shared round's level.
+`app/tests/leaderboardModel.test.js` covers independent Battle Royale levels, elimination levels, and unchanged standard-mode behavior.
+The independent-level regression failed before the model change and passed afterward.
+
+## D21 - A network blip removes a player from the game - **fixed 2026-10-11**
+
+When a player's connection drops, the `Meteor.onConnection` close handler in `gameMethods.js` marks them `connected: false` and removes them after `DISCONNECT_GRACE_MS` (15 s) unless they reconnect.
+"Reconnect" meant `players.join` rewriting `connectionId`, but `GamePage` only calls `players.join` while it has no `playerId`.
+After a DDP auto-reconnect it already has one, so nothing rebound the player: a short Wi-Fi drop mid-round silently deleted them 15 seconds later, even though their tab had reconnected.
+
+**Fix (applied):** new `players.rebind(playerId)` sets `connectionId` and `connected: true` for the caller's connection, and `GamePage` calls it whenever `Meteor.status().connected` goes from false to true.
+It also keeps `players.secret`, which selects by `connectionId`, delivering the player's sequence after a reconnect.
+`app/imports/api/gameMethods.js`, `app/imports/ui/pages/GamePage.jsx`.
+
+## D20 - Battle Royale sent every level's sequence to every client - **fixed 2026-10-11**
+
+The `rounds` publication selected `{ gameId, advanced: false }` and published `sequence`.
+Standard rounds are marked `advanced` as the game moves on, but Battle Royale level rounds (`getOrCreateRound`) never are, so every level a leader had unlocked sat in every client's minimongo, answer included.
+A trailing player could read the next level's sequence from the browser console before reaching it.
+
+**Fix (applied):** `rounds` excludes `sequence` in every mode.
+Each player's sequence is written to `players.secret.sequence` and published only to their own connection through `players.secret`, and `players.submitSequence` grades against that copy.
+`app/server/publications.js`, `app/imports/api/gameEngine.js`, `app/imports/api/gameMethods.js`.
 
 ## D19 - The play column is taller than the screen, so CLEAR and SUBMIT vanish when the turn starts - **fixed 2026-09-01**
 

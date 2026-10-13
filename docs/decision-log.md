@@ -20,6 +20,91 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-12 - Slo-Mo, 2x Speed and Lights Out abilities; round-6 Slow Motion removed
+
+Three hostile pre-round cards change how another player's sequence plays back: Slo-Mo (half speed), 2x Speed (double speed, floored at `MIN_FLASH_MS` / `MIN_GAP_MS` so a fast room stays watchable) and Lights Out (the board fades to dark and back all round).
+They are picked in the draft like Strike, so they land before the target's first watch and last for every replay that round. Shield blocks them.
+The effect lives in `players.secret.playback`, keyed by `roundId` like `shieldRoundId`, so nothing has to clear it: a new round or level makes it stale.
+A target takes one speed change and one Lights Out per round. The guard is in the update filter, not a read-then-write, so racing Battle Royale picks can not both land.
+In a standard draft playback cards resolve after Steals and Strikes, so one aimed at a player struck out in the same draft misses.
+In Battle Royale a pick resolves immediately but the target's current level is already playing, so it is stored with `roundId: null` and `moveToLevel` binds it to their next level in the same write that moves them.
+`ColourSequence` reads its timing on every flash, because the effect reaches the client on `players.secret` and can arrive a beat after `rounds.draft.resolved` opens playback.
+Lights Out's period (2600ms) is deliberately not a multiple of any flash and gap, so a replay loses different flashes to the dark and replays stay worth using.
+
+The hidden round-6 Slow Motion powerup (`slowMotionActive`, set for everyone by `rounds.advance` and shown as a raw blue popup) is gone, so "slow" only ever means someone played Slo-Mo on you.
+
+Files: `app/imports/api/abilityRules.js`, `abilityEngine.js`, `gameEngine.js`, `gameMethods.js`, `app/imports/constants.js`, `app/imports/ui/ColourSequence.jsx`, `pages/GamePage.jsx`, `abilities/abilityFeed.js`, `styles.css`, and their tests. `docs/design_system.md` v0.5 adds the `lightsOut` animation and the playback effect chip.
+
+## 2026-10-12 - Local Docker hot reload exposes Rspack's development port
+
+`docker-compose.yml` now publishes backend port 8080 alongside Meteor's app port 3000 (D23).
+Rspack was already listening on all container interfaces at port 8080, but the browser's separate hot reload WebSocket could not reach it through Docker.
+Reproduced during browser playtesting: the game loaded while the browser logged repeated WebSocket connection failures, and a host request to port 8080 failed.
+The mapping requires backend recreation rather than a container restart; it does not change production networking.
+`docs/dev-environment.md` records the local ports and verification procedure, and `AGENTS.md` and `docs/defect-register.md` record the resolved defect.
+
+## 2026-10-12 - Battle Royale leaderboard follows each player's level
+
+The live leaderboard in `app/imports/ui/leaderboardModels.js` now derives each active Battle Royale player's displayed level from their own `currentLevel`.
+The shared initial round remains current while those players advance independently, so using its `roundNumber` left every active row at level 1 (D22).
+The internal sequence length 4 maps to displayed level 1; `eliminatedRound` already stores a displayed level and must not be converted again.
+Standard modes retain the shared round's level, including Easy mode.
+
+Reproduced in a browser with three real DDP bot players advancing while the browser player remained on the initial level.
+`app/tests/leaderboardModel.test.js` adds regressions for independent levels, recorded elimination levels, and standard players with stale `currentLevel`.
+The independent-level regression failed against the original model and passed after the fix.
+`AGENTS.md` and `docs/defect-register.md` record the coverage and resolved defect.
+
+## 2026-10-11 - Host lobby: only the player list scrolls
+
+The host lobby in `app/imports/ui/pages/PlayerLobby.jsx` now keeps the room panel and the Start button at full size and scrolls only the player list (#143).
+The panel is also more compact: the game mode badge and the abilities switch share a row, the room code tiles are smaller, and the game name and invite link are single rows on phones.
+
+Things that are not obvious from the diff:
+
+- **Centring uses auto margins, not `justify-center`.** In a scrolling flex column, `justify-center` pushes overflow above the top edge where it cannot be scrolled to. That is what squashed the panel and hid the invite link once a few players joined.
+- **The player section has an explicit minimum (heading plus one row).** Its automatic minimum would be the whole list, so the list would never shrink. On a screen too short for the panel plus one row, the page itself scrolls as a fallback.
+- **Player rows lost their "Player" sub-label and have a fixed height**, in both the host and joined views, so a row with a kick button matches the host's own row.
+- **From `lg` up both lobby views go full screen.** The host view becomes a grid: panel and Start in a fixed 26rem left column, players filling the rest as cards (at least 12rem wide). The joined view drops its `max-w-2xl` cap. In both, only the player grid scrolls, so a big lobby never pushes the panel, title or waiting line away.
+- **Your own row is tinted with the primary colour**, matching the leaderboards, because in a narrow grid card the "· you" suffix truncates away.
+- **The abilities switch hides its one-line description below `xs`** so it fits beside the mode badge on a phone. The badge shows the short mode name ("Battle Royale") for the same reason.
+
+## 2026-10-11 - Round abilities: a pick-1-of-3 draft, and private per-player sequences
+
+Players now draft an ability before each round (#140).
+From round 2 of a standard game every surviving player is dealt 3 of Steal, Strike, Shield, Free Pass, Reroll and Scramble, and picks 1 or skips within `DRAFT_SECONDS` (20 seconds).
+Battle Royale players draft on each level-up, where Jump (move to a random other player's level) joins the pool.
+The host can turn abilities off in the lobby; they are on by default for new rooms.
+A persistent live feed lists every ability event and elimination; its Me / All toggle defaults to Me because a full room produces more events than anyone can read.
+
+New files: `app/imports/api/abilities.js`, `abilityEngine.js`, `abilityRules.js`, `gameEngine.js`, and `app/imports/ui/abilities/`.
+`gameMethods.js` now holds only method definitions; its helpers moved to `gameEngine.js` so the ability code can share them without a circular import.
+
+Things that are not obvious from the diff:
+
+- **Every player's sequence is now private, in every mode.** Reroll and Scramble give one player a different sequence from the rest of the room, so the sequence moved from the shared round to `players.secret.sequence`, which only its owner receives (`players.secret`, keyed on the connection). The `rounds` publication stops sending `sequence` altogether. This also closes a leak: Battle Royale level rounds are never marked `advanced`, so every level's answer was reaching every client (D20).
+- **`players.secret` depends on the connection binding being current.** A DDP reconnect opens a new connection, so `GamePage` now calls the new `players.rebind` when the connection comes back. Without it the player stops receiving their sequence, and the server removes them after the 15-second disconnect grace period anyway (D21, which predates this change).
+- **Drafts are resolved on the server, once.** `rounds.advance` puts `draft` on the new round at insert time, so no client starts playback before it sees the draft. A server timer closes it; clients ask again through `abilities.closeDraft` if their own countdown runs out first, in case a restart lost the timer. Whoever flips `draft.resolved` does the work, so the timer, the fallback and an early close (everyone has chosen) can race safely.
+- **Resolution order is a rule, not an accident.** Every Steal lands before any Strike, each in pick order, so a Steal is judged on the lives a player went into the round with. A player struck out in the same resolution still lands their own card.
+- **Ability methods are the first ones bound to the caller's connection.** They can hurt other players, so they apply the D3 fix to themselves only. Every older method still trusts the `playerId` it is given.
+- **Lives now move with `$inc` everywhere.** A Battle Royale Strike can land while its target submits, so wrong answers, timeouts and Steals no longer write lives computed from an earlier read. That closes the life-deduction part of D4.
+- **Steal is only dealt when the room starts players on more than 1 life**, because it never takes a last life. Battle Royale now starts on 1 life (#116), so it is not dealt there; a Battle Royale streak can still bank extra lives, which a Strike can then take.
+- **Lives can exceed the starting count through Steal**, which the heart row from #116 already handles by drawing `max(startingLives, lives)` hearts. The #116 streak life moved into the shared `clearRound` with the rest of the correct-answer path, and a Free Pass does not count towards a streak.
+- **Rooms created before this change have no `abilitiesEnabled` and play without abilities**, so a deploy mid-game does not start dealing cards into it.
+
+Changed after playtesting with bot players (same day):
+
+- **The draft is 20 seconds, not 10.** Reading three cards and finding a target took longer than 10 seconds in practice.
+- **Ability events live in a persistent, scrollable live feed** instead of vanishing toasts, so a player can see who came for them and answer back. It keeps every ability event (`gameFeed`, capped at `FEED_EVENT_LIMIT`) and every elimination for the whole game. Me shows only rows involving you; All shows everything with yours highlighted and the ones aimed at you edged in pink. The feed is open by default only from 1280px, where it fits beside the play area; narrower screens open it from a Feed button that badges unread rows (pink when one was aimed at you). On phones the feed and the leaderboard are bottom sheets in the same place, so opening one closes the other.
+- **Toasts only carry things about you**: cards played on or by you, life awards and the replay bonus, so an attack is still noticed with the feed closed. Toasts about other players' progress ("X has reached level 8", "X has submitted the correct sequence") are gone; the server no longer writes `level-up` or `correct-submission` events (about one per player per round), and the `gameEvents` publication that fed them was removed, so `gameEvents` holds ability events only. In-game elimination toasts went too, since eliminations are in the feed.
+- **A draft is marked resolved only after its effects have landed.** It used to flip `draft.resolved` first, so for a few hundred milliseconds clients could see the round open while lives and feed rows were still changing. A separate `draft.resolving` claim keeps the server timer, client fallbacks and an early close from resolving twice.
+- **Two final answers arriving together no longer create two next rounds** (D4). Seen live: round 5's last two answers landed 3ms apart and produced two round-6 documents, the orphan left `isCurrent`.
+- **"Already watched this sequence" is per tab** (`sessionStorage`), not per browser. It only exists so a refresh skips the replay, and two players in one browser were skipping each other's sequences.
+- **The play column centres with an auto margin, not `justify-content: center`.** A held card adds a row; centring pushed the overflow off the top of the screen, where it could not be scrolled to, and the hearts disappeared.
+- **A submit's result is ignored for round state once the round has moved on.** The last answer is what advances the round, so its result arrives after the next round has started and used to write "please wait for other players" and a stale submitted flag into it.
+- **A refresh no longer awards a replay.** The replay bonus compared the streak with 0 on load, so any page load mid-streak counted as a new streak and gave a free replay with a toast.
+- **The "FINAL LIFE" banner is gone**, as it duplicated the hearts.
+
 ## 2026-10-11 - A life for every streak of correct rounds
 
 Every `STREAK_BONUS_LIFE_THRESHOLD` (3) correct rounds in a row now earns a life, granted by `players.submitSequence` in `app/imports/api/gameMethods.js` and returned to the submitter as `lifeAward` (#116).

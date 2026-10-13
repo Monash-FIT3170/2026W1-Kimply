@@ -33,6 +33,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
           hostName: 1,
           customSettings: 1,
           gameMode: 1,
+          abilitiesEnabled: 1,
           'players.name': 1,
           'players.id': 1,
           'players.connected': 1,
@@ -71,6 +72,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
         createdAt: new Date(),
         gameMode: 'default',
         customSettings: { ...GAME_MODE_PRESETS.default },
+        abilitiesEnabled: true,
       });
 
       return { pin: pin, hostId: hostId };
@@ -96,6 +98,17 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
         },
         { $set: update }
       );
+    },
+
+    // Turn the pick-1-of-3 ability draft on or off for the next game.
+    async 'rooms.setAbilities'(pin, enabled) {
+      if (typeof pin !== 'string' || !pin.trim()) throw new Meteor.Error('invalid', 'Invalid PIN');
+      if (typeof enabled !== 'boolean') throw new Meteor.Error('invalid', 'enabled must be true or false');
+      const room = await RoomsCollection.findOneAsync({ pin: pin.trim() });
+      if (!room) throw new Meteor.Error('not-found', 'Room not found');
+      if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
+
+      await RoomsCollection.updateAsync({ _id: room._id }, { $set: { abilitiesEnabled: enabled } });
     },
 
     async 'rooms.updateSettings'(pin, settings) {

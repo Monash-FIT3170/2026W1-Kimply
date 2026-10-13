@@ -4,7 +4,9 @@ import { useTracker } from 'meteor/react-meteor-data';
 import { PlayersCollection } from '../api/players';
 import { ELIMINATION_FEED_MS as DISPLAY_MS, MAX_LIVE_FEED_ITEMS } from '../constants';
 
-export const EliminationFeed = ({ gameId }) => {
+// scope 'me' keeps only the viewer's own elimination: the ones they caused already
+// arrive as ability notices.
+export const EliminationFeed = ({ gameId, scope = 'everyone', viewerId = null }) => {
   const { ready, eliminations } = useTracker(() => {
     if (!gameId) return { ready: false, eliminations: [] };
     const sub = Meteor.subscribe('eliminations', gameId);
@@ -34,9 +36,10 @@ export const EliminationFeed = ({ gameId }) => {
       return;
     }
 
-    const fresh = eliminations.filter((e) => !seenIds.current.has(e._id));
+    const unseen = eliminations.filter((e) => !seenIds.current.has(e._id));
+    unseen.forEach((e) => seenIds.current.add(e._id));
+    const fresh = scope === 'me' ? unseen.filter((e) => e._id === viewerId) : unseen;
     if (fresh.length === 0) return;
-    fresh.forEach((e) => seenIds.current.add(e._id));
 
     // Show the most recent few; count the rest.
     const shown = fresh.slice(-MAX_LIVE_FEED_ITEMS);
@@ -61,7 +64,7 @@ export const EliminationFeed = ({ gameId }) => {
       clearTimeout(overflowTimer.current);
       overflowTimer.current = setTimeout(() => setOverflow(0), DISPLAY_MS);
     }
-  }, [ready, eliminations]);
+  }, [ready, eliminations, scope, viewerId]);
 
   useEffect(() => {
     const activeTimers = timers.current;

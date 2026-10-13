@@ -21,6 +21,9 @@ function accuracyPercent(player) {
   return Math.round((player.correctGuesses / player.totalGuesses) * 100);
 }
 
+const RESULTS_GRID =
+  'grid grid-cols-[2rem_minmax(0,1fr)_4rem_2.5rem_3rem] items-center gap-x-2 px-3 xs:grid-cols-[2rem_minmax(0,1fr)_5rem_3rem_3.5rem] xs:gap-x-3';
+
 export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
   const navigate = useNavigate();
 
@@ -221,42 +224,16 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
         </div>
 
         <div className="flex w-full max-w-md flex-col gap-2">
-          {/* header */}
+          {/* Use the same tracks and border inset as the result rows. */}
           <div
-            className="mb-1 flex items-center gap-2 border border-transparent px-2 sm:gap-3 sm:px-3"
-            style={{ animation: 'rowSlideIn 0.45s ease 3.5s both' }}
+            className={`${RESULTS_GRID} mb-1 border border-transparent font-mono text-[10px] uppercase tracking-wide xs:text-[11px] xs:tracking-widest`}
+            style={{ color: FG2, animation: 'rowSlideIn 0.45s ease 3.5s both' }}
           >
-            <span
-              className="w-8 shrink-0 font-mono text-[10px] uppercase tracking-wider sm:w-12 sm:text-[11px] sm:tracking-widest"
-              style={{ color: FG2 }}
-            >
-              Rank
-            </span>
-            <span className="hidden w-8 shrink-0 sm:block" />
-            <span
-              className="min-w-0 flex-1 font-mono text-[10px] uppercase tracking-wider sm:text-[11px] sm:tracking-widest"
-              style={{ color: FG2 }}
-            >
-              Player
-            </span>
-            <span
-              className="w-[4.5rem] shrink-0 whitespace-nowrap text-right font-mono text-[10px] uppercase tracking-wider sm:w-24 sm:text-[11px] sm:tracking-widest"
-              style={{ color: FG2 }}
-            >
-              Score
-            </span>
-            <span
-              className="w-12 shrink-0 text-right font-mono text-[10px] uppercase tracking-wider sm:w-24 sm:text-[11px] sm:tracking-widest"
-              style={{ color: FG2 }}
-            >
-              Streak
-            </span>
-            <span
-              className="w-12 shrink-0 text-right font-mono text-[10px] uppercase tracking-wider sm:w-20 sm:text-[11px] sm:tracking-widest"
-              style={{ color: FG2 }}
-            >
-              Acc
-            </span>
+            <span>Rank</span>
+            <span>Player</span>
+            <span className="text-right">Score</span>
+            <span className="text-right">Streak</span>
+            <span className="text-right">Acc</span>
           </div>
 
           {sorted.map((player, index) => {
@@ -270,7 +247,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
             return (
               <div
                 key={player.name}
-                className="flex items-center gap-2 rounded-xl px-2 py-3 sm:gap-3 sm:px-3"
+                className={`${RESULTS_GRID} rounded-xl py-3`}
                 style={{
                   animation: `scoreboardRowIn 0.55s cubic-bezier(0.22,1,0.36,1) ${rowDelay}s both`,
                   background: medal
@@ -288,43 +265,49 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
                   boxShadow: isCurrentPlayer ? `0 0 22px color-mix(in oklab, ${PRIMARY} 18%, transparent)` : 'none',
                 }}
               >
-                <span className="w-8 shrink-0 font-outfit text-sm font-extrabold sm:w-12" style={{ color: rowColor }}>
+                <span className="font-outfit text-sm font-extrabold" style={{ color: rowColor }}>
                   {tied ? '=' : ''}
                   {rank + 1}
                 </span>
 
-                <div className="hidden sm:block">
-                  <Avatar letter={player.name[0]} color={avatarColor(player.name)} size={32} />
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className="hidden shrink-0 xs:block">
+                    <Avatar letter={player.name[0]} color={avatarColor(player.name)} size={32} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <span
+                      className="block truncate font-outfit text-[13px] font-semibold xs:text-[15px]"
+                      style={{ color: rowColor }}
+                      title={player.name}
+                    >
+                      {player.name}
+                    </span>
+                    {isCurrentPlayer && (
+                      <div className="mt-1 flex items-center gap-1 font-mono text-[9px] uppercase tracking-wide xs:text-[10px]">
+                        <span
+                          className="rounded-full px-1.5 py-0.5"
+                          style={{
+                            color: PRIMARY,
+                            background: `color-mix(in oklab, ${PRIMARY} 16%, transparent)`,
+                            border: `1px solid color-mix(in oklab, ${PRIMARY} 38%, transparent)`,
+                          }}
+                        >
+                          You
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                <span className="min-w-0 flex-1 font-outfit text-[15px] font-semibold" style={{ color: rowColor }}>
-                  {player.name}
-                  {isCurrentPlayer && (
-                    <span
-                      className="ml-2 rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest"
-                      style={{
-                        color: PRIMARY,
-                        background: `color-mix(in oklab, ${PRIMARY} 16%, transparent)`,
-                        border: `1px solid color-mix(in oklab, ${PRIMARY} 38%, transparent)`,
-                      }}
-                    >
-                      You
-                    </span>
-                  )}
-                </span>
-
-                <span
-                  className="w-[4.5rem] shrink-0 whitespace-nowrap text-right font-mono text-xs sm:w-24 sm:text-sm"
-                  style={{ color: FG2 }}
-                >
+                <span className="whitespace-nowrap text-right font-mono text-xs xs:text-sm" style={{ color: FG2 }}>
                   {player.isWinner ? `Won Rd ${playerScore(player)}` : `Rd ${playerScore(player)}`}
                 </span>
 
-                <span className="w-12 shrink-0 text-right font-mono text-sm sm:w-24" style={{ color: FG2 }}>
+                <span className="whitespace-nowrap text-right font-mono text-xs xs:text-sm" style={{ color: FG2 }}>
                   {player.longestStreak}
                 </span>
 
-                <span className="w-12 shrink-0 text-right font-mono text-sm sm:w-20" style={{ color: FG2 }}>
+                <span className="whitespace-nowrap text-right font-mono text-xs xs:text-sm" style={{ color: FG2 }}>
                   {accuracyPercent(player)}%
                 </span>
               </div>
