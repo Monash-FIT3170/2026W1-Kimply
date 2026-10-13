@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Meteor } from 'meteor/meteor';
-import { GhostButton, TILE } from '../components/design';
+import { CloseIcon, GhostButton, TILE } from '../components/design';
 import { AbilityCard, AbilityDialog } from './AbilityDialog.jsx';
 import { abilityGuide } from './abilityFeed';
 
@@ -112,31 +112,44 @@ function AbilityGuide({ guide, onClose }) {
       labelledBy="ability-guide-title"
       eyebrow={`Abilities · ${guide.count} cards`}
       title="Know your cards"
+      aside={
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close the card guide"
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[10px] border border-hairline text-fg2 transition-colors duration-[120ms] hover:bg-surface2 hover:text-fg"
+        >
+          <CloseIcon size={14} />
+        </button>
+      }
       footer={
         <div className="flex">
           <GhostButton onClick={onClose}>Close · Esc</GhostButton>
         </div>
       }
     >
-      <p className="font-manrope text-[14px] font-medium leading-snug text-fg2">{guide.intro}</p>
-      {guide.sections.map((section) => (
-        <section key={section.key} aria-labelledby={`ability-guide-${section.key}`} className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1">
-            <h3
-              id={`ability-guide-${section.key}`}
-              className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-fg3"
-            >
-              {section.title}
-            </h3>
-            <p className="font-manrope text-[13px] font-medium leading-snug text-fg2">{section.note}</p>
-          </div>
-          <div className="grid grid-cols-1 gap-3 xs:grid-cols-2">
-            {section.types.map((type) => (
-              <AbilityCard key={type} type={type} />
-            ))}
-          </div>
-        </section>
-      ))}
+      {/* Only the cards scroll, so the header's close button and the footer stay in reach. */}
+      <div className="-mr-3 flex min-h-0 flex-col gap-5 overflow-y-auto pr-3">
+        <p className="font-manrope text-[14px] font-medium leading-snug text-fg2">{guide.intro}</p>
+        {guide.sections.map((section) => (
+          <section key={section.key} aria-labelledby={`ability-guide-${section.key}`} className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1">
+              <h3
+                id={`ability-guide-${section.key}`}
+                className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-fg3"
+              >
+                {section.title}
+              </h3>
+              <p className="font-manrope text-[13px] font-medium leading-snug text-fg2">{section.note}</p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 xs:grid-cols-2">
+              {section.types.map((type) => (
+                <AbilityCard key={type} type={type} />
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
     </AbilityDialog>
   );
 }

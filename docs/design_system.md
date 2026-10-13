@@ -345,7 +345,8 @@ A drawer from the left above `xs`, a bottom sheet below; open by default from 12
 ### Ability guide
 A lobby button, `SEE THE CARDS` with a mono count of the cards this game can deal, opens a modal in the Ability draft's shell.
 Mono eyebrow (`ABILITIES · 9 CARDS`), the H2 `Know your cards`, one Manrope 14px line on how the draft deals, then a section per timing (`BEFORE THE ROUND`, `DURING THE ROUND`): a mono label, one Manrope 13px note, and read-only ability cards, one column on phones and two from `xs`.
-A Close ghost button with `Esc` ends it.
+A close icon button (44px, hairline, 10px radius, as on the Live feed) sits top right, and a Close ghost button with `Esc` ends it too.
+Only the cards scroll, so the header and the footer stay in reach on a phone.
 The button is a 44px pill beside the host's Switch, and a 36px pill inside a 44px hit target beside the joined view's chips, so it sits level with them.
 It shows only while abilities are on.
 
