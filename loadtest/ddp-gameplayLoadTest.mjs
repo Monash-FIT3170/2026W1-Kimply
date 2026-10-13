@@ -26,6 +26,7 @@
 import WebSocket from "ws";
 import { appendFileSync } from "fs";
 import { fileURLToPath } from "url";
+import { randomBytes } from "node:crypto";
 import { dirname, join } from "path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -347,6 +348,10 @@ async function joinGame(participant, pin) {
       currentRound._id,
       name,
       pin,
+      null,
+      false,
+      null,
+      randomBytes(32).toString("base64url"),
     ]);
     return playerId;
   } catch (e) {

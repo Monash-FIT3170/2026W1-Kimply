@@ -331,6 +331,8 @@ Panel with a 4px tile-gradient band across the top edge, mono uppercase label, 5
 
 ### Ability draft
 A modal over the game screen, which stays visible behind a blurred `--bg` scrim.
+The draft and held-card shell use a native modal dialog: the background is inert, Tab and Shift+Tab stay in the dialog, and closing restores focus to the opener when it is still present.
+Escape retains its contextual behavior (skip, back, or close).
 Surface card (18px radius) holding a mono eyebrow (`LEVEL 3 · ABILITY DRAFT`), an H2, a pulse-meta countdown at the top right, then 3 ability cards (one column on phones, three from `xs`), then a footer line and a Skip ghost button with an `Esc` key hint.
 Picking a card that needs a target replaces the cards with the target picker in the same card, with a Back ghost button.
 After a pick, the card shows what was locked in until the draft closes.

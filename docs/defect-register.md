@@ -254,6 +254,21 @@ The cost of leaving it is that every branch inherits the dirt, so no diff can be
 
 ---
 
+## D25 - Ability dialogs let keyboard focus reach the background - **fixed 2026-10-13**
+
+The ability shell initially focused its panel but neither trapped focus nor made the game behind it inert.
+Reproduced in the browser: opening Play a card and pressing Tab three times focused the obscured Feed button.
+The shell now opens a native modal `dialog`, retains the draft and hand's Escape behavior, and restores focus to the mounted opener on close.
+
+## D24 - Public player IDs can take over private game state - **fixed 2026-10-13**
+
+`players.rebind` accepted any published player ID, and `players.join` could rebind an existing player from its public lobby ID.
+Reproduced with two DDP connections: a guest received the host's private sequence and chose the host's ability after rebinding.
+Both paths now require a random per-tab credential whose hash stays server-side.
+First client joins also verify lobby connection ownership and round membership.
+Legacy players can enroll a credential only on their existing owning connection, so an attacker cannot claim an uncredentialed player after a deploy.
+This fixes the new private-state takeover; D3 remains open for other game and room mutations.
+
 ## D23 - Local hot reload cannot reach Rspack's WebSocket - **fixed 2026-10-12**
 
 The local app loaded on port 3000, but the browser's Rspack client repeatedly failed to connect to `ws://localhost:8080/ws`.

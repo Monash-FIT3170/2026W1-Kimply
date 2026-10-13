@@ -20,6 +20,29 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-13 - Reconnect ownership and ability-dialog keyboard focus
+
+PR #141 review reproduced a guest rebinding the host's public player ID, receiving the host's private sequence and picking the host's card (D24).
+The game now supplies a random per-tab credential to `players.join` and `players.rebind`, with only its SHA-256 hash stored on the server and excluded from publications.
+Both rebinding paths verify that credential.
+A first client join checks lobby connection ownership and round membership; omitting the lobby ID derives only the caller's own membership.
+Anonymous play is preserved.
+Session storage survives refresh; an in-memory fallback still handles network reconnects when storage is blocked.
+Legacy players without a hash can enroll only on the original owning connection; a legacy session that already lost that connection must join a new game.
+The gameplay load harness supplies the new credential while retaining the string player-ID return value.
+
+Three Tab presses in the held-card dialog reached the obscured Feed button (D25).
+The shared ability shell now uses a native modal `dialog`, which makes the background inert and contains keyboard focus.
+The draft and hand keep their existing Escape behavior, and focus returns to the opener on close when it remains mounted.
+
+Validation: the original ownership regressions failed before the fix, and all 204 server tests passed in full-app mode afterward.
+Two real DDP connections verified rejected takeover attempts and a valid reconnect surviving the disconnect grace period.
+Browser checks verified anonymous entry, refresh preserving the player, modal focus cycling, Escape restoration, and a 375px layout.
+
+Files: `app/imports/api/gameMethods.js`, `app/server/publications.js`, `app/imports/ui/gameReconnect.js`, `app/imports/ui/pages/GamePage.jsx`, `app/imports/ui/abilities/AbilityDialog.jsx`, `app/tests/playerReconnect.test.js`, `loadtest/ddp-gameplayLoadTest.mjs`, `AGENTS.md`, `docs/defect-register.md`, `docs/design_system.md`.
+
+---
+
 ## 2026-10-13 - ECS deploys wait out the canary alarm bake
 
 Every `dev` deploy since 2026-10-06 failed in **Deploy to ECS** with `rollout still IN_PROGRESS after 1800s`, although each release went live and ECS later marked it `COMPLETED` (#146).
