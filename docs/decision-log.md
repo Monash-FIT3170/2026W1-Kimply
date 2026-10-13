@@ -20,6 +20,18 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-13 - ECS deploys wait out the canary alarm bake
+
+Every `dev` deploy since 2026-10-06 failed in **Deploy to ECS** with `rollout still IN_PROGRESS after 1800s`, although each release went live and ECS later marked it `COMPLETED` (#146).
+With alarm-based rollback (D31 in [ecs-target-architecture.md](ecs-target-architecture.md)), ECS keeps a rolling deployment `IN_PROGRESS` until it has watched the canary alarm for its period x evaluation periods after the new tasks are healthy.
+The canary runs every 15 minutes and the alarm needs 2 periods, so that is 30 minutes, and the seven rollouts measured completed 32m15s to 32m35s after their task started, today's 2m48s after the script gave up.
+`ROLLOUT_TIMEOUT` in `deploy/ecs-deploy.sh` was 1800 from `update-service`, so the script could never see the outcome. It is now 2700.
+The ceiling is the GitHub OIDC session: both `*-github-deploy` roles allow 1 hour, and the readiness probe and failure diagnostics still have to run after the wait.
+A green deploy job therefore now takes about 35 minutes. That is the price of the bake: returning before `COMPLETED` would report success for a release the alarm can still roll back.
+Changing `canary_rate_minutes` moves the bake with it. The canary alarm in `infra/terraform/modules/kimply-ecs/monitoring.tf` now says so.
+
+---
+
 ## 2026-10-12 - Slo-Mo, 2x Speed and Lights Out abilities; round-6 Slow Motion removed
 
 Three hostile pre-round cards change how another player's sequence plays back: Slo-Mo (half speed), 2x Speed (double speed, floored at `MIN_FLASH_MS` / `MIN_GAP_MS` so a fast room stays watchable) and Lights Out (the board fades to dark and back all round).
