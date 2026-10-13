@@ -20,6 +20,19 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-13 - Ability guide in the lobby
+
+Players were reading cards for the first time inside a 20-second draft (#148).
+Both lobby views now carry a `SEE THE CARDS` button, shown while abilities are on, that opens every card the room can deal, grouped into before-the-round and during-the-round cards, with one line on how the draft deals.
+The list comes from `eligibleAbilities` with the room's mode and starting lives, the same call the server deals from, so Jump appears only in Battle Royale and Steal disappears whenever players start on 1 life (Hard and Battle Royale), with a line saying why.
+The draft-order note names only the cards that are dealt, so a 1-life room does not promise Steals first.
+`AbilityCard` renders a read-only `div` when it has no `onClick`, so the guide reuses the draft's card instead of a copy.
+The joined view's button draws a 36px pill inside its 44px hit target to sit level with the mode and abilities chips.
+In the same lobby, a player row truncated a short name like "Guest" to "Gue..." to keep the "· you" suffix; the suffix now gives way first, since the tinted row already marks you.
+Files: `app/imports/ui/abilities/LobbyAbilities.jsx`, `app/imports/ui/abilities/abilityFeed.js`, `app/imports/ui/abilities/AbilityDialog.jsx`, `app/imports/ui/pages/PlayerLobby.jsx`, `app/tests/abilityFeed.test.js`, `docs/design_system.md`, `AGENTS.md`.
+
+---
+
 ## 2026-10-13 - ECS deploys wait out the canary alarm bake
 
 Every `dev` deploy since 2026-10-06 failed in **Deploy to ECS** with `rollout still IN_PROGRESS after 1800s`, although each release went live and ECS later marked it `COMPLETED` (#146).

@@ -2,7 +2,7 @@
 
 Multiplayer memory challenge. This document is the single source of truth for how Kimply looks, sounds, and behaves. Check here before designing or building anything new.
 
-**Status:** v0.5 · Active
+**Status:** v0.6 · Active
 **Owner:** Design
 
 ---
@@ -287,6 +287,7 @@ Avatar (32px circle, gradient from assigned tile color, `--bg` initial) → name
 `--surface-2` fill, hairline border, 14px radius, 16px padding with 20px on top, and a 4px band across the top edge in the card's tile accent.
 Label in Outfit 700 18px, description in Manrope 500 13px `--fg-2`, then mono 10px uppercase tags (`PICK A PLAYER`, `SAVED UNTIL USED`) in the accent.
 A key hint (`1`, `2`, `3`) sits top right. Hover and focus lift 2px and turn the border to the accent.
+Read-only where nothing is being chosen (the Ability guide): same card, no key hint, no lift.
 
 | Accent | Cards | Meaning |
 |---|---|---|
@@ -340,6 +341,13 @@ Surface panel (16px radius, `--surface` at 82% over a blur) with an H2-sized "Li
 Each row is a 12px-radius card with a 4px left edge in the card's tile accent (pink for eliminations), the sentence in Manrope 13px, and a mono 10px uppercase line: `ROUND 3 · STRIKE · BLOCKED`.
 Rows involving the viewer are raised (`--surface-2`, `--fg-3` border, semibold text, a `YOU` chip); rows aimed at the viewer use a pink edge and an `AT YOU` chip.
 A drawer from the left above `xs`, a bottom sheet below; open by default from 1280px. The Feed button carries an unread badge, amber, or pink when an unread row was aimed at the viewer.
+
+### Ability guide
+A lobby button, `SEE THE CARDS` with a mono count of the cards this game can deal, opens a modal in the Ability draft's shell.
+Mono eyebrow (`ABILITIES · 9 CARDS`), the H2 `Know your cards`, one Manrope 14px line on how the draft deals, then a section per timing (`BEFORE THE ROUND`, `DURING THE ROUND`): a mono label, one Manrope 13px note, and read-only ability cards, one column on phones and two from `xs`.
+A Close ghost button with `Esc` ends it.
+The button is a 44px pill beside the host's Switch, and a 36px pill inside a 44px hit target beside the joined view's chips, so it sits level with them.
+It shows only while abilities are on.
 
 ### Target picker
 Mono label with the count (`PLAYERS (7)`), a text input that filters by name, then player rows (avatar, name, mono `LEVEL 4 · 2 LIVES`).
@@ -468,3 +476,4 @@ The system grows by addition, not by drift.
 | v0.3 | 2026-09-22 | Adds the Third-party sign-in pattern for Google sign-in on the Account page. |
 | v0.4 | 2026-10-11 | Adds the Ability card, Key hint, Segmented toggle and Switch components, and the Ability draft, Target picker and Live feed patterns, for round abilities. |
 | v0.5 | 2026-10-12 | Adds the `lightsOut` animation and the Playback effect chip for the Slo-Mo, 2x Speed and Lights Out abilities. |
+| v0.6 | 2026-10-13 | Adds the Ability guide pattern and the read-only Ability card, so the lobby can show every card before the game. |
