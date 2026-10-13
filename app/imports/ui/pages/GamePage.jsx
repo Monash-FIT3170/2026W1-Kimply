@@ -19,6 +19,7 @@ import { DraftOverlay } from '../abilities/DraftOverlay.jsx';
 import { HandDialog } from '../abilities/HandDialog.jsx';
 import { KeyHint } from '../abilities/AbilityDialog.jsx';
 import { useAbilityNotices } from '../abilities/useAbilityNotices';
+import { gameReconnectToken, forgetGameReconnectToken } from '../gameReconnect';
 import {
   ROUND_TIMER_SECONDS as ROUND_SECONDS,
   LEVEL_UP_TOAST_MS,
@@ -151,6 +152,7 @@ export const GamePage = () => {
       }
 
       localStorage.removeItem(`gamePlayerId:${gameId}`);
+      forgetGameReconnectToken(gameId, lobbyPlayerId);
       localStorage.removeItem('reconnectData');
       navigate('/play', { replace: true, state: playerAccount ? { playerAccount } : undefined });
     });
@@ -180,12 +182,6 @@ export const GamePage = () => {
   };
 
   useEffect(() => {
-    if (!gameId || lobbyPlayerId) return;
-    const savedPlayerId = localStorage.getItem(`gamePlayerId:${gameId}`);
-    if (savedPlayerId) setPlayerId(savedPlayerId);
-  }, [gameId, lobbyPlayerId]);
-
-  useEffect(() => {
     if (!gameId) return undefined;
     const roundsSub = Meteor.subscribe('rounds', gameId);
     const playersSub = Meteor.subscribe('players', gameId);
@@ -206,12 +202,12 @@ export const GamePage = () => {
   const wasConnectedRef = useRef(connected);
   useEffect(() => {
     if (connected && !wasConnectedRef.current && playerId) {
-      Meteor.call('players.rebind', playerId, (error) => {
+      Meteor.call('players.rebind', playerId, gameReconnectToken(gameId, lobbyPlayerId), (error) => {
         if (error) setMessage('Lost track of your game after reconnecting. Refresh to rejoin.');
       });
     }
     wasConnectedRef.current = connected;
-  }, [connected, playerId]);
+  }, [connected, playerId, gameId, lobbyPlayerId]);
 
   const player = useTracker(() => {
     if (!playerId) return null;
@@ -319,6 +315,14 @@ export const GamePage = () => {
   useEffect(() => {
     // Wait for a stored session to resume, or the player would join without their account.
     if (!round?._id || playerId || sessionResuming) return;
+    const savedPlayerId = !lobbyPlayerId && localStorage.getItem(`gamePlayerId:${gameId}`);
+    if (savedPlayerId) {
+      Meteor.call('players.rebind', savedPlayerId, gameReconnectToken(gameId, lobbyPlayerId), (error) => {
+        if (error) setMessage('Could not reconnect to your game. Join a new room to play.');
+        else setPlayerId(savedPlayerId);
+      });
+      return;
+    }
     Meteor.call(
       'players.join',
       round._id,
@@ -327,6 +331,7 @@ export const GamePage = () => {
       lobbyPlayerId,
       isBattleRoyale,
       accountId,
+      gameReconnectToken(gameId, lobbyPlayerId),
       (error, result) => {
         if (error) {
           console.error(error);
@@ -699,7 +704,18 @@ export const GamePage = () => {
     );
   }
 
-  if (!player) return null;
+  if (!player) {
+    return message ? (
+      <main className="flex min-h-[100dvh] flex-col items-center justify-center gap-5 bg-bg px-6 text-center text-fg">
+        <p role="alert" className="font-manrope text-sm">
+          {message}
+        </p>
+        <a href="/play" className="font-outfit text-sm font-semibold text-primary">
+          Join or create a room
+        </a>
+      </main>
+    ) : null;
+  }
 
   if (player.gameFinished) {
     return (

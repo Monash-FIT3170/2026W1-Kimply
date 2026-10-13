@@ -1,4 +1,5 @@
 import { Meteor } from 'meteor/meteor';
+import { createHash } from 'crypto';
 import { RoundsCollection } from './rounds';
 import { PlayersCollection } from './players';
 import { LeaderboardCollection } from './leaderboard';
@@ -17,6 +18,27 @@ import {
 import { dealLevelUpDraft, dealRoundDrafts, gameContext, newRoundDraft } from './abilityEngine';
 import './abilities';
 import { DEFAULT_SEQUENCE_LENGTH, DEFAULT_STARTING_LIVES, INITIAL_LEVEL, DISCONNECT_GRACE_MS } from '../constants';
+
+function reconnectHash(token) {
+  if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) {
+    throw new Meteor.Error('not-yours', 'Your game reconnect credential is missing or invalid');
+  }
+  return createHash('sha256').update(token).digest('hex');
+}
+
+async function rebindPlayer(player, connectionId, token) {
+  const hash = reconnectHash(token);
+  // A player created before credentials existed can enroll only on its owning
+  // connection. Knowing a public player or lobby ID never grants that right.
+  const enroll = !player.reconnectTokenHash && connectionId && player.connectionId === connectionId;
+  const selector = enroll
+    ? { _id: player._id, connectionId, reconnectTokenHash: { $exists: false } }
+    : { _id: player._id, reconnectTokenHash: hash };
+  const updated = await PlayersCollection.updateAsync(selector, {
+    $set: { connectionId, connected: true, ...(enroll ? { reconnectTokenHash: hash } : {}) },
+  });
+  if (!updated) throw new Meteor.Error('not-yours', 'This reconnect credential does not belong to that player');
+}
 
 if (Meteor.isServer && !global._gameMethodsInitialized) {
   global._gameMethodsInitialized = true;
@@ -54,19 +76,38 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       gameId = null,
       lobbyPlayerId = null,
       isBattleRoyale = false,
-      accountId = null
+      accountId = null,
+      reconnectToken = null
     ) {
       const connectionId = this.connection?.id ?? null;
+      const room = await RoomsCollection.findOneAsync({ pin: gameId });
+      const round = await RoundsCollection.findOneAsync(roundId);
+      if (connectionId) {
+        if (!room || !round || round.gameId !== gameId) {
+          throw new Meteor.Error('invalid-game', 'Choose a round in your game');
+        }
+        // Older callers omit the lobby ID. Derive it only from their own room
+        // membership, rather than allowing another unbound player to be minted.
+        if (!lobbyPlayerId) {
+          lobbyPlayerId = room.players?.find((p) => p.connectionId === connectionId && p.name === playerName)?.id;
+          if (!lobbyPlayerId) throw new Meteor.Error('not-yours', 'Join the lobby before entering the game');
+        }
+      }
       if (lobbyPlayerId) {
         const existing = await PlayersCollection.findOneAsync({ gameId, lobbyPlayerId });
         if (existing) {
-          await PlayersCollection.updateAsync(existing._id, { $set: { connectionId, connected: true } });
+          await rebindPlayer(existing, connectionId, reconnectToken);
           return existing._id;
         }
       }
 
-      const room = await RoomsCollection.findOneAsync({ pin: gameId });
-      const round = await RoundsCollection.findOneAsync(roundId);
+      if (connectionId && lobbyPlayerId) {
+        const member = room?.players?.find((p) => p.id === lobbyPlayerId);
+        if (!member || member.connectionId !== connectionId) {
+          throw new Meteor.Error('not-yours', 'That lobby player does not belong to your connection');
+        }
+      }
+      const reconnectTokenHash = connectionId || reconnectToken ? reconnectHash(reconnectToken) : null;
       const startingLives = room?.customSettings?.startingLives
         ? room.customSettings.startingLives
         : DEFAULT_STARTING_LIVES;
@@ -94,6 +135,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         eliminatedAt: null,
         connectionId,
         connected: true,
+        ...(reconnectTokenHash ? { reconnectTokenHash } : {}),
         // Only ever published to this player's own connection (players.secret).
         secret: { sequence: round ? sequenceState(roundId, round.sequence) : null, hand: [] },
       });
@@ -101,11 +143,12 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
 
     // Point a player at the caller's connection again. A DDP reconnect opens a new
     // connection, and without this the disconnect grace timer removes the player.
-    async 'players.rebind'(playerId) {
+    async 'players.rebind'(playerId, reconnectToken) {
       if (typeof playerId !== 'string' || !playerId) throw new Meteor.Error('invalid', 'Invalid player');
       const connectionId = this.connection?.id ?? null;
-      const updated = await PlayersCollection.updateAsync(playerId, { $set: { connectionId, connected: true } });
-      if (!updated) throw new Meteor.Error('not-found', 'Player not found');
+      const player = await PlayersCollection.findOneAsync(playerId);
+      if (!player) throw new Meteor.Error('not-found', 'Player not found');
+      await rebindPlayer(player, connectionId, reconnectToken);
       return true;
     },
 
