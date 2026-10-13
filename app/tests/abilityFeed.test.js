@@ -1,5 +1,6 @@
 import assert from 'assert';
 import {
+  abilityGuide,
   abilityTags,
   buildFeedRows,
   describeAbilityEvent,
@@ -20,6 +21,46 @@ describe('ability feed', function () {
 
     it("keeps everything in the 'everyone' feed", function () {
       assert.strictEqual(isInFeed('everyone', 'zoe', { playerId: 'ian', targetId: 'sam' }), true);
+    });
+  });
+
+  describe('abilityGuide', function () {
+    const typesOf = (guide) => Object.fromEntries(guide.sections.map((s) => [s.key, s.types]));
+
+    it('lists every card a standard game deals, by when it is played', function () {
+      const guide = abilityGuide();
+      assert.deepStrictEqual(typesOf(guide), {
+        pre: ['steal', 'strike', 'shield', 'slowMo', 'fastForward', 'lightsOut'],
+        in: ['freePass', 'reroll', 'scramble'],
+      });
+      assert.strictEqual(guide.count, 9);
+      assert.strictEqual(
+        guide.sections[0].note,
+        'They all land together when the draft closes: Steals first, then Strikes, then the rest.'
+      );
+      assert.match(
+        guide.intro,
+        /^From round 2, before every round, you are dealt 3 cards\. Pick 1 or skip within 20 seconds\.$/
+      );
+    });
+
+    it('adds Jump and the level-up draft in Battle Royale', function () {
+      const guide = abilityGuide({ isBattleRoyale: true });
+      assert.deepStrictEqual(typesOf(guide).in, ['freePass', 'reroll', 'scramble', 'jump']);
+      assert.strictEqual(guide.count, 10);
+      assert.match(guide.intro, /^Every time you level up/);
+      assert.match(guide.sections[0].note, /next level/);
+    });
+
+    it('leaves Steal out, and says why, when everyone starts on 1 life', function () {
+      const guide = abilityGuide({ startingLives: 1 });
+      assert.ok(!typesOf(guide).pre.includes('steal'));
+      assert.strictEqual(guide.count, 8);
+      assert.strictEqual(
+        guide.sections[0].note,
+        'They all land together when the draft closes: Strikes first, then the rest.'
+      );
+      assert.match(guide.intro, /Steal is left out: everyone starts on 1 life\.$/);
     });
   });
 

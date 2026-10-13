@@ -66,16 +66,19 @@ export function KeyHint({ children }) {
   );
 }
 
-// One ability as a pickable card.
+// One ability as a pickable card, or a read-only one (the lobby's guide) without onClick.
 export function AbilityCard({ type, keyHint, onClick, disabled = false, compact = false }) {
   const ability = ABILITIES[type];
   const accent = TILE[ABILITY_ACCENTS[type]] ?? TILE.amber;
+  const Card = onClick ? 'button' : 'div';
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="relative flex min-h-11 w-full flex-col gap-2 overflow-hidden rounded-xl2 border border-hairline bg-surface2 p-4 pt-5 text-left transition-[border-color,transform] duration-[120ms] hover:-translate-y-0.5 hover:border-[color:var(--accent)] focus-visible:-translate-y-0.5 focus-visible:border-[color:var(--accent)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:border-hairline"
+    <Card
+      {...(onClick ? { type: 'button', onClick, disabled } : {})}
+      className={`relative flex min-h-11 w-full flex-col gap-2 overflow-hidden rounded-xl2 border border-hairline bg-surface2 p-4 pt-5 text-left ${
+        onClick
+          ? 'transition-[border-color,transform] duration-[120ms] hover:-translate-y-0.5 hover:border-[color:var(--accent)] focus-visible:-translate-y-0.5 focus-visible:border-[color:var(--accent)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:border-hairline'
+          : ''
+      }`}
       style={{ '--accent': accent }}
     >
       <span className="absolute inset-x-0 top-0 h-1" style={{ background: accent }} />
@@ -97,6 +100,6 @@ export function AbilityCard({ type, keyHint, onClick, disabled = false, compact 
           </span>
         ))}
       </span>
-    </button>
+    </Card>
   );
 }

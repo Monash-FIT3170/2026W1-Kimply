@@ -3,7 +3,7 @@ import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { Meteor } from 'meteor/meteor';
 import { useSubscribe, useTracker } from 'meteor/react-meteor-data';
 import { RoomsCollection } from '/imports/api/rooms';
-import { AbilitiesChip, AbilitiesSwitch } from '../abilities/LobbyAbilities.jsx';
+import { AbilitiesChip, AbilitiesSwitch, AbilityGuideButton } from '../abilities/LobbyAbilities.jsx';
 import { ConfirmationPopup } from '../components/ConfirmationPopup';
 import {
   PRIMARY,
@@ -59,7 +59,7 @@ function PlayerRow({ player, isYou, onKick }) {
     // Fixed height so rows with a kick button match the host's own row. The kick button's
     // touch target already carries its own space, so those rows need less right padding.
     // Your own row is tinted like the leaderboards do, since in a narrow grid card the
-    // "· you" suffix can truncate away.
+    // "· you" suffix can truncate away. It gives way before the name does.
     <div
       className={`flex h-[52px] shrink-0 items-center gap-3 rounded-xl border border-hairline bg-surface pl-3.5 xs:h-12 ${
         onKick ? 'pr-1 xs:pr-2' : 'pr-3.5'
@@ -74,9 +74,9 @@ function PlayerRow({ player, isYou, onKick }) {
       }
     >
       <Avatar letter={player.name[0]?.toUpperCase()} color={color} size={28} />
-      <div className="min-w-0 flex-1 truncate font-outfit text-sm font-semibold text-fg">
-        {player.name}
-        {isYou && <span className="ml-1.5 font-medium text-fg3">· you</span>}
+      <div className="flex min-w-0 flex-1 items-baseline font-outfit text-sm font-semibold text-fg">
+        <span className="max-w-full shrink-0 truncate">{player.name}</span>
+        {isYou && <span className="ml-1.5 min-w-0 truncate font-medium text-fg3">· you</span>}
       </div>
       {onKick ? (
         <button
@@ -235,6 +235,9 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
               </span>
             </div>
             <AbilitiesSwitch pin={room.pin} enabled={room.abilitiesEnabled === true} />
+            {room.abilitiesEnabled === true && (
+              <AbilityGuideButton gameMode={gameMode} startingLives={room.customSettings?.startingLives} />
+            )}
           </div>
 
           <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-fg3">Your Room Code</p>
@@ -381,6 +384,9 @@ function JoinedView({ room, playerName, playerId, onBack, navigate, gameMode, cu
               <span className="font-outfit text-sm font-semibold text-bg">{getGameModeLabel(selectedGameMode)}</span>
             </div>
             <AbilitiesChip enabled={room.abilitiesEnabled === true} />
+            {room.abilitiesEnabled === true && (
+              <AbilityGuideButton gameMode={selectedGameMode} startingLives={room.customSettings?.startingLives} slim />
+            )}
           </div>
           <div className="flex items-center justify-between">
             <p className="font-outfit text-sm font-bold uppercase tracking-widest text-fg2">

@@ -414,6 +414,7 @@ Steal, Strike, Shield and the playback cards resolve when the draft closes (all 
 Slo-Mo and 2x Speed halve or double the target's playback speed for the round, replays included; Lights Out fades their board to dark and back all round. A target takes at most one speed change and one Lights Out per round: the first to land wins and a second misses.
 Free Pass and Jump stay in the hand until played; Reroll and Scramble expire with their round.
 The rules and copy live in `abilityRules.js`; the server work in `abilityEngine.js`.
+The lobby's `SEE THE CARDS` guide (`ui/abilities/LobbyAbilities.jsx`, built by `abilityGuide` in `abilityFeed.js`) lists every card the room can deal, from the same `eligibleAbilities` the server deals with, so it cannot drift from the draft.
 
 | Method | Line | Args | Description |
 |---|---|---|---|
@@ -500,7 +501,7 @@ How to write and run them is the `test` skill. What exists today:
 | `publications.test.js` | scoped pubs; no `sequence` on `rounds`; no `attemptedSequence` or `secret` on `players` / `eliminations`; `players.secret` is connection-bound; `gameFeed` |
 | `abilityRules.test.js` | dealing, eligibility, Shield, hand expiry, caller binding, `playbackFor` and `playbackTiming` |
 | `abilities.test.js` | draft dealing, resolution order, Shield, Steal and Strike outcomes, Slo-Mo / 2x Speed / Lights Out landing, stacking, lapsing and Battle Royale pending, Free Pass, Reroll, Scramble, Jump, `rooms.setAbilities` |
-| `abilityFeed.test.js` | feed rows, scope filtering and the wording of ability notices, playback cards included |
+| `abilityFeed.test.js` | feed rows, scope filtering and the wording of ability notices, playback cards included; the lobby card guide per mode and starting lives |
 | `leaderboardModel.test.js` | live leaderboard row helpers in `leaderboardModels.js`; independent Battle Royale levels, recorded elimination levels, and shared standard-round levels |
 | `leaveGame.test.js` | spectator departure retains their result and allows the game to finish |
 
