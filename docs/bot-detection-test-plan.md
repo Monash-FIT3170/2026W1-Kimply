@@ -1,5 +1,8 @@
 # Bot detection: what is left to test
 
+**Verification update 2026-10-12:** [Executed results and remaining failures](bot-detection-test-results.md).
+D44 and D45 prevent sign-off; the server suites and formatting check pass.
+
 For the next session. The branch is `142-bot-detector`. The worktree is `.claude/worktrees/142-bot-detection`. The main checkout is on another branch and is serving port 3000. Do not edit it, and do not start a second compose project on ports 3000 or 27017.
 
 Issue: #142. Detection is built on the round-abilities player (`players.secret.sequence`, drafts, `players.rebind`). Pull request #141 is the abilities review. This branch contains that work too, because detection cannot run on `origin/dev` without it.

@@ -540,6 +540,8 @@ One line each, so a review can cite an ID without opening anything.
 | D11 | root `package-lock.json` | Desynced against an empty root `package.json`, so `npm ci` at the repo root fails |
 | D12 | `ColourSequence.jsx:80-92` | A new `AudioContext` per tile click, never closed |
 | D14 | repo-wide | `npm run format:check` fails on `main`. Needs one dedicated formatting commit before it can gate CI |
+| D44 | `roomBans.js`, trusted proxy handling | Spoofed forwarded headers yield no client address, so removal writes no IP ban and a fresh session bypasses it |
+| D45 | Production-mode Rspack CSS serving | Local `meteor run --production` returns HTTP 500 for the main CSS chunk, leaving the browser unstyled |
 
 Fixed and kept for history in the register: D1, D2, D9, D10, D15, D16, D17, D18, D19, D20, D21, D22.
 

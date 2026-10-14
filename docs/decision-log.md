@@ -20,6 +20,23 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-12 - Chrome automation remains below the timing detector threshold
+
+Ran three real point-and-click attempts in a fresh Chrome Incognito session with detection enabled.
+The Chrome agent retained five of eight fixture lives, accumulated zero bot strikes, and stayed connected.
+A machine-speed DDP control against the same app was removed on its third attempt.
+Recorded the comparison and screenshot in `docs/bot-detection-test-results.md` and `docs/test-evidence/bot-detection/chrome-agent-gameplay.png`.
+This verifies a limitation of the chosen heuristic, not coverage of the Claude Chrome extension itself.
+
+## 2026-10-12 - Bot-detection verification finds IP-ban and CSS blockers
+
+Executed the worktree's test plan with isolated MongoDB, real DDP clients, a local Nginx proxy, and browser interaction.
+Both Meteor server test modes pass 200 tests and the worktree's formatting check passes.
+A spoofed forwarding header makes removal omit the IP ban; a fresh browser session can then evade it (D44).
+The local production simulation returns HTTP 500 for its main CSS chunk and renders unstyled (D45).
+Recorded evidence and explicit coverage limits in `docs/bot-detection-test-results.md`, linked it from the test plan, and synchronized the defect register and AGENTS.md.
+No application or deployment source was changed, and no deployment was performed.
+
 ## 2026-10-12 - Bot detection blocks a browser session and a room's address
 
 Three consecutive machine-speed attempts remove that player before the attempt is graded (#142).

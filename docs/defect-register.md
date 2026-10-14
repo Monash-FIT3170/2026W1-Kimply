@@ -345,6 +345,29 @@ The ID is D15 because D13 is a deliberate gap (see the note at the top of this f
 
 ---
 
+## D44 - Spoofed forwarded headers bypass the room IP ban
+
+**Reproduced 2026-10-12:** a raw DDP bot supplies an extra `X-Forwarded-For` prefix, and the trusted proxy appends the peer address.
+Meteor reports no `clientAddress` when the header length differs from its configured proxy count.
+`removeDetectedPlayer` logs `missing client address` and writes only the browser-session block.
+A fresh session on the same real address can join the disposable room when it is returned to lobby.
+Without the spoofed prefix, the real address is banned for exactly 15 minutes and a different address remains allowed.
+Both direct local transport and a real Nginx proxy reproduce the failure.
+
+**Fix:** enforce a trusted ingress/address policy that cannot convert spoofed forwarded headers into an IP-ban exemption.
+Validate the policy through the actual proxy chain and do not substitute an address supplied by a client.
+See [the executed test report](bot-detection-test-results.md) for the fixtures and remaining verification.
+
+## D45 - Production-mode main stylesheet returns HTTP 500
+
+**Reproduced 2026-10-12:** local `meteor run --production` serves `/build-chunks/main.b70987423f38e5ae.css` with HTTP 500.
+The server logs ENOENT for the CSS chunk under `programs/server/build-chunks`.
+The browser removal and join screens render without their intended styling.
+The deployed image has not been checked, so the confirmed scope is the local production simulation.
+
+**Fix:** correct the emitted CSS asset path and its server registration, then verify a clean production build and the removed-player screen.
+See [the executed test report](bot-detection-test-results.md) for browser evidence.
+
 ## Structural issues that are not bugs but shape future work
 
 **Duplicated sequence generator.** `generateSequence` exists identically in `imports/api/sequence.js:9` and `imports/api/gameMethods.js:9`.
