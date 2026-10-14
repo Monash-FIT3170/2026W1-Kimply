@@ -20,6 +20,20 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-14 - Bot detection merged with reconnect credentials
+
+Bot detection (#142) and reconnect ownership (#150) were built in parallel, and both changed `players.join` and `players.rebind`.
+The merge keeps both checks rather than choosing one: a rebind must come from the browser session that owns the player, from an address the room has not banned, and with the per-tab reconnect credential.
+The bot guard's fields (`guard.browserSessionId`, `boundAt`, `botStrikes`) are written by `rebindPlayer` in the same credential-guarded update, so a refused credential never moves the guard.
+`players` and `eliminations` exclude both `guard` and `reconnectTokenHash`.
+A banned or removed player who resumes a saved game after a refresh now sees the removal screen, as on a DDP reconnect, instead of a generic reconnect error.
+
+The bot branch had recorded its defect as D22, which `dev` had already given to the Battle Royale leaderboard.
+It is D43 now: D26 to D42 are the ECS architecture decisions in [ecs-target-architecture.md](ecs-target-architecture.md), so D43 is the first ID neither list uses.
+Anything citing "D22" for machine-speed play means D43.
+
+---
+
 ## 2026-10-13 - Reconnect ownership and ability-dialog keyboard focus
 
 PR #141 review reproduced a guest rebinding the host's public player ID, receiving the host's private sequence and picking the host's card (D24).
@@ -40,6 +54,9 @@ Two real DDP connections verified rejected takeover attempts and a valid reconne
 Browser checks verified anonymous entry, refresh preserving the player, modal focus cycling, Escape restoration, and a 375px layout.
 
 Files: `app/imports/api/gameMethods.js`, `app/server/publications.js`, `app/imports/ui/gameReconnect.js`, `app/imports/ui/pages/GamePage.jsx`, `app/imports/ui/abilities/AbilityDialog.jsx`, `app/tests/playerReconnect.test.js`, `loadtest/ddp-gameplayLoadTest.mjs`, `AGENTS.md`, `docs/defect-register.md`, `docs/design_system.md`.
+
+---
+
 ## 2026-10-13 - Ability guide in the lobby
 
 Players were reading cards for the first time inside a 20-second draft (#148).
@@ -62,6 +79,40 @@ The canary runs every 15 minutes and the alarm needs 2 periods, so that is 30 mi
 The ceiling is the GitHub OIDC session: both `*-github-deploy` roles allow 1 hour, and the readiness probe and failure diagnostics still have to run after the wait.
 A green deploy job therefore now takes about 35 minutes. That is the price of the bake: returning before `COMPLETED` would report success for a release the alarm can still roll back.
 Changing `canary_rate_minutes` moves the bake with it. The canary alarm in `infra/terraform/modules/kimply-ecs/monitoring.tf` now says so.
+
+---
+
+## 2026-10-12 - Chrome automation remains below the timing detector threshold
+
+Ran three real point-and-click attempts in a fresh Chrome Incognito session with detection enabled.
+The Chrome agent retained five of eight fixture lives, accumulated zero bot strikes, and stayed connected.
+A machine-speed DDP control against the same app was removed on its third attempt.
+Recorded the comparison and screenshot in `docs/bot-detection-test-results.md` and `docs/test-evidence/bot-detection/chrome-agent-gameplay.png`.
+This verifies a limitation of the chosen heuristic, not coverage of the Claude Chrome extension itself.
+
+## 2026-10-12 - Bot-detection verification finds IP-ban and CSS blockers
+
+Executed the worktree's test plan with isolated MongoDB, real DDP clients, a local Nginx proxy, and browser interaction.
+Both Meteor server test modes pass 200 tests and the worktree's formatting check passes.
+A spoofed forwarding header makes removal omit the IP ban; a fresh browser session can then evade it (D44).
+The local production simulation returns HTTP 500 for its main CSS chunk and renders unstyled (D45).
+Recorded evidence and explicit coverage limits in `docs/bot-detection-test-results.md`, linked it from the test plan, and synchronized the defect register and AGENTS.md.
+No application or deployment source was changed, and no deployment was performed.
+
+---
+
+## 2026-10-12 - Bot detection blocks a browser session and a room's address
+
+Three consecutive machine-speed attempts remove that player before the attempt is graded (#142).
+The browser session is blocked for the life of the room, and the connection's address is banned from that room for 15 minutes. Both are stored on `rooms.security`, so they disappear with the room's existing 24-hour TTL and are never published.
+
+Things that are not obvious from the diff:
+
+- **A shared address does not drop the other people already in the room.** Their current connection keeps playing. Joining, reconnecting, or rebinding from that address is refused until the ban's `expiresAt`, including a brand-new browser session.
+- **A missing address stores a session block and no placeholder ban.** One connection without `clientAddress` cannot lock every other anonymous player out of the room.
+- **`HTTP_FORWARDED_COUNT` is 1 behind Nginx and the ALB, and 0 on the local direct connection.** Meteor's own proxy handling picks the address. A spoofed `X-Forwarded-For` prefix is not what `connection.clientAddress` returns.
+- **`BOT_DETECTION_ENABLED=false` works only in development.** In production the flag is logged once and ignored, so a deployed environment cannot turn detection off by setting it.
+- **Detection is built on the ability-system player.** The sequence being graded is `players.secret.sequence`, and an attempt cannot start while that round's draft is still open.
 
 ---
 

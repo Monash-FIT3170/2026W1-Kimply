@@ -37,6 +37,19 @@ export const PIN_LENGTH = 5;
 export const PIN_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export const DISCONNECT_GRACE_MS = 15000; // remove a disconnected player after this
 
+// --- Bot detection ---
+// A flagged attempt has at least this many colours, every gap under BOT_MAX_INTERVAL_MS,
+// and those gaps within BOT_MAX_SPREAD_MS of each other. The server clock must agree.
+export const BOT_MIN_COLOURS = 4;
+export const BOT_MAX_INTERVAL_MS = 60;
+export const BOT_MAX_SPREAD_MS = 5;
+export const BOT_STRIKES_TO_REMOVE = 3;
+// How far the server's observed duration may run past the client's last offset and still
+// count as the same speed. Covers one round trip; a forged fast trace on a slow attempt does not fit.
+export const BOT_SERVER_SLACK_MS = 500;
+export const ROOM_IP_BAN_MS = 15 * 60 * 1000;
+export const BROWSER_SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
+
 // Game-mode presets, copied into room.customSettings on selection.
 export const GAME_MODE_PRESETS = {
   default: { flashingSpeed: 'medium', startingLives: 3, startingSequenceLength: 4, sequenceGrowth: 1 },

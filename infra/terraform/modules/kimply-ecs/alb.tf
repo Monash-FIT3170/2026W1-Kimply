@@ -46,6 +46,10 @@ resource "aws_lb" "app" {
   # players idling in a lobby.
   idle_timeout = 3600
 
+  # Append the real peer to X-Forwarded-For. Meteor's HTTP_FORWARDED_COUNT=1
+  # then selects that last entry, so a client-supplied prefix cannot choose the address.
+  xff_header_processing_mode = "append"
+
   drop_invalid_header_fields = true
   enable_deletion_protection = var.alb_deletion_protection
 }

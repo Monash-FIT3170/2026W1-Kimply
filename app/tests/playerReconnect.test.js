@@ -1,6 +1,7 @@
 import assert from 'assert';
 import { Meteor } from 'meteor/meteor';
 import '../imports/api/gameMethods';
+import '../imports/api/browserSessions';
 import { PlayersCollection } from '../imports/api/players';
 import { RoomsCollection } from '../imports/api/rooms';
 import { RoundsCollection } from '../imports/api/rounds';
@@ -14,7 +15,14 @@ if (Meteor.isServer) {
     const callAs = (connectionId, method, ...args) =>
       Meteor.server.method_handlers[method].apply({ connection: { id: connectionId } }, args);
 
+    // Every connection here shares one browser session: another tab of the same browser,
+    // or a script holding its browser token. The session check (#142) cannot tell them
+    // apart, so these tests exercise the per-tab reconnect credential on its own.
+    const CONNECTIONS = ['owner', 'attacker', 'new-owner'];
+
     beforeEach(async function () {
+      const { token: browserToken } = await callAs('owner', 'browserSessions.resume', null);
+      for (const id of CONNECTIONS.slice(1)) await callAs(id, 'browserSessions.resume', browserToken);
       await PlayersCollection.removeAsync({});
       await RoomsCollection.removeAsync({});
       await RoundsCollection.removeAsync({});
@@ -32,6 +40,12 @@ if (Meteor.isServer) {
         callAs('attacker', 'players.rebind', playerId, 'b'.repeat(43)),
         (e) => e.error === 'not-yours'
       );
+      assert.strictEqual((await PlayersCollection.findOneAsync(playerId)).connectionId, 'owner');
+    });
+
+    it('still refuses the right credential from a different browser session', async function () {
+      await callAs('other-browser', 'browserSessions.resume', null);
+      await assert.rejects(callAs('other-browser', 'players.rebind', playerId, token), (e) => e.error === 'not-yours');
       assert.strictEqual((await PlayersCollection.findOneAsync(playerId)).connectionId, 'owner');
     });
 

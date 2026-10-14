@@ -38,7 +38,8 @@
     "postcss-loader": "^8.2.1",
     "prettier": "^3.8.3",
     "prettier-plugin-tailwindcss": "^0.8.0",
-    "react-refresh": "^0.17.0"
+    "react-refresh": "^0.17.0",
+    "ws": "^8.18.0"
   },
   "meteor": {
     "mainModule": {

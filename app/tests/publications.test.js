@@ -4,6 +4,7 @@ import { RoundsCollection } from '../imports/api/rounds';
 import { PlayersCollection } from '../imports/api/players';
 import { LeaderboardCollection } from '../imports/api/leaderboard';
 import { GameEventsCollection } from '../imports/api/gameEvents';
+import { RoomsCollection } from '../imports/api/rooms';
 import '../server/publications.js';
 
 const READY = Symbol('ready');
@@ -155,6 +156,17 @@ if (Meteor.isServer) {
         assert.ok(!('attemptedSequence' in docs[0]), 'attemptedSequence must be excluded from the publication');
       });
 
+      it('never publishes guard, which holds strikes, attempts and the browser session', async function () {
+        const id = await insertPlayer(OURS, 'Player 1');
+        await PlayersCollection.updateAsync(id, {
+          $set: { guard: { browserSessionId: 'session-1', botStrikes: 2, attempt: { id: 'attempt-1' } } },
+        });
+
+        const [doc] = await fetchPublication('players', OURS);
+
+        assert.ok(!('guard' in doc));
+      });
+
       it('still publishes the fields the UI needs', async function () {
         await insertPlayer(OURS, 'Player 1');
 
@@ -252,12 +264,14 @@ if (Meteor.isServer) {
           eliminatedAt: new Date(),
           attemptedSequence: ['red'],
           secret: { sequence: { roundId: 'r', colours: ['red'], version: 1 } },
+          guard: { botStrikes: 1 },
         });
 
         const [doc] = await fetchPublication('eliminations', OURS);
 
         assert.ok(!('secret' in doc));
         assert.ok(!('attemptedSequence' in doc));
+        assert.ok(!('guard' in doc));
       });
     });
 
@@ -297,6 +311,28 @@ if (Meteor.isServer) {
         assert.strictEqual(runPublication('gameFeed'), READY);
         assert.strictEqual(runPublication('gameFeed', ''), READY);
         assert.strictEqual(runPublication('gameFeed', 42), READY);
+      });
+    });
+
+    describe('rooms.lobby', function () {
+      it('does not publish security blocks or a player browser session', async function () {
+        await RoomsCollection.removeAsync({ pin: OURS });
+        await RoomsCollection.insertAsync({
+          pin: OURS,
+          status: 'lobby',
+          gameName: 'Game',
+          hostName: 'Host',
+          createdAt: new Date(),
+          security: { blockedSessionIds: ['session-1'], ipBans: [{ address: '203.0.113.5' }] },
+          players: [{ id: 'p1', name: 'Host', connected: true, browserSessionId: 'session-1' }],
+        });
+
+        const [doc] = await fetchPublication('rooms.lobby', OURS);
+
+        assert.ok(!('security' in doc));
+        assert.strictEqual(doc.players[0].name, 'Host');
+        assert.ok(!('browserSessionId' in doc.players[0]));
+        await RoomsCollection.removeAsync({ pin: OURS });
       });
     });
   });

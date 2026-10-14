@@ -461,6 +461,7 @@ stat -c '%a %U:%G' .env      # MUST print: 600 root:root
 
 Fill in `APP_IMAGE`, `DOMAIN`, `ROOT_URL`, `LETSENCRYPT_EMAIL`, `MONGO_URL`, `AWS_REGION`, `ECR_REGISTRY`, `ECR_REPOSITORY`.
 `GOOGLE_CLIENT_ID` is optional and can stay empty; see [google-sign-in.md](google-sign-in.md).
+`HTTP_FORWARDED_COUNT` must be `1` on this stack. Nginx and the ALB each append one forwarding hop, and Meteor uses that count to choose `connection.clientAddress`. Bot detection bans that address; a wrong count would ban the proxy, or trust a header the client forged. Do not set `BOT_DETECTION_ENABLED=false` here. Production ignores that value.
 
 `ROOT_URL` must be the **public HTTPS origin**.
 Meteor puts it in `__meteor_runtime_config__`, so a wrong value breaks the client's DDP endpoint.

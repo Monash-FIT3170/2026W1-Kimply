@@ -11,6 +11,7 @@ import { EliminationFeed } from '../EliminationFeed.jsx';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { TILE, TileLattice } from '../components/design';
 import { ConfirmationPopup } from '../components/ConfirmationPopup.jsx';
+import { RemovedScreen } from '../components/RemovedScreen.jsx';
 import { useSessionResuming, useSignedInAccount } from '../accountSession';
 import { playableHand, playbackFor } from '../../api/abilityRules';
 import { useFeedScope } from '../abilities/FeedScopeToggle.jsx';
@@ -130,6 +131,9 @@ export const GamePage = () => {
   const [feedScope, setFeedScope] = useFeedScope();
   const [showLeavePopup, setShowLeavePopup] = useState(false);
   const [leaveError, setLeaveError] = useState('');
+  const [removal, setRemoval] = useState(null);
+  const attemptRef = useRef({ offsets: [], attemptId: null, t0: null });
+  const seenPlayerRef = useRef(false);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -143,6 +147,21 @@ export const GamePage = () => {
   // No 'demo' fallback: the publications are scoped by gameId, so a placeholder
   // would subscribe to a game that does not exist and hang on LOADING forever.
   const gameId = roomPin || null;
+
+  const resetAttempt = () => {
+    attemptRef.current = { offsets: [], attemptId: null, t0: null };
+  };
+
+  const noteRemoval = (error) => {
+    localStorage.removeItem(`gamePlayerId:${gameId}`);
+    localStorage.removeItem('reconnectData');
+    setPlayerCanInput(false);
+    setRemoval(
+      error?.error === 'banned' || error?.error === 'removed-automation'
+        ? error
+        : { error: 'removed-automation', details: { reason: 'session' } }
+    );
+  };
 
   const handleLeaveGame = () => {
     Meteor.call('players.leaveGame', playerId, (error) => {
@@ -203,6 +222,10 @@ export const GamePage = () => {
   useEffect(() => {
     if (connected && !wasConnectedRef.current && playerId) {
       Meteor.call('players.rebind', playerId, gameReconnectToken(gameId, lobbyPlayerId), (error) => {
+        if (error?.error === 'banned' || error?.error === 'removed-automation') {
+          noteRemoval(error);
+          return;
+        }
         if (error) setMessage('Lost track of your game after reconnecting. Refresh to rejoin.');
       });
     }
@@ -318,7 +341,8 @@ export const GamePage = () => {
     const savedPlayerId = !lobbyPlayerId && localStorage.getItem(`gamePlayerId:${gameId}`);
     if (savedPlayerId) {
       Meteor.call('players.rebind', savedPlayerId, gameReconnectToken(gameId, lobbyPlayerId), (error) => {
-        if (error) setMessage('Could not reconnect to your game. Join a new room to play.');
+        if (error?.error === 'banned' || error?.error === 'removed-automation') noteRemoval(error);
+        else if (error) setMessage('Could not reconnect to your game. Join a new room to play.');
         else setPlayerId(savedPlayerId);
       });
       return;
@@ -334,8 +358,11 @@ export const GamePage = () => {
       gameReconnectToken(gameId, lobbyPlayerId),
       (error, result) => {
         if (error) {
-          console.error(error);
-          setMessage('Could not join the game.');
+          if (error.error === 'banned' || error.error === 'removed-automation') noteRemoval(error);
+          else {
+            console.error(error);
+            setMessage('Could not join the game.');
+          }
           return;
         }
         setPlayerId(result);
@@ -349,6 +376,7 @@ export const GamePage = () => {
   useEffect(() => {
     if (!player?.roundId) return;
     setAttemptedSequence([]);
+    resetAttempt();
     setMessage('');
     setCompletedRoundId(null);
     submittedRoundRef.current = false;
@@ -392,6 +420,7 @@ export const GamePage = () => {
     setReplaysRemaining((prev) => prev - 1);
     setPlayerCanInput(false);
     setAttemptedSequence([]);
+    resetAttempt();
     setReplayKey((prev) => prev + 1);
   };
 
@@ -400,10 +429,24 @@ export const GamePage = () => {
   // for has already advanced (the last answer is what advances it).
   const currentRoundIdRef = useRef(null);
   currentRoundIdRef.current = player?.roundId ?? null;
-  const handleColourClick = (colour) => {
+  const handleColourClick = (colour, at) => {
     if (!tilesLive) return;
     if (!sequenceReady) return;
     if (attemptedSequence.length >= sequence.length) return;
+    const stamp = typeof at === 'number' ? at : performance.now();
+    const current = attemptRef.current;
+    if (current.offsets.length === 0) {
+      current.t0 = stamp;
+      current.offsets = [0];
+      current.attemptId = new Promise((resolve, reject) => {
+        Meteor.call('players.startAttempt', playerId, player.roundId, (error, result) => {
+          if (error) reject(error);
+          else resolve(result.attemptId);
+        });
+      });
+    } else {
+      current.offsets.push(stamp - current.t0);
+    }
     setAttemptedSequence((prev) => [...prev, colour]);
   };
 
@@ -498,56 +541,101 @@ export const GamePage = () => {
       return;
     }
     const submittedRoundId = player?.roundId;
-    Meteor.call('players.submitSequence', playerId, attemptedSequence, (error, result) => {
-      if (error) {
-        console.error(error);
-        setMessage('Something went wrong while submitting.');
-        return;
-      }
-      if (result.success) {
-        if (result.lifeAward) showLifeAward(result.lifeAward);
-        setCorrectGlow(true);
-        setTimeout(() => setCorrectGlow(false), 800);
-        // Already on the next round (Battle Royale, or the answer that advanced the round):
-        // its state is fresh, so leave it alone.
-        if (currentRoundIdRef.current !== submittedRoundId) return;
-        submittedRoundRef.current = true;
-        if (isBattleRoyale) {
-          setMessage('Correct! Moving to next round...');
-        } else {
-          setMessage('Correct sequence! Please wait for other players to finish.');
-        }
-        setCompletedRoundId(round._id);
-        setPlayerCanInput(false);
-      } else {
-        const remainingLives = result.remainingLives ?? (player?.lives ?? 3) - 1;
-        if (remainingLives <= 0) {
-          setMessage('No lives left. You have been eliminated!');
-          setPlayerCanInput(false);
-        } else {
-          setMessage(`Wrong sequence! ${remainingLives} ${remainingLives === 1 ? 'life' : 'lives'} remaining.`);
-          setShake(true);
-          setTimeout(() => setShake(false), 400);
-          setAttemptedSequence([]);
+    const pending = attemptRef.current.attemptId;
+    const offsets = attemptRef.current.offsets.slice();
+    if (!pending) {
+      setMessage('Enter the sequence before submitting.');
+      return;
+    }
+    pending
+      .then((attemptId) => {
+        Meteor.call(
+          'players.submitSequence',
+          playerId,
+          attemptedSequence,
+          { attemptId, roundId: submittedRoundId, offsets },
+          (error, result) => {
+            if (error) {
+              if (error.error === 'removed-automation' || error.error === 'banned') {
+                noteRemoval(error);
+                return;
+              }
+              if (error.error === 'stale-attempt' || error.error === 'duplicate-attempt') {
+                resetAttempt();
+                setAttemptedSequence([]);
+                setMessage('That attempt expired. Enter the sequence again.');
+                return;
+              }
+              console.error(error);
+              setMessage('Something went wrong while submitting.');
+              return;
+            }
+            if (result.success) {
+              if (result.lifeAward) showLifeAward(result.lifeAward);
+              setCorrectGlow(true);
+              setTimeout(() => setCorrectGlow(false), 800);
+              // Already on the next round (Battle Royale, or the answer that advanced the round):
+              // its state is fresh, so leave it alone.
+              if (currentRoundIdRef.current !== submittedRoundId) return;
+              submittedRoundRef.current = true;
+              if (isBattleRoyale) {
+                setMessage('Correct! Moving to next round...');
+              } else {
+                setMessage('Correct sequence! Please wait for other players to finish.');
+              }
+              setCompletedRoundId(round._id);
+              setPlayerCanInput(false);
+            } else {
+              const remainingLives = result.remainingLives ?? (player?.lives ?? 3) - 1;
+              if (remainingLives <= 0) {
+                setMessage('No lives left. You have been eliminated!');
+                setPlayerCanInput(false);
+              } else {
+                setMessage(`Wrong sequence! ${remainingLives} ${remainingLives === 1 ? 'life' : 'lives'} remaining.`);
+                setShake(true);
+                setTimeout(() => setShake(false), 400);
+                setAttemptedSequence([]);
 
-          // Keep input locked while the sequence replays, otherwise the tiles stay
-          // clickable and the player can copy the answer as it lights up. The replay
-          // (triggered by the replayKey bump) re-enables input via onSequenceComplete
-          // once it finishes, exactly like a fresh round does.
-          setPlayerCanInput(false);
-          setReplayKey((prev) => prev + 1);
+                // Keep input locked while the sequence replays, otherwise the tiles stay
+                // clickable and the player can copy the answer as it lights up. The replay
+                // (triggered by the replayKey bump) re-enables input via onSequenceComplete
+                // once it finishes, exactly like a fresh round does.
+                setPlayerCanInput(false);
+                resetAttempt();
+                setReplayKey((prev) => prev + 1);
+              }
+            }
+          }
+        );
+      })
+      .catch((error) => {
+        if (error?.error === 'banned' || error?.error === 'removed-automation' || error?.error === 'draft-open') {
+          if (error.error === 'draft-open') {
+            setMessage('Wait for the card draft to finish.');
+            return;
+          }
+          noteRemoval(error);
+          return;
         }
-      }
-    });
+        resetAttempt();
+        setAttemptedSequence([]);
+        setMessage('Could not start that attempt. Enter the sequence again.');
+      });
   };
 
   const handleClear = () => {
     setAttemptedSequence([]);
+    resetAttempt();
     setMessage('Try again. Repeat the flashed sequence.');
   };
 
   const handleUndo = () => {
     setAttemptedSequence((prev) => prev.slice(0, -1));
+    attemptRef.current.offsets = attemptRef.current.offsets.slice(0, -1);
+    if (attemptRef.current.offsets.length === 0) {
+      attemptRef.current.attemptId = null;
+      attemptRef.current.t0 = null;
+    }
   };
 
   useEffect(() => {
@@ -702,6 +790,11 @@ export const GamePage = () => {
         </a>
       </div>
     );
+  }
+
+  if (player) seenPlayerRef.current = true;
+  if (removal || (playerId && seenPlayerRef.current && !player)) {
+    return <RemovedScreen error={removal} onLeave={() => navigate('/play', { replace: true })} />;
   }
 
   if (!player) {

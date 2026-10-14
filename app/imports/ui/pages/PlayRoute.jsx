@@ -18,6 +18,7 @@ import { ReconnectPopup } from '../components/ReconnectPopup';
 import { submitOnEnter } from '../keyboard';
 import { signOut, useSessionResuming, useSignedInAccount } from '../accountSession';
 import { loadUsername, saveUsername, USERNAME_MAX_LENGTH } from '../savedUsername';
+import { banMessage } from '../browserSession';
 
 function RouteCard({ kind, title, blurb, color, primary, onClick, disabled }) {
   return (
@@ -105,6 +106,7 @@ export function PlayRoute() {
   const hasName = trimmedName.length > 0;
 
   const [reconnectData, setReconnectData] = useState(null);
+  const [reconnectError, setReconnectError] = useState('');
 
   useEffect(() => {
     const raw = localStorage.getItem('reconnectData');
@@ -121,7 +123,10 @@ export function PlayRoute() {
 
     Meteor.call('rooms.reconnect', gameId, playerId, (err, result) => {
       if (err) {
+        if (err.error === 'banned') setReconnectError(banMessage(err));
+        else setReconnectError('Could not rejoin that room.');
         localStorage.removeItem('reconnectData');
+        setReconnectData(null);
         return;
       }
 
@@ -307,6 +312,11 @@ export function PlayRoute() {
         </button>
       </div>
 
+      {reconnectError && (
+        <p role="alert" className="px-6 pb-4 text-center font-manrope text-sm text-red-300">
+          {reconnectError}
+        </p>
+      )}
       <ReconnectPopup
         isOpen={reconnectData}
         gameId={reconnectData?.gameId}

@@ -21,6 +21,10 @@ services:
       MONGO_URL: mongodb://mongodb:27017/kimply
       ROOT_URL: http://localhost:3000
       PORT: 3000
+      # Direct connection: do not trust X-Forwarded-For. See Meteor HTTP_FORWARDED_COUNT.
+      HTTP_FORWARDED_COUNT: 0
+      # Set to false in the root .env to let a local agent play without detection or bans.
+      BOT_DETECTION_ENABLED: ${BOT_DETECTION_ENABLED:-true}
       METEOR_ALLOW_SUPERUSER: 1
       CHOKIDAR_USEPOLLING: 1
       CHOKIDAR_INTERVAL: 500
@@ -44,6 +48,7 @@ services:
       MONGO_URL: mongodb://mongodb:27017/kimply-test
       ROOT_URL: http://localhost:3000
       PORT: 3000
+      HTTP_FORWARDED_COUNT: 0
       METEOR_ALLOW_SUPERUSER: 1
     depends_on:
       - mongodb

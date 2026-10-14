@@ -10,7 +10,7 @@ Keep the two in step: an ID means the same thing in both files, or neither file 
 
 There is no D13. The register and the summary table had drifted by one on the last three IDs; reconciling them on 2026-08-29 onto the summary table's numbering left the gap. Do not renumber to close it - the IDs are cited from skills and pull requests.
 
-**Last verified:** 2026-08-31
+**Last verified:** 2026-10-12
 
 ---
 
@@ -28,29 +28,19 @@ There is no D13. The register and the summary table had drifted by one on the la
 
 ---
 
-## D3 - The server trusts client-supplied player identifiers
+## D3 - Room host actions still trust client-supplied identifiers
 
-**Severity: high.** The most serious outstanding defect.
+**Severity: high.** Gameplay mutations are no longer in this defect.
 
-`imports/api/gameMethods.js:122`
-
-```js
-async 'players.submitSequence'(playerId, attemptedSequence) {
-  const player = await PlayersCollection.findOneAsync(playerId);
-  // ...no check that the caller owns this player
-}
-```
-
-Every player's `_id` is published to every client in the same room by the `players` publication.
-Any browser can therefore call `Meteor.call('players.submitSequence', '<someone else>', ['x'])` in a loop and drain another player's lives to zero.
+`players.startAttempt`, `players.submitSequence`, `players.timeoutTurn`, `players.timeoutRound`, `players.leaveGame`, `players.rebind`, and `abilities.pick` / `skip` / `use` now act only when the calling connection owns the player. A call with no connection, which is how the server and the existing tests invoke them, still runs.
 
 **Be precise about the framing.**
 Kimply is intentionally open to anyone, and accounts are optional by design.
 "There is no login" is therefore **not** the defect, and the fix is **not** a login wall.
 
-The defect is narrower: the server never checks that the connection sending an identifier is the connection that owns it.
+The defect that remains: room host actions still trust an identifier the client supplies.
 
-Related, all in the same category:
+Still in the same category:
 
 | Method | Location | Problem |
 |---|---|---|
@@ -254,6 +244,14 @@ The cost of leaving it is that every branch inherits the dirt, so no diff can be
 
 ---
 
+## D43 - A script can play a round at machine speed - **fixed 2026-10-12**
+
+An automated client could subscribe, join, and submit a sequence as fast as the socket allowed. Short sequences and accuracy alone never distinguished that from a person.
+
+**Fix (applied):** `players.startAttempt` opens one attempt, and `players.submitSequence` requires its id plus per-colour offsets. An attempt of at least 4 colours is flagged when every interval is under 60 ms, the spread is at most 5 ms, and the server-observed elapsed time supports that speed. The third consecutive flagged attempt removes the player before grading, blocks that browser session for the room's lifetime, and bans the connection's address from that room for 15 minutes. A normal attempt of at least 4 colours resets the count. `BOT_DETECTION_ENABLED=false` is ignored outside development.
+
+What this does not catch: input with human-looking gaps, a new address, or an IPv6 prefix that rotates. Those stay out of the ban.
+
 ## D25 - Ability dialogs let keyboard focus reach the background - **fixed 2026-10-13**
 
 The ability shell initially focused its panel but neither trapped focus nor made the game behind it inert.
@@ -385,6 +383,29 @@ React evaluates a `useState` functional updater eagerly only when the fiber has 
 The ID is D15 because D13 is a deliberate gap (see the note at the top of this file).
 
 ---
+
+## D44 - Spoofed forwarded headers bypass the room IP ban
+
+**Reproduced 2026-10-12:** a raw DDP bot supplies an extra `X-Forwarded-For` prefix, and the trusted proxy appends the peer address.
+Meteor reports no `clientAddress` when the header length differs from its configured proxy count.
+`removeDetectedPlayer` logs `missing client address` and writes only the browser-session block.
+A fresh session on the same real address can join the disposable room when it is returned to lobby.
+Without the spoofed prefix, the real address is banned for exactly 15 minutes and a different address remains allowed.
+Both direct local transport and a real Nginx proxy reproduce the failure.
+
+**Fix:** enforce a trusted ingress/address policy that cannot convert spoofed forwarded headers into an IP-ban exemption.
+Validate the policy through the actual proxy chain and do not substitute an address supplied by a client.
+See [the executed test report](bot-detection-test-results.md) for the fixtures and remaining verification.
+
+## D45 - Production-mode main stylesheet returns HTTP 500
+
+**Reproduced 2026-10-12:** local `meteor run --production` serves `/build-chunks/main.b70987423f38e5ae.css` with HTTP 500.
+The server logs ENOENT for the CSS chunk under `programs/server/build-chunks`.
+The browser removal and join screens render without their intended styling.
+The deployed image has not been checked, so the confirmed scope is the local production simulation.
+
+**Fix:** correct the emitted CSS asset path and its server registration, then verify a clean production build and the removed-player screen.
+See [the executed test report](bot-detection-test-results.md) for browser evidence.
 
 ## Structural issues that are not bugs but shape future work
 

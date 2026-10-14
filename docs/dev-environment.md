@@ -83,6 +83,7 @@ The host directory stays `/opt/kimply` on both boxes on purpose.
 `deploy/deploy.sh` and `deploy/sync-config.sh` both default to it, the workflow's SSM command hardcodes `/opt/kimply/deploy/deploy.sh`, and these are separate machines so there is nothing to collide with.
 
 The dev `/opt/kimply/.env` differs from production's in exactly four values: `DOMAIN`, `ROOT_URL`, `ECR_REPOSITORY`, and `MONGO_URL`.
+`HTTP_FORWARDED_COUNT` is `1` on both, because both sit behind one proxy. Local `docker compose` sets it to `0`, because nothing is in front of Meteor there. `BOT_DETECTION_ENABLED=false` is honoured only by a development Meteor process, so it can be set in the local `.env` when an agent needs to play, and it must not be set on this box.
 `AWS_REGION` and `ECR_REGISTRY` are the same, and `APP_IMAGE` is rewritten by `deploy.sh` on every deploy.
 
 ---

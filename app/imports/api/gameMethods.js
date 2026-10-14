@@ -1,9 +1,15 @@
 import { Meteor } from 'meteor/meteor';
+import { Random } from 'meteor/random';
 import { createHash } from 'crypto';
 import { RoundsCollection } from './rounds';
 import { PlayersCollection } from './players';
 import { LeaderboardCollection } from './leaderboard';
 import { RoomsCollection } from './rooms';
+import { boundPlayer, requireBrowserSession } from './playerAccess';
+import { assertEntryAllowed, assertPlayAllowed, removeDetectedPlayer } from './roomBans';
+import { assessAttempt, detectionEnabled } from './botDetection';
+import { isCallerBound } from './abilityRules';
+import './browserSessions';
 import {
   advanceRoundIfReady,
   checkWinner,
@@ -17,7 +23,167 @@ import {
 } from './gameEngine';
 import { dealLevelUpDraft, dealRoundDrafts, gameContext, newRoundDraft } from './abilityEngine';
 import './abilities';
-import { DEFAULT_SEQUENCE_LENGTH, DEFAULT_STARTING_LIVES, INITIAL_LEVEL, DISCONNECT_GRACE_MS } from '../constants';
+import {
+  DEFAULT_SEQUENCE_LENGTH,
+  DEFAULT_STARTING_LIVES,
+  INITIAL_LEVEL,
+  DISCONNECT_GRACE_MS,
+  SEQUENCE_COLOURS,
+  BOT_MIN_COLOURS,
+  BOT_STRIKES_TO_REMOVE,
+} from '../constants';
+
+// One submission at a time per player, including across overlapping method calls in this process.
+// The consumed flag on the attempt is what still rejects a duplicate if a second replica races.
+function withPlayerLock(playerId, fn) {
+  if (!global._playerAttemptChains) global._playerAttemptChains = new Map();
+  const chains = global._playerAttemptChains;
+  const previous = chains.get(playerId) || Promise.resolve();
+  const run = previous.then(fn, fn);
+  chains.set(
+    playerId,
+    run.then(
+      () => undefined,
+      () => undefined
+    )
+  );
+  return run;
+}
+
+function assertAttemptShape(colours, attempt, expectedLength) {
+  const fail = (message) => {
+    throw new Meteor.Error('invalid-attempt', message);
+  };
+  if (!Array.isArray(colours) || colours.length !== expectedLength) fail('Wrong number of colours');
+  if (!colours.every((colour) => typeof colour === 'string' && SEQUENCE_COLOURS.includes(colour))) {
+    fail('Unknown colour');
+  }
+  if (!attempt || typeof attempt !== 'object') fail('Missing attempt');
+  if (typeof attempt.attemptId !== 'string' || !attempt.attemptId) fail('Missing attempt id');
+  if (typeof attempt.roundId !== 'string' || !attempt.roundId) fail('Missing round');
+  if (!Array.isArray(attempt.offsets) || attempt.offsets.length !== colours.length) fail('Missing timing');
+  let previous = -1;
+  for (const offset of attempt.offsets) {
+    if (typeof offset !== 'number' || !Number.isFinite(offset) || offset < 0 || offset < previous) {
+      fail('Timing is not usable');
+    }
+    previous = offset;
+  }
+}
+
+async function ownsGameplay(player, connection) {
+  if (connection?.id && !isCallerBound(player, connection.id)) {
+    throw new Meteor.Error('not-yours', 'That is not your player');
+  }
+  await assertPlayAllowed(player, connection);
+}
+
+// The grading path shared by a trusted server call and a validated connected attempt.
+// A removed player never reaches this, so the triggering submission awards nothing.
+async function applySubmission(playerId, attemptedSequence) {
+  const player = await PlayersCollection.findOneAsync(playerId);
+  const round = await RoundsCollection.findOneAsync(player.roundId);
+  const isBattleRoyale = player.isBattleRoyale ?? false;
+
+  const correct = JSON.stringify(attemptedSequence) === JSON.stringify(sequenceFor(player, round));
+
+  if (correct) {
+    const { nextRoundId, lifeAward } = await clearRound(player, round, { credited: true, attemptedSequence });
+    if (nextRoundId) await dealLevelUpDraft(playerId);
+    return { success: true, sequenceComplete: true, lifeAward };
+  }
+
+  await PlayersCollection.updateAsync(playerId, {
+    $set: {
+      attemptedSequence,
+      currentStreak: 0,
+      longestStreak: Math.max(player.longestStreak ?? 0, player.currentStreak ?? 0),
+      currentLevel: round.level ?? round.lengthOfSequence,
+      roundStatus: 'Playing',
+    },
+    $inc: { totalGuesses: 1 },
+  });
+  const { lives: remainingLives } = await loseLife(playerId, round);
+
+  await checkWinner(player.gameId, isBattleRoyale);
+
+  if (!isBattleRoyale) {
+    const updatedRound = await RoundsCollection.findOneAsync(player.roundId);
+    await advanceRoundIfReady(updatedRound);
+  }
+
+  return {
+    success: false,
+    sequenceComplete: false,
+    remainingLives: remainingLives ?? 0,
+  };
+}
+
+async function acceptGuardedAttempt(connection, playerId, attemptedSequence, attempt) {
+  const player = await boundPlayer(playerId, connection);
+  await assertPlayAllowed(player, connection);
+  const round = await RoundsCollection.findOneAsync(player.roundId);
+  if (!round) throw new Meteor.Error('round-not-found', 'Current round does not exist');
+  const expected = sequenceFor(player, round);
+  assertAttemptShape(attemptedSequence, attempt, expected.length);
+
+  const version = player.secret?.sequence?.version ?? 1;
+  const open = player.guard?.attempt;
+  if (
+    attempt.roundId !== player.roundId ||
+    player.secret?.sequence?.roundId !== player.roundId ||
+    !open ||
+    open.roundId !== attempt.roundId ||
+    open.version !== version ||
+    open.id !== attempt.attemptId
+  ) {
+    throw new Meteor.Error('stale-attempt', 'That attempt is no longer valid');
+  }
+  if (round.draft && !round.draft.resolved) throw new Meteor.Error('invalid-attempt', 'The draft is still open');
+  const levelDraft = player.secret?.draft;
+  if (levelDraft && levelDraft.roundId === player.roundId && levelDraft.status === 'open') {
+    throw new Meteor.Error('invalid-attempt', 'The draft is still open');
+  }
+
+  const claimed = await PlayersCollection.updateAsync(
+    {
+      _id: player._id,
+      'guard.attempt.id': attempt.attemptId,
+      'guard.attempt.version': version,
+      'guard.attempt.consumed': { $ne: true },
+    },
+    { $set: { 'guard.attempt.consumed': true } }
+  );
+  if (!claimed) {
+    const current = await PlayersCollection.findOneAsync(player._id);
+    if (current?.guard?.attempt?.id === attempt.attemptId && current.guard.attempt.consumed) {
+      throw new Meteor.Error('duplicate-attempt', 'That attempt was already submitted');
+    }
+    throw new Meteor.Error('stale-attempt', 'That attempt is no longer valid');
+  }
+
+  const serverElapsedMs = Date.now() - new Date(open.startedAt).getTime();
+  const { flagged, reason } = assessAttempt({
+    colours: attemptedSequence,
+    offsets: attempt.offsets,
+    serverElapsedMs,
+  });
+  if (flagged) {
+    const strikes = (player.guard?.botStrikes ?? 0) + 1;
+    if (strikes >= BOT_STRIKES_TO_REMOVE) {
+      const removed = await removeDetectedPlayer(player, connection, reason);
+      throw new Meteor.Error('removed-automation', 'Removed for automated play', {
+        reason: 'session',
+        expiresAt: removed.expiresAt,
+      });
+    }
+    await PlayersCollection.updateAsync(player._id, { $inc: { 'guard.botStrikes': 1 } });
+  } else if (attemptedSequence.length >= BOT_MIN_COLOURS) {
+    await PlayersCollection.updateAsync(player._id, { $set: { 'guard.botStrikes': 0 } });
+  }
+
+  return applySubmission(player._id, attemptedSequence);
+}
 
 function reconnectHash(token) {
   if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) {
@@ -26,7 +192,16 @@ function reconnectHash(token) {
   return createHash('sha256').update(token).digest('hex');
 }
 
-async function rebindPlayer(player, connectionId, token) {
+// The bot guard's ownership fields, written in the same update as the rebind.
+function guardOnBind(player, sessionId, boundAt) {
+  return {
+    'guard.browserSessionId': sessionId || player.guard?.browserSessionId || null,
+    'guard.boundAt': boundAt,
+    'guard.botStrikes': player.guard?.botStrikes ?? 0,
+  };
+}
+
+async function rebindPlayer(player, connectionId, token, extraSet = {}) {
   const hash = reconnectHash(token);
   // A player created before credentials existed can enroll only on its owning
   // connection. Knowing a public player or lobby ID never grants that right.
@@ -35,7 +210,7 @@ async function rebindPlayer(player, connectionId, token) {
     ? { _id: player._id, connectionId, reconnectTokenHash: { $exists: false } }
     : { _id: player._id, reconnectTokenHash: hash };
   const updated = await PlayersCollection.updateAsync(selector, {
-    $set: { connectionId, connected: true, ...(enroll ? { reconnectTokenHash: hash } : {}) },
+    $set: { connectionId, connected: true, ...extraSet, ...(enroll ? { reconnectTokenHash: hash } : {}) },
   });
   if (!updated) throw new Meteor.Error('not-yours', 'This reconnect credential does not belong to that player');
 }
@@ -80,6 +255,9 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       reconnectToken = null
     ) {
       const connectionId = this.connection?.id ?? null;
+      const sessionId = requireBrowserSession(this.connection);
+      await assertEntryAllowed(gameId, this.connection);
+      const boundAt = new Date();
       const room = await RoomsCollection.findOneAsync({ pin: gameId });
       const round = await RoundsCollection.findOneAsync(roundId);
       if (connectionId) {
@@ -96,7 +274,10 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       if (lobbyPlayerId) {
         const existing = await PlayersCollection.findOneAsync({ gameId, lobbyPlayerId });
         if (existing) {
-          await rebindPlayer(existing, connectionId, reconnectToken);
+          if (sessionId && existing.guard?.browserSessionId && existing.guard.browserSessionId !== sessionId) {
+            throw new Meteor.Error('not-yours', 'That is not your player');
+          }
+          await rebindPlayer(existing, connectionId, reconnectToken, guardOnBind(existing, sessionId, boundAt));
           return existing._id;
         }
       }
@@ -138,6 +319,8 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         ...(reconnectTokenHash ? { reconnectTokenHash } : {}),
         // Only ever published to this player's own connection (players.secret).
         secret: { sequence: round ? sequenceState(roundId, round.sequence) : null, hand: [] },
+        // Strikes, the open attempt, and which browser owns this player. Not published.
+        guard: { browserSessionId: sessionId, boundAt, botStrikes: 0, attempt: null },
       });
     },
 
@@ -148,51 +331,62 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       const connectionId = this.connection?.id ?? null;
       const player = await PlayersCollection.findOneAsync(playerId);
       if (!player) throw new Meteor.Error('not-found', 'Player not found');
-      await rebindPlayer(player, connectionId, reconnectToken);
+      // The new connection does not own the player yet. The browser session and the
+      // per-tab reconnect credential do.
+      const sessionId = requireBrowserSession(this.connection);
+      if (sessionId && player.guard?.browserSessionId && player.guard.browserSessionId !== sessionId) {
+        throw new Meteor.Error('not-yours', 'That is not your player');
+      }
+      await assertEntryAllowed(player.gameId, this.connection);
+      await rebindPlayer(player, connectionId, reconnectToken, guardOnBind(player, sessionId, new Date()));
       return true;
     },
 
-    // Submit a player's attempted sequence
-    async 'players.submitSequence'(playerId, attemptedSequence) {
-      // get player and current round
-      const player = await PlayersCollection.findOneAsync(playerId);
-      const round = await RoundsCollection.findOneAsync(player.roundId);
-      const isBattleRoyale = player.isBattleRoyale ?? false;
-
-      // compare submitted sequence with the player's own sequence
-      const correct = JSON.stringify(attemptedSequence) === JSON.stringify(sequenceFor(player, round));
-
-      if (correct) {
-        const { nextRoundId, lifeAward } = await clearRound(player, round, { credited: true, attemptedSequence });
-        if (nextRoundId) await dealLevelUpDraft(playerId);
-        return { success: true, sequenceComplete: true, lifeAward };
+    // Opens the attempt the client will submit. Playback waits until the draft has resolved.
+    async 'players.startAttempt'(playerId, roundId) {
+      const player = await boundPlayer(playerId, this.connection);
+      await assertPlayAllowed(player, this.connection);
+      if (player.eliminated || player.winner || player.gameFinished || player.completeRound) {
+        throw new Meteor.Error('not-playing', 'You are not playing this round');
       }
-
-      // remove one life for wrong sequence
+      if (typeof roundId !== 'string' || player.roundId !== roundId) {
+        throw new Meteor.Error('stale-attempt', 'That round is no longer active');
+      }
+      const round = await RoundsCollection.findOneAsync(roundId);
+      if (!round) throw new Meteor.Error('round-not-found', 'Current round does not exist');
+      if (round.draft && !round.draft.resolved) throw new Meteor.Error('draft-open', 'The draft is still open');
+      const levelDraft = player.secret?.draft;
+      if (levelDraft && levelDraft.roundId === roundId && levelDraft.status === 'open') {
+        throw new Meteor.Error('draft-open', 'The draft is still open');
+      }
+      if (player.secret?.sequence?.roundId !== roundId) {
+        throw new Meteor.Error('stale-attempt', 'Your sequence is not ready');
+      }
+      const attemptId = Random.id();
       await PlayersCollection.updateAsync(playerId, {
         $set: {
-          attemptedSequence,
-          currentStreak: 0,
-          longestStreak: Math.max(player.longestStreak ?? 0, player.currentStreak ?? 0),
-          currentLevel: round.level ?? round.lengthOfSequence,
-          roundStatus: 'Playing', // loseLife switches it to 'Eliminated' on the last life
+          'guard.attempt': {
+            id: attemptId,
+            roundId,
+            version: player.secret.sequence.version ?? 1,
+            startedAt: new Date(),
+            consumed: false,
+          },
         },
-        $inc: { totalGuesses: 1 },
       });
-      const { lives: remainingLives } = await loseLife(playerId, round);
+      return { attemptId };
+    },
 
-      await checkWinner(player.gameId, isBattleRoyale);
-
-      if (!isBattleRoyale) {
-        const updatedRound = await RoundsCollection.findOneAsync(player.roundId);
-        await advanceRoundIfReady(updatedRound);
+    // Submit a player's attempted sequence. Connected play, with detection on, must name
+    // the attempt opened by players.startAttempt and include per-colour offsets.
+    async 'players.submitSequence'(playerId, attemptedSequence, attempt = null) {
+      if (this.connection?.id && detectionEnabled()) {
+        const connection = this.connection;
+        return withPlayerLock(playerId, () => acceptGuardedAttempt(connection, playerId, attemptedSequence, attempt));
       }
-
-      return {
-        success: false,
-        sequenceComplete: false,
-        remainingLives: remainingLives ?? 0,
-      };
+      const player = await boundPlayer(playerId, this.connection);
+      await assertPlayAllowed(player, this.connection);
+      return applySubmission(player._id, attemptedSequence);
     },
 
     // Deduct a life when a player runs out of time on their turn
@@ -201,6 +395,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       if (!player || player.eliminated || player.winner || player.gameFinished) {
         return { ignored: true };
       }
+      await ownsGameplay(player, this.connection);
 
       const round = await RoundsCollection.findOneAsync(player.roundId);
       if (!round) {
@@ -247,6 +442,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       if (!player || player.eliminated || player.winner || player.gameFinished || player.completeRound) {
         return { ignored: true };
       }
+      await ownsGameplay(player, this.connection);
       const round = await RoundsCollection.findOneAsync(player.roundId);
       const isBattleRoyale = player.isBattleRoyale ?? false;
       const longestStreak = Math.max(player.longestStreak ?? 0, player.currentStreak ?? 0);
@@ -275,6 +471,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
     async 'players.leaveGame'(playerId) {
       const player = await PlayersCollection.findOneAsync(playerId);
       if (!player) throw new Meteor.Error('not-found', 'Player not found');
+      await ownsGameplay(player, this.connection);
 
       const round = await RoundsCollection.findOneAsync(player.roundId);
 
