@@ -10,7 +10,7 @@ Shared guidance for any coding agent working in this repository (Cursor, Claude 
 > If you change any of those things, update the matching table before you finish, and add an entry to [docs/decision-log.md](docs/decision-log.md) in the same change.
 > See [Maintaining this file](#maintaining-this-file) at the bottom.
 
-**Last verified against the codebase:** 2026-10-12
+**Last verified against the codebase:** 2026-10-14
 
 ---
 
@@ -57,7 +57,7 @@ Everything below has a home of its own. Read the home file rather than expecting
 
 - Anonymous play is intentional. Do not add a login wall to "fix" missing `this.userId`.
 - All writes go through Meteor methods. Do not add `.allow()` / `.deny()`, `autopublish`, or `insecure`.
-- Do not undo the publication properties: `rounds` never carries `sequence`, `players` and `eliminations` exclude `attemptedSequence` and `secret`, `players.secret` is keyed on the caller's connection, and every publication is scoped by `gameId`.
+- Do not undo the publication properties: `rounds` never carries `sequence`, `players` and `eliminations` exclude `attemptedSequence`, `secret`, and `reconnectTokenHash`, `players.secret` is keyed on the caller's connection, and every publication is scoped by `gameId`.
 - Do not invent npm scripts. There is no `lint`, `build`, `dev`, `typecheck`, or `e2e`. Format with Prettier. There is no ESLint.
 - Docker commands run from WSL2 on Windows, not PowerShell. Local compose is `docker-compose.yml`; production-shaped changes belong in `docker-compose.prod.yml`. Do not fork `deploy/`, `nginx/`, or compose files per environment.
 - After changing collections, publications, methods, routes, tests, or defects, update the matching table in this file and add an entry to `docs/decision-log.md` in the same change.
@@ -180,7 +180,7 @@ app/
 │   │   ├── gameEngine.js     # Server helpers shared by the game and ability methods (winner, advance, lives)
 │   │   ├── abilities.js      # abilities.* methods (connection-bound)
 │   │   ├── abilityEngine.js  # Dealing, resolving and playing ability cards (server)
-│   │   ├── abilityRules.js   # Pure card catalogue and rules, shared with the client
+│   │   ├── abilityRules.js   # Pure card catalogue and rules (incl. playback effects), shared with the client
 │   │   ├── playerAccounts.js # PlayerAccountsCollection + register/signIn/googleSignIn/resume/signOut
 │   │   ├── googleAuth.js     # GOOGLE_CLIENT_ID + Google ID-token verification (server use only)
 │   │   └── sequence.js       # COLOURS + generateSequence
@@ -262,24 +262,31 @@ Each definition is wrapped in a `global._<Name>Collection` guard so it survives 
 `draft` exists on standard rounds from round 2 when abilities are on. Playback and the round timer wait for `resolved`.
 `sequence` is the server's copy only: the `rounds` publication never sends it. Each player receives theirs in `players.secret.sequence`.
 
-**`players`** (written by `players.join`, `gameMethods.js:103-118`)
+**`players`** (written by `players.join` in `gameMethods.js`)
 ```js
 { gameId, roundId, name, lives: 3, attemptedSequence: [], currentStreak: 0,
   longestStreak: 0, totalGuesses: 0, correctGuesses: 0, eliminatedRound: null,
   eliminated: false, winner: false, completeRound: false,
   roundStatus: 'Playing' | 'Correct' | 'Passed' | 'Eliminated', gameFinished: false,
-  connectionId, connected,
+  connectionId, connected, reconnectTokenHash?,
   guard: { browserSessionId, boundAt, botStrikes, attempt },
   secret: {
     sequence: { roundId, colours, version },   // what this player must repeat
     draft?: { roundId, offered: [3 types], endsAt, status: 'open'|'picked'|'skipped'|'expired', pick },
     hand: [{ id, type, roundId }],              // held cards; Free Pass and Jump outlive their round
     shieldRoundId?,                             // shielded while it equals roundId
+    playback?: {                                // Slo-Mo / 2x Speed / Lights Out aimed at this player
+      speed?: { roundId, value: 'slow'|'fast', by },
+      lightsOut?: { roundId, by },
+    },
   } }
 ```
+`reconnectTokenHash` is a server-only SHA-256 hash of the per-tab reconnect credential.
+It is excluded from every player publication.
 `secret` is hidden state. It is excluded from `players` and `eliminations` and reaches only its owner, through `players.secret`.
 `guard` holds the open attempt, the strike count, and which browser session owns the player. It is excluded from `players` and `eliminations` and is never published.
 `'Passed'` means the round was cleared with a Free Pass.
+A `playback` effect holds while its `roundId` equals the player's `roundId`, so it lapses on its own. `roundId: null` is a Battle Royale effect waiting for the target's next level; `moveToLevel` binds it.
 `roundStatus` is public, summary-only state for the live round UI. It must never
 contain a sequence, attempted colour, or answer detail.
 
@@ -339,10 +346,10 @@ All publications are **scoped to a single game**. `gameId` is the 5-character ro
 | Name | Defined at | Args | Selector | Projection |
 |---|---|---|---|---|
 | `rounds` | `server/publications.js:16` | `gameId` | `{ gameId, advanced: false }` | excludes `sequence` |
-| `players` | `server/publications.js:23` | `gameId` | `{ gameId }` | excludes `attemptedSequence`, `secret`, `guard` |
+| `players` | `server/publications.js:23` | `gameId` | `{ gameId }` | excludes `attemptedSequence`, `secret`, `guard`, `reconnectTokenHash` |
 | `players.secret` | `server/publications.js:31` | `gameId` | `{ gameId, connectionId: this.connection.id }` | `secret` only |
 | `leaderboard` | `server/publications.js:36` | `gameId` | `{ gameId }` | none |
-| `eliminations` | `server/publications.js:41` | `gameId` | eliminated players in game | excludes `attemptedSequence`, `secret`, `guard`, newest 20 |
+| `eliminations` | `server/publications.js:41` | `gameId` | eliminated players in game | excludes `attemptedSequence`, `secret`, `guard`, `reconnectTokenHash`, newest 20 |
 | `gameFeed` | `server/publications.js:52` | `gameId` | `{ gameId, type: 'ability' }` | newest `FEED_EVENT_LIMIT` (500) |
 | `rooms.lobby` | `imports/api/rooms.js:23` | `pin` | `{ pin }` | `_id, pin, status, gameName, hostName, customSettings, gameMode, abilitiesEnabled, players.name, players.id, players.connected` |
 
@@ -381,7 +388,9 @@ There is deliberately no `'demo'` placeholder: with scoped publications it would
 
 All methods are registered inside `if (Meteor.isServer && !global._<x>Initialized)` guards.
 **None of them validate arguments with `check()` or `Match`.**
-Only the `abilities.*` methods check caller identity: they act only when the calling connection is the player's `connectionId` (D3 is still open for everything else).
+`abilities.*` methods require the owning connection.
+`players.rebind` and the existing-player branch of `players.join` require a private reconnect credential; a first client join checks lobby connection ownership and that the round belongs to the game.
+D3 remains open for the other game and room mutations.
 `check@1.5.0` is available in `.meteor/versions` but is never imported.
 
 ### Rooms (`imports/api/rooms.js`)
@@ -403,26 +412,28 @@ PIN alphabet is `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (`rooms.js:12`), generated wi
 
 | Method | Line | Args | Description |
 |---|---|---|---|
-| `rounds.generate` | 26 | `length = 4, gameId = null` | Inserts a new `isCurrent` round |
-| `players.join` | 52 | `roundId, playerName, gameId, lobbyPlayerId, isBattleRoyale, accountId` | Inserts a player with the room's starting lives and their own copy of the round's sequence, or rebinds an existing one |
-| `players.rebind` | 106 | `playerId` | Points the player at the caller's connection after a DDP reconnect (D21). Refused while that address is banned from the room |
-| `players.startAttempt` | | `playerId, roundId` | Opens one attempt for the caller's player once the draft has resolved. Returns `{ attemptId }` |
-| `players.submitSequence` | | `playerId, attemptedSequence, attempt?` | Grades against `secret.sequence`. A connected caller, with detection on, must send `{ attemptId, roundId, offsets }` from `players.startAttempt`. Lives move with `$inc` |
+| `rounds.generate` | 222 | `gameId = null` | Inserts a new `isCurrent` round |
+| `players.join` | 248 | `roundId, playerName, gameId, lobbyPlayerId, isBattleRoyale, accountId, reconnectToken` | Inserts a player with the room's starting lives and their own copy of the round's sequence, or rebinds an existing one |
+| `players.rebind` | 329 | `playerId, reconnectToken` | Verifies the private credential before binding the caller's connection after a DDP reconnect (D21, D24). Refused while that browser or address is banned from the room |
+| `players.startAttempt` | 346 | `playerId, roundId` | Opens one attempt for the caller's player once the draft has resolved. Returns `{ attemptId }` |
+| `players.submitSequence` | 382 | `playerId, attemptedSequence, attempt?` | Grades against `secret.sequence`. A connected caller, with detection on, must send `{ attemptId, roundId, offsets }` from `players.startAttempt`. Lives move with `$inc` |
 | `browserSessions.resume` | | `token` | Binds this DDP connection to an anonymous browser session. Returns the token. Only the hash is stored |
-| `players.timeoutTurn` | 157 | `playerId` | Deducts a life and updates the public round status |
-| `players.timeoutRound` | 197 | `playerId` | Eliminates a player whose standard-round timer expires |
-| `players.leaveGame` | 232 | `playerId` | Marks a spectator eliminated while retaining their result, then rechecks the winner and round progress |
-| `rounds.advance` | 256 | `currentRoundId` | Marks the round advanced, inserts the next one (with a draft when abilities are on), moves active players onto it with their new `secret.sequence` |
+| `players.timeoutTurn` | 393 | `playerId` | Deducts a life and updates the public round status |
+| `players.timeoutRound` | 435 | `playerId, timeoutRoundId` | Eliminates a player whose standard-round timer expires |
+| `players.leaveGame` | 471 | `playerId` | Marks a spectator eliminated while retaining their result, then rechecks the winner and round progress |
+| `rounds.advance` | 496 | `currentRoundId` | Marks the round advanced, inserts the next one (with a draft when abilities are on), moves active players onto it with their new `secret.sequence` |
 
 Shared helpers live in `gameEngine.js`: `checkWinner`, `advanceRoundIfReady`, `getOrCreateRound`, `loseLife`, `clearRound`, `moveToLevel`, `recordGlobalResult`.
 
 ### Abilities (`imports/api/abilities.js`)
 
-From round 2 of a standard game, each surviving player is dealt 3 of Steal, Strike, Shield, Free Pass, Reroll and Scramble, and picks 1 or skips within `DRAFT_SECONDS`.
+From round 2 of a standard game, each surviving player is dealt 3 of Steal, Strike, Shield, Slo-Mo, 2x Speed, Lights Out, Free Pass, Reroll and Scramble, and picks 1 or skips within `DRAFT_SECONDS`.
 Battle Royale players draft on every level-up instead, Jump is added, and Steal is only dealt when the room starts players on more than 1 life.
-Steal, Strike and Shield resolve when the draft closes (all at once: Steals, then Strikes; Shields block both, and Scramble). In Battle Royale they resolve on pick.
+Steal, Strike, Shield and the playback cards resolve when the draft closes (all at once: Steals, then Strikes, then playback cards; Shields block all of them, and Scramble). In Battle Royale they resolve on pick, and a playback card waits for the target's next level.
+Slo-Mo and 2x Speed halve or double the target's playback speed for the round, replays included; Lights Out fades their board to dark and back all round. A target takes at most one speed change and one Lights Out per round: the first to land wins and a second misses.
 Free Pass and Jump stay in the hand until played; Reroll and Scramble expire with their round.
 The rules and copy live in `abilityRules.js`; the server work in `abilityEngine.js`.
+The lobby's `SEE THE CARDS` guide (`ui/abilities/LobbyAbilities.jsx`, built by `abilityGuide` in `abilityFeed.js`) lists every card the room can deal, from the same `eligibleAbilities` the server deals with, so it cannot drift from the draft.
 
 | Method | Line | Args | Description |
 |---|---|---|---|
@@ -464,10 +475,13 @@ There are four unrelated identity mechanisms, none of them Meteor's.
 1. **Lobby identity** - a server-minted `Random.id()` (`rooms.js:50` for the host, `:116` for joiners).
    Joiners persist it to `localStorage.reconnectData` at `JoinRoom.jsx:53-58`.
    The host branch that would persist it is commented out at `PlayRoute.jsx:144-150`, so a host who reloads has no reconnect path.
-2. **In-game identity** - the `_id` of a `players` document, held only in React state at `GamePage.jsx:12`.
-   Not persisted, so it is lost on refresh (see D7).
+2. **In-game identity** - the `_id` of a `players` document, held in React state by `GamePage.jsx`.
+   The player ID is also saved in `localStorage`, and lobby joins resume the same player on refresh.
+   A random reconnect credential is kept in `sessionStorage` per game and lobby player, with an in-memory fallback when storage is blocked.
+   The server stores only its hash and checks it before rebinding; public player IDs and lobby IDs are insufficient.
+   Legacy players without a hash can enroll a credential only while their original connection still owns them.
    The player document also records the owning DDP `connectionId` (set by `players.join`, refreshed by `players.rebind` after a reconnect).
-   `players.secret` and the `abilities.*` methods rely on it; nothing older does.
+   `players.secret`, first joins, legacy credential enrollment and the `abilities.*` methods rely on it.
 3. **Browser session** - a random token from `browserSessions.resume`, kept in `localStorage['kimply.browser']` and bound to the DDP connection on startup and on reconnect. Gameplay mutations check the connection that owns the player. A room can block that session for its own lifetime.
 4. **Account identity** - a session token from `register` / `signIn`, kept in `localStorage['kimply.session']` and resumed at startup by `imports/ui/accountSession.js`.
    Pages read the account with `useSignedInAccount()`; it is never passed through router state.
@@ -508,17 +522,18 @@ How to write and run them is the `test` skill. What exists today:
 | `uiHelpers.test.js` | `roomCode.js`, `keyboard.js`, and `savedUsername.js` pure helpers |
 | `sequence.test.js` | `imports/api/sequence.js` |
 | `publications.test.js` | scoped pubs; no `sequence` on `rounds`; no `attemptedSequence` or `secret` on `players` / `eliminations`; `players.secret` is connection-bound; `gameFeed` |
-| `abilityRules.test.js` | dealing, eligibility, Shield, hand expiry, caller binding |
-| `abilities.test.js` | draft dealing, resolution order, Shield, Steal and Strike outcomes, Free Pass, Reroll, Scramble, Jump, `rooms.setAbilities` |
-| `abilityFeed.test.js` | feed rows, scope filtering and the wording of ability notices |
-| `leaderboardModel.test.js` | live leaderboard row helpers in `leaderboardModels.js` |
+| `playerReconnect.test.js` | Rebind and join ownership, valid reconnects, legacy enrollment, lobby and round checks, credential publication exclusion |
+| `abilityRules.test.js` | dealing, eligibility, Shield, hand expiry, caller binding, `playbackFor` and `playbackTiming` |
+| `abilities.test.js` | draft dealing, resolution order, Shield, Steal and Strike outcomes, Slo-Mo / 2x Speed / Lights Out landing, stacking, lapsing and Battle Royale pending, Free Pass, Reroll, Scramble, Jump, `rooms.setAbilities` |
+| `abilityFeed.test.js` | feed rows, scope filtering and the wording of ability notices, playback cards included; the lobby card guide per mode and starting lives |
+| `leaderboardModel.test.js` | live leaderboard row helpers in `leaderboardModels.js`; independent Battle Royale levels, recorded elimination levels, and shared standard-round levels |
 | `botDetection.test.js` | timing thresholds and the development-only kill switch |
 | `clientAddress.test.js` | IPv4 and IPv6 normalisation; addresses come only from `connection.clientAddress` |
 | `browserSessions.test.js` | create, resume, hash-only storage, and clearing the connection binding |
 | `roomBans.test.js` | attempt validation, third-strike removal, session and 15-minute IP bans |
 | `leaveGame.test.js` | spectator departure retains their result and allows the game to finish |
 
-**Not covered:** any authorization case, any concurrency or race scenario, `rooms.start`, `rooms.disconnect`, `rooms.updateGameName`, `rooms.reconnect`.
+**Not covered:** authorization on the older game and room mutations, most concurrency or race scenarios, `rooms.start`, `rooms.disconnect`, `rooms.updateGameName`, `rooms.reconnect`.
 
 CI (`.github/workflows/test.yml`) runs on pull requests to `main` and `dev` only, never on merge, behind a coverage smoke gate.
 
@@ -540,10 +555,11 @@ One line each, so a review can cite an ID without opening anything.
 | D11 | root `package-lock.json` | Desynced against an empty root `package.json`, so `npm ci` at the repo root fails |
 | D12 | `ColourSequence.jsx:80-92` | A new `AudioContext` per tile click, never closed |
 | D14 | repo-wide | `npm run format:check` fails on `main`. Needs one dedicated formatting commit before it can gate CI |
+| D23 | `docker-compose.yml` | Fixed 2026-10-12: local Rspack hot reload needs the backend's published port 8080 alongside the app on 3000 |
 | D44 | `roomBans.js`, trusted proxy handling | Spoofed forwarded headers yield no client address, so removal writes no IP ban and a fresh session bypasses it |
 | D45 | Production-mode Rspack CSS serving | Local `meteor run --production` returns HTTP 500 for the main CSS chunk, leaving the browser unstyled |
 
-Fixed and kept for history in the register: D1, D2, D9, D10, D15, D16, D17, D18, D19, D20, D21, D22.
+Fixed and kept for history in the register: D1, D2, D9, D10, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D43.
 
 ### Not a defect, so nobody chases it again
 

@@ -338,20 +338,28 @@ export async function clearRound(player, round, { credited, attemptedSequence = 
 }
 
 // Battle Royale: put a player on a level's round with that round's sequence. Cards
-// that only last a round are dropped, since the player has left it.
+// that only last a round are dropped, since the player has left it. A Slo-Mo, 2x Speed
+// or Lights Out waiting for this player's next level lands on this one, in the same
+// write, so the sequence never plays before the effect is in place.
 export async function moveToLevel(playerId, gameId, level) {
   const roundId = await getOrCreateRound(gameId, level);
   const round = await RoundsCollection.findOneAsync(roundId);
+  const player = await PlayersCollection.findOneAsync(playerId, { fields: { 'secret.playback': 1 } });
+
+  const set = {
+    roundId,
+    currentLevel: level,
+    completeRound: false,
+    roundStatus: 'Playing',
+    attemptedSequence: [],
+    'secret.sequence': sequenceState(roundId, round.sequence),
+  };
+  for (const [kind, effect] of Object.entries(player?.secret?.playback ?? {})) {
+    if (effect && effect.roundId === null) set[`secret.playback.${kind}.roundId`] = roundId;
+  }
 
   await PlayersCollection.updateAsync(playerId, {
-    $set: {
-      roundId,
-      currentLevel: level,
-      completeRound: false,
-      roundStatus: 'Playing',
-      attemptedSequence: [],
-      'secret.sequence': sequenceState(roundId, round.sequence),
-    },
+    $set: set,
     $pull: { 'secret.hand': ROUND_ONLY_CARDS },
   });
   return roundId;

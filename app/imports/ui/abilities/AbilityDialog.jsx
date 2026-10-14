@@ -7,37 +7,50 @@ import { ABILITY_ACCENTS, abilityTags } from './abilityFeed';
 // running (its timer included), it just stops taking input while this is open.
 export function AbilityDialog({ labelledBy, eyebrow, title, aside, children, footer }) {
   const panelRef = useRef(null);
+  const dialogRef = useRef(null);
   useEffect(() => {
+    const dialog = dialogRef.current;
+    const opener = document.activeElement;
+    dialog.showModal();
     panelRef.current?.focus();
+    return () => {
+      dialog.close();
+      if (opener?.isConnected) opener.focus();
+    };
   }, []);
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center px-6 py-6"
-      style={{ background: `color-mix(in oklab, ${BG} 82%, transparent)`, backdropFilter: 'blur(6px)' }}
+    <dialog
+      ref={dialogRef}
+      aria-labelledby={labelledBy}
+      aria-modal="true"
+      onCancel={(event) => event.preventDefault()}
+      className="m-0 h-[100dvh] max-h-none w-screen max-w-none border-0 bg-transparent p-0 backdrop:bg-transparent"
     >
       <div
-        ref={panelRef}
-        tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={labelledBy}
-        className="flex max-h-full w-full max-w-2xl flex-col gap-5 overflow-y-auto rounded-xl3 border border-hairline bg-surface p-5 text-fg outline-none xs:p-6"
-        style={{ boxShadow: '0 6px 18px -10px rgba(0,0,0,0.5)' }}
+        className="fixed inset-0 z-[60] flex items-center justify-center px-6 py-6"
+        style={{ background: `color-mix(in oklab, ${BG} 82%, transparent)`, backdropFilter: 'blur(6px)' }}
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex min-w-0 flex-col gap-1">
-            <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-fg3">{eyebrow}</p>
-            <h2 id={labelledBy} className="font-outfit text-[22px] font-bold tracking-[-0.01em]">
-              {title}
-            </h2>
+        <div
+          ref={panelRef}
+          tabIndex={-1}
+          className="flex max-h-full w-full max-w-2xl flex-col gap-5 overflow-y-auto rounded-xl3 border border-hairline bg-surface p-5 text-fg outline-none xs:p-6"
+          style={{ boxShadow: '0 6px 18px -10px rgba(0,0,0,0.5)' }}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-col gap-1">
+              <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-fg3">{eyebrow}</p>
+              <h2 id={labelledBy} className="font-outfit text-[22px] font-bold tracking-[-0.01em]">
+                {title}
+              </h2>
+            </div>
+            {aside}
           </div>
-          {aside}
+          {children}
+          {footer}
         </div>
-        {children}
-        {footer}
       </div>
-    </div>
+    </dialog>
   );
 }
 
@@ -66,16 +79,19 @@ export function KeyHint({ children }) {
   );
 }
 
-// One ability as a pickable card.
+// One ability as a pickable card, or a read-only one (the lobby's guide) without onClick.
 export function AbilityCard({ type, keyHint, onClick, disabled = false, compact = false }) {
   const ability = ABILITIES[type];
   const accent = TILE[ABILITY_ACCENTS[type]] ?? TILE.amber;
+  const Card = onClick ? 'button' : 'div';
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="relative flex min-h-11 w-full flex-col gap-2 overflow-hidden rounded-xl2 border border-hairline bg-surface2 p-4 pt-5 text-left transition-[border-color,transform] duration-[120ms] hover:-translate-y-0.5 hover:border-[color:var(--accent)] focus-visible:-translate-y-0.5 focus-visible:border-[color:var(--accent)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:border-hairline"
+    <Card
+      {...(onClick ? { type: 'button', onClick, disabled } : {})}
+      className={`relative flex min-h-11 w-full flex-col gap-2 overflow-hidden rounded-xl2 border border-hairline bg-surface2 p-4 pt-5 text-left ${
+        onClick
+          ? 'transition-[border-color,transform] duration-[120ms] hover:-translate-y-0.5 hover:border-[color:var(--accent)] focus-visible:-translate-y-0.5 focus-visible:border-[color:var(--accent)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:border-hairline'
+          : ''
+      }`}
       style={{ '--accent': accent }}
     >
       <span className="absolute inset-x-0 top-0 h-1" style={{ background: accent }} />
@@ -97,6 +113,6 @@ export function AbilityCard({ type, keyHint, onClick, disabled = false, compact 
           </span>
         ))}
       </span>
-    </button>
+    </Card>
   );
 }

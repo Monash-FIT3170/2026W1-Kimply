@@ -1,5 +1,6 @@
 import assert from 'assert';
 import {
+  abilityGuide,
   abilityTags,
   buildFeedRows,
   describeAbilityEvent,
@@ -20,6 +21,46 @@ describe('ability feed', function () {
 
     it("keeps everything in the 'everyone' feed", function () {
       assert.strictEqual(isInFeed('everyone', 'zoe', { playerId: 'ian', targetId: 'sam' }), true);
+    });
+  });
+
+  describe('abilityGuide', function () {
+    const typesOf = (guide) => Object.fromEntries(guide.sections.map((s) => [s.key, s.types]));
+
+    it('lists every card a standard game deals, by when it is played', function () {
+      const guide = abilityGuide();
+      assert.deepStrictEqual(typesOf(guide), {
+        pre: ['steal', 'strike', 'shield', 'slowMo', 'fastForward', 'lightsOut'],
+        in: ['freePass', 'reroll', 'scramble'],
+      });
+      assert.strictEqual(guide.count, 9);
+      assert.strictEqual(
+        guide.sections[0].note,
+        'They all land together when the draft closes: Steals first, then Strikes, then the rest.'
+      );
+      assert.match(
+        guide.intro,
+        /^From round 2, before every round, you are dealt 3 cards\. Pick 1 or skip within 20 seconds\.$/
+      );
+    });
+
+    it('adds Jump and the level-up draft in Battle Royale', function () {
+      const guide = abilityGuide({ isBattleRoyale: true });
+      assert.deepStrictEqual(typesOf(guide).in, ['freePass', 'reroll', 'scramble', 'jump']);
+      assert.strictEqual(guide.count, 10);
+      assert.match(guide.intro, /^Every time you level up/);
+      assert.match(guide.sections[0].note, /next level/);
+    });
+
+    it('leaves Steal out, and says why, when everyone starts on 1 life', function () {
+      const guide = abilityGuide({ startingLives: 1 });
+      assert.ok(!typesOf(guide).pre.includes('steal'));
+      assert.strictEqual(guide.count, 8);
+      assert.strictEqual(
+        guide.sections[0].note,
+        'They all land together when the draft closes: Strikes first, then the rest.'
+      );
+      assert.match(guide.intro, /Steal is left out: everyone starts on 1 life\.$/);
     });
   });
 
@@ -62,6 +103,30 @@ describe('ability feed', function () {
       const jump = event({ ability: 'jump', outcome: 'used', targetId: null, fromLevel: 2, level: 6 });
       assert.strictEqual(describeAbilityEvent(jump, 'ian'), 'You jumped to level 6.');
       assert.strictEqual(describeAbilityEvent(jump, 'zoe'), 'Ian jumped from level 2 to level 6.');
+    });
+
+    it('describes Slo-Mo, 2x Speed and Lights Out for each reader', function () {
+      const slowMo = event({ ability: 'slowMo', outcome: 'hit' });
+      assert.strictEqual(describeAbilityEvent(slowMo, 'ian'), "You slowed Sam's sequence.");
+      assert.strictEqual(describeAbilityEvent(slowMo, 'sam'), 'Ian slowed your sequence.');
+      assert.strictEqual(describeAbilityEvent(slowMo, 'zoe'), "Ian slowed Sam's sequence.");
+      const fast = event({ ability: 'fastForward', outcome: 'hit' });
+      assert.strictEqual(describeAbilityEvent(fast, 'sam'), 'Ian sped up your sequence.');
+      const lights = event({ ability: 'lightsOut', outcome: 'hit' });
+      assert.strictEqual(describeAbilityEvent(lights, 'sam'), 'Ian turned your lights out.');
+      assert.strictEqual(describeAbilityEvent(lights, 'ian'), "You turned the lights out on Sam's sequence.");
+    });
+
+    it('says when a playback card missed or waits for the next level', function () {
+      const missed = event({ ability: 'fastForward', outcome: 'failed' });
+      assert.strictEqual(describeAbilityEvent(missed, 'ian'), 'Your 2x Speed on Sam missed.');
+      assert.strictEqual(describeAbilityEvent(missed, 'sam'), "Ian's 2x Speed missed you.");
+      const pending = event({ ability: 'slowMo', outcome: 'hit', pending: true });
+      assert.strictEqual(describeAbilityEvent(pending, 'sam'), 'Ian slowed your next level.');
+      const pendingLights = event({ ability: 'lightsOut', outcome: 'hit', pending: true });
+      assert.strictEqual(describeAbilityEvent(pendingLights, 'sam'), 'Ian turned your lights out for your next level.');
+      const blocked = event({ ability: 'lightsOut', outcome: 'blocked' });
+      assert.strictEqual(describeAbilityEvent(blocked, 'ian'), "Sam's Shield blocked your Lights Out.");
     });
 
     it('uses a bare apostrophe after a name ending in s', function () {

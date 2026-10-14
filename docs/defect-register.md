@@ -28,14 +28,6 @@ There is no D13. The register and the summary table had drifted by one on the la
 
 ---
 
-## D22 - A script can play a round at machine speed - **fixed 2026-10-12**
-
-An automated client could subscribe, join, and submit a sequence as fast as the socket allowed. Short sequences and accuracy alone never distinguished that from a person.
-
-**Fix (applied):** `players.startAttempt` opens one attempt, and `players.submitSequence` requires its id plus per-colour offsets. An attempt of at least 4 colours is flagged when every interval is under 60 ms, the spread is at most 5 ms, and the server-observed elapsed time supports that speed. The third consecutive flagged attempt removes the player before grading, blocks that browser session for the room's lifetime, and bans the connection's address from that room for 15 minutes. A normal attempt of at least 4 colours resets the count. `BOT_DETECTION_ENABLED=false` is ignored outside development.
-
-What this does not catch: input with human-looking gaps, a new address, or an IPv6 prefix that rotates. Those stay out of the ban.
-
 ## D3 - Room host actions still trust client-supplied identifiers
 
 **Severity: high.** Gameplay mutations are no longer in this defect.
@@ -251,6 +243,53 @@ The cost of leaving it is that every branch inherits the dirt, so no diff can be
 **Fix:** one dedicated commit that runs `meteor npm run format` and changes nothing else, so it can be reviewed as a no-op and skipped in `git blame`.
 
 ---
+
+## D43 - A script can play a round at machine speed - **fixed 2026-10-12**
+
+An automated client could subscribe, join, and submit a sequence as fast as the socket allowed. Short sequences and accuracy alone never distinguished that from a person.
+
+**Fix (applied):** `players.startAttempt` opens one attempt, and `players.submitSequence` requires its id plus per-colour offsets. An attempt of at least 4 colours is flagged when every interval is under 60 ms, the spread is at most 5 ms, and the server-observed elapsed time supports that speed. The third consecutive flagged attempt removes the player before grading, blocks that browser session for the room's lifetime, and bans the connection's address from that room for 15 minutes. A normal attempt of at least 4 colours resets the count. `BOT_DETECTION_ENABLED=false` is ignored outside development.
+
+What this does not catch: input with human-looking gaps, a new address, or an IPv6 prefix that rotates. Those stay out of the ban.
+
+## D25 - Ability dialogs let keyboard focus reach the background - **fixed 2026-10-13**
+
+The ability shell initially focused its panel but neither trapped focus nor made the game behind it inert.
+Reproduced in the browser: opening Play a card and pressing Tab three times focused the obscured Feed button.
+The shell now opens a native modal `dialog`, retains the draft and hand's Escape behavior, and restores focus to the mounted opener on close.
+
+## D24 - Public player IDs can take over private game state - **fixed 2026-10-13**
+
+`players.rebind` accepted any published player ID, and `players.join` could rebind an existing player from its public lobby ID.
+Reproduced with two DDP connections: a guest received the host's private sequence and chose the host's ability after rebinding.
+Both paths now require a random per-tab credential whose hash stays server-side.
+First client joins also verify lobby connection ownership and round membership.
+Legacy players can enroll a credential only on their existing owning connection, so an attacker cannot claim an uncredentialed player after a deploy.
+This fixes the new private-state takeover; D3 remains open for other game and room mutations.
+
+## D23 - Local hot reload cannot reach Rspack's WebSocket - **fixed 2026-10-12**
+
+The local app loaded on port 3000, but the browser's Rspack client repeatedly failed to connect to `ws://localhost:8080/ws`.
+The installed `@meteorjs/rspack` configuration starts the development server on port 8080, and the container was already listening on all interfaces at that port.
+`docker-compose.yml` published only port 3000, so a host request to port 8080 failed before reaching Rspack.
+
+**Fix (applied):** publish `8080:8080` alongside the existing backend mapping.
+Recreate the backend to apply the mapping; restarting an existing container does not change its published ports.
+`docs/dev-environment.md` records the two local ports and the verification procedure.
+The change applies only to local development, and the production compose file remains unchanged.
+
+## D22 - Battle Royale leaderboard stays at level 1 as players advance - **fixed 2026-10-12**
+
+The initial Battle Royale round stays `isCurrent: true` while players move independently to their own level rounds.
+`Leaderboard.jsx` selected that initial round, and `createLiveLeaderboardRows` assigned its `roundNumber` to every active player, ignoring their `currentLevel`.
+In room `8U5Z6`, three bot players reached sequence length 5 while the browser player remained at length 4, but the browser leaderboard showed level 1 for all four.
+The browser reproduction is saved at `docs/test-evidence/round-abilities/br-levels-before.png`.
+
+**Fix (applied):** `app/imports/ui/leaderboardModels.js` converts each active Battle Royale player's own sequence length to its displayed level (`currentLevel - 3`).
+An eliminated player's `eliminatedRound` is already a displayed level and is preserved.
+Standard modes continue to use the shared round's level.
+`app/tests/leaderboardModel.test.js` covers independent Battle Royale levels, elimination levels, and unchanged standard-mode behavior.
+The independent-level regression failed before the model change and passed afterward.
 
 ## D21 - A network blip removes a player from the game - **fixed 2026-10-11**
 

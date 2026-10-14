@@ -13,13 +13,14 @@ import { TILE, TileLattice } from '../components/design';
 import { ConfirmationPopup } from '../components/ConfirmationPopup.jsx';
 import { RemovedScreen } from '../components/RemovedScreen.jsx';
 import { useSessionResuming, useSignedInAccount } from '../accountSession';
-import { playableHand } from '../../api/abilityRules';
+import { playableHand, playbackFor } from '../../api/abilityRules';
 import { useFeedScope } from '../abilities/FeedScopeToggle.jsx';
 import { LiveFeedPanel, useLiveFeed } from '../abilities/LiveFeed.jsx';
 import { DraftOverlay } from '../abilities/DraftOverlay.jsx';
 import { HandDialog } from '../abilities/HandDialog.jsx';
 import { KeyHint } from '../abilities/AbilityDialog.jsx';
 import { useAbilityNotices } from '../abilities/useAbilityNotices';
+import { gameReconnectToken, forgetGameReconnectToken } from '../gameReconnect';
 import {
   ROUND_TIMER_SECONDS as ROUND_SECONDS,
   LEVEL_UP_TOAST_MS,
@@ -124,7 +125,6 @@ export const GamePage = () => {
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(leaderboardOpenByDefault);
   const [isFeedOpen, setIsFeedOpen] = useState(feedOpenByDefault);
   const [feedSeenAt, setFeedSeenAt] = useState(() => new Date());
-  const [showPowerupPopup, setShowPowerupPopup] = useState(false);
   const [completedRoundId, setCompletedRoundId] = useState(null);
   const [handOpen, setHandOpen] = useState(false);
   const [expiredDraftKey, setExpiredDraftKey] = useState(null);
@@ -171,6 +171,7 @@ export const GamePage = () => {
       }
 
       localStorage.removeItem(`gamePlayerId:${gameId}`);
+      forgetGameReconnectToken(gameId, lobbyPlayerId);
       localStorage.removeItem('reconnectData');
       navigate('/play', { replace: true, state: playerAccount ? { playerAccount } : undefined });
     });
@@ -200,12 +201,6 @@ export const GamePage = () => {
   };
 
   useEffect(() => {
-    if (!gameId || lobbyPlayerId) return;
-    const savedPlayerId = localStorage.getItem(`gamePlayerId:${gameId}`);
-    if (savedPlayerId) setPlayerId(savedPlayerId);
-  }, [gameId, lobbyPlayerId]);
-
-  useEffect(() => {
     if (!gameId) return undefined;
     const roundsSub = Meteor.subscribe('rounds', gameId);
     const playersSub = Meteor.subscribe('players', gameId);
@@ -226,7 +221,7 @@ export const GamePage = () => {
   const wasConnectedRef = useRef(connected);
   useEffect(() => {
     if (connected && !wasConnectedRef.current && playerId) {
-      Meteor.call('players.rebind', playerId, (error) => {
+      Meteor.call('players.rebind', playerId, gameReconnectToken(gameId, lobbyPlayerId), (error) => {
         if (error?.error === 'banned' || error?.error === 'removed-automation') {
           noteRemoval(error);
           return;
@@ -235,7 +230,7 @@ export const GamePage = () => {
       });
     }
     wasConnectedRef.current = connected;
-  }, [connected, playerId]);
+  }, [connected, playerId, gameId, lobbyPlayerId]);
 
   const player = useTracker(() => {
     if (!playerId) return null;
@@ -269,6 +264,8 @@ export const GamePage = () => {
   const sequenceReady = Boolean(ownSequence && round && ownSequence.roundId === round._id);
   const sequence = sequenceReady ? ownSequence.colours : [];
   const sequenceVersion = sequenceReady ? ownSequence.version : null;
+  // Slo-Mo, 2x Speed or Lights Out someone has aimed at this player for this round.
+  const playback = playbackFor(player);
 
   // Standard rounds open with a shared draft on the round. Battle Royale deals each
   // player their own when they level up.
@@ -341,6 +338,15 @@ export const GamePage = () => {
   useEffect(() => {
     // Wait for a stored session to resume, or the player would join without their account.
     if (!round?._id || playerId || sessionResuming) return;
+    const savedPlayerId = !lobbyPlayerId && localStorage.getItem(`gamePlayerId:${gameId}`);
+    if (savedPlayerId) {
+      Meteor.call('players.rebind', savedPlayerId, gameReconnectToken(gameId, lobbyPlayerId), (error) => {
+        if (error?.error === 'banned' || error?.error === 'removed-automation') noteRemoval(error);
+        else if (error) setMessage('Could not reconnect to your game. Join a new room to play.');
+        else setPlayerId(savedPlayerId);
+      });
+      return;
+    }
     Meteor.call(
       'players.join',
       round._id,
@@ -349,6 +355,7 @@ export const GamePage = () => {
       lobbyPlayerId,
       isBattleRoyale,
       accountId,
+      gameReconnectToken(gameId, lobbyPlayerId),
       (error, result) => {
         if (error) {
           if (error.error === 'banned' || error.error === 'removed-automation') noteRemoval(error);
@@ -407,11 +414,6 @@ export const GamePage = () => {
       setTimeout(() => setNotices((prev) => prev.filter((n) => n.key !== notice.key)), 5000);
     }
   }, [player?.currentStreak]);
-
-  // Show the slow-motion powerup popup whenever the player picks it up
-  useEffect(() => {
-    setShowPowerupPopup(!!player?.slowMotionActive);
-  }, [player?.slowMotionActive]);
 
   const handleReplay = () => {
     if (!canReplay) return;
@@ -795,7 +797,18 @@ export const GamePage = () => {
     return <RemovedScreen error={removal} onLeave={() => navigate('/play', { replace: true })} />;
   }
 
-  if (!player) return null;
+  if (!player) {
+    return message ? (
+      <main className="flex min-h-[100dvh] flex-col items-center justify-center gap-5 bg-bg px-6 text-center text-fg">
+        <p role="alert" className="font-manrope text-sm">
+          {message}
+        </p>
+        <a href="/play" className="font-outfit text-sm font-semibold text-primary">
+          Join or create a room
+        </a>
+      </main>
+    ) : null;
+  }
 
   if (player.gameFinished) {
     return (
@@ -928,24 +941,6 @@ export const GamePage = () => {
           onClose={() => setHandOpen(false)}
         />
       )}
-      {showPowerupPopup && (
-        <div
-          style={{
-            position: 'fixed',
-            top: '20px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            background: '#0a84ff',
-            color: 'white',
-            padding: '14px 28px',
-            borderRadius: '12px',
-            fontWeight: 'bold',
-            zIndex: 1000,
-          }}
-        >
-          Powerup Gained: Slow Motion for one round!
-        </div>
-      )}
       {renderNoticeStack(76)}
       <div
         className="relative flex shrink-0 justify-between"
@@ -969,7 +964,7 @@ export const GamePage = () => {
       {/* Centred with an auto margin rather than justify-center: when the column is taller
           than the screen (more hearts, a held card), justify-center pushes the overflow off
           the top where it can not be scrolled to. my-auto falls back to top-aligned scrolling. */}
-      <div className="relative flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-6 pb-6">
+      <div className="relative flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-6 pb-6 pt-[5dvh] md:pt-0">
         <div className="flex w-full flex-col items-center md:my-auto">
           {isBattleRoyale && (
             <div
@@ -1064,13 +1059,9 @@ export const GamePage = () => {
                 markSequenceSeen(gameId, player?.roundId, sequenceVersion);
               }}
               onColourClick={handleColourClick}
-              flashingSpeed={
-                player?.slowMotionActive
-                  ? 'slow'
-                  : room?.gameMode === 'custom'
-                    ? room.customSettings?.flashingSpeed
-                    : 'medium'
-              }
+              flashingSpeed={room?.gameMode === 'custom' ? room.customSettings?.flashingSpeed : 'medium'}
+              speed={playback.speed}
+              lightsOut={playback.lightsOut}
             />
             <p
               style={{
