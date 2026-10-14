@@ -19,7 +19,18 @@ export const ABILITY_CARDS_OFFERED = 3;
 // The live feed keeps a game's ability events for its whole length; this only bounds a
 // pathological game so one subscription can not grow without limit.
 export const FEED_EVENT_LIMIT = 500;
-export const ABILITY_WEIGHTS = { steal: 3, strike: 3, shield: 3, reroll: 3, scramble: 2, freePass: 1, jump: 1 };
+export const ABILITY_WEIGHTS = {
+  steal: 3,
+  strike: 3,
+  shield: 3,
+  reroll: 3,
+  scramble: 2,
+  slowMo: 2,
+  fastForward: 2,
+  lightsOut: 2,
+  freePass: 1,
+  jump: 1,
+};
 
 // --- Rooms ---
 export const PIN_LENGTH = 5;
@@ -55,6 +66,15 @@ export const FLASH_SPEEDS = {
   medium: { flash: 600, gap: 250 },
   fast: { flash: 350, gap: 150 },
 };
+
+// Slo-Mo and 2x Speed scale the room's playback speed. The floor keeps a 2x Speed in a
+// fast room something a person can still see.
+export const PLAYBACK_SPEED_FACTORS = { slow: 2, fast: 0.5 };
+export const MIN_FLASH_MS = 160;
+export const MIN_GAP_MS = 70;
+// One fade out and back in under Lights Out. Not a multiple of any flash + gap, so a
+// replay loses different flashes to the dark.
+export const LIGHTS_OUT_CYCLE_MS = 2600;
 
 // --- Accounts ---
 export const MIN_PASSWORD_LENGTH = 8;

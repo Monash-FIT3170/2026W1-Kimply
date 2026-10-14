@@ -7,59 +7,75 @@ import { ELIMINATION_FEED_MS as DISPLAY_MS, MAX_LIVE_FEED_ITEMS } from '../const
 // scope 'me' keeps only the viewer's own elimination: the ones they caused already
 // arrive as ability notices.
 export const EliminationFeed = ({ gameId, scope = 'everyone', viewerId = null }) => {
-  const eliminations = useTracker(() => {
+  const { ready, eliminations } = useTracker(() => {
+    if (!gameId) return { ready: false, eliminations: [] };
     const sub = Meteor.subscribe('eliminations', gameId);
-
-    if (!sub.ready() || !gameId) {
-      return [];
-    }
-
-    return PlayersCollection.find({ gameId, eliminated: true }, { sort: { eliminatedAt: -1 } }).fetch();
+    if (!sub.ready()) return { ready: false, eliminations: [] };
+    return {
+      ready: true,
+      eliminations: PlayersCollection.find({ gameId, eliminated: true }, { sort: { eliminatedAt: 1 } }).fetch(),
+    };
   }, [gameId]);
 
   const [visible, setVisible] = useState([]);
+  const [overflow, setOverflow] = useState(0);
+  const visibleRef = useRef([]);
   const seenIds = useRef(new Set());
+  const baselined = useRef(false);
   const timers = useRef({});
+  const overflowTimer = useRef(null);
 
   useEffect(() => {
-    // The cursor is newest-first; replay oldest-first so the cap keeps the newest.
-    [...eliminations].reverse().forEach((entry) => {
-      if (seenIds.current.has(entry._id)) return;
-      seenIds.current.add(entry._id);
-      if (scope === 'me' && entry._id !== viewerId) return;
+    if (!ready) return;
 
-      // Cap the stack: a big lobby eliminates players faster than the toasts expire,
-      // and on a phone an uncapped column covers the whole board.
-      setVisible((prev) => [...prev, entry].slice(-MAX_LIVE_FEED_ITEMS));
+    // Eliminations from before this feed mounted (a player moving into the spectator
+    // view remounts it) are history, not news, so only announce ones that arrive later.
+    if (!baselined.current) {
+      eliminations.forEach((e) => seenIds.current.add(e._id));
+      baselined.current = true;
+      return;
+    }
 
+    const unseen = eliminations.filter((e) => !seenIds.current.has(e._id));
+    unseen.forEach((e) => seenIds.current.add(e._id));
+    const fresh = scope === 'me' ? unseen.filter((e) => e._id === viewerId) : unseen;
+    if (fresh.length === 0) return;
+
+    // Show the most recent few; count the rest.
+    const shown = fresh.slice(-MAX_LIVE_FEED_ITEMS);
+    let hidden = fresh.length - shown.length;
+
+    const combined = [...visibleRef.current, ...shown];
+    const evicted = Math.max(0, combined.length - MAX_LIVE_FEED_ITEMS);
+    hidden += evicted;
+    visibleRef.current = combined.slice(-MAX_LIVE_FEED_ITEMS);
+    setVisible(visibleRef.current);
+
+    shown.forEach((entry) => {
       timers.current[entry._id] = setTimeout(() => {
-        setVisible((prev) => prev.filter((e) => e._id !== entry._id));
+        visibleRef.current = visibleRef.current.filter((e) => e._id !== entry._id);
+        setVisible(visibleRef.current);
         delete timers.current[entry._id];
       }, DISPLAY_MS);
     });
-  }, [eliminations, scope, viewerId]);
+
+    if (hidden > 0) {
+      setOverflow((n) => n + hidden);
+      clearTimeout(overflowTimer.current);
+      overflowTimer.current = setTimeout(() => setOverflow(0), DISPLAY_MS);
+    }
+  }, [ready, eliminations, scope, viewerId]);
 
   useEffect(() => {
     const activeTimers = timers.current;
     return () => {
       Object.values(activeTimers).forEach(clearTimeout);
+      clearTimeout(overflowTimer.current);
     };
   }, []);
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        bottom: 'calc(20px + env(safe-area-inset-bottom, 0px))',
-        left: '20px',
-        width: 'min(260px, calc(100vw - 40px))',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '6px',
-        pointerEvents: 'none',
-        zIndex: 50,
-      }}
-    >
+    <div className="kill-feed" aria-live="polite">
       {visible.map((entry) => (
         <div
           key={entry._id}
@@ -67,6 +83,7 @@ export const EliminationFeed = ({ gameId, scope = 'everyone', viewerId = null })
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
+            gap: '8px',
             padding: '8px 12px',
             borderRadius: '6px',
             backgroundColor: 'rgba(0, 0, 0, 0.55)',
@@ -77,7 +94,7 @@ export const EliminationFeed = ({ gameId, scope = 'everyone', viewerId = null })
             animation: `killFeedPop ${DISPLAY_MS}ms ease forwards`,
           }}
         >
-          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
             <span
               style={{
                 width: '6px',
@@ -88,11 +105,28 @@ export const EliminationFeed = ({ gameId, scope = 'everyone', viewerId = null })
                 flexShrink: 0,
               }}
             />
-            <strong>{entry.name}</strong>
+            <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.name}</strong>
           </span>
-          <span style={{ color: '#ff9c9c', fontSize: '0.75rem' }}>eliminated · Lv {entry.eliminatedRound}</span>
+          <span style={{ color: '#ff9c9c', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+            eliminated · Lv {entry.eliminatedRound}
+          </span>
         </div>
       ))}
+      {overflow > 0 && (
+        <div
+          style={{
+            padding: '6px 12px',
+            borderRadius: '6px',
+            backgroundColor: 'rgba(0, 0, 0, 0.55)',
+            border: '1px solid rgba(224, 48, 48, 0.25)',
+            color: '#ff9c9c',
+            fontSize: '0.75rem',
+            textAlign: 'center',
+          }}
+        >
+          +{overflow} more eliminated
+        </div>
+      )}
     </div>
   );
 };

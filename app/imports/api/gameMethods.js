@@ -1,5 +1,6 @@
 import { Meteor } from 'meteor/meteor';
 import { Random } from 'meteor/random';
+import { createHash } from 'crypto';
 import { RoundsCollection } from './rounds';
 import { PlayersCollection } from './players';
 import { LeaderboardCollection } from './leaderboard';
@@ -184,6 +185,36 @@ async function acceptGuardedAttempt(connection, playerId, attemptedSequence, att
   return applySubmission(player._id, attemptedSequence);
 }
 
+function reconnectHash(token) {
+  if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) {
+    throw new Meteor.Error('not-yours', 'Your game reconnect credential is missing or invalid');
+  }
+  return createHash('sha256').update(token).digest('hex');
+}
+
+// The bot guard's ownership fields, written in the same update as the rebind.
+function guardOnBind(player, sessionId, boundAt) {
+  return {
+    'guard.browserSessionId': sessionId || player.guard?.browserSessionId || null,
+    'guard.boundAt': boundAt,
+    'guard.botStrikes': player.guard?.botStrikes ?? 0,
+  };
+}
+
+async function rebindPlayer(player, connectionId, token, extraSet = {}) {
+  const hash = reconnectHash(token);
+  // A player created before credentials existed can enroll only on its owning
+  // connection. Knowing a public player or lobby ID never grants that right.
+  const enroll = !player.reconnectTokenHash && connectionId && player.connectionId === connectionId;
+  const selector = enroll
+    ? { _id: player._id, connectionId, reconnectTokenHash: { $exists: false } }
+    : { _id: player._id, reconnectTokenHash: hash };
+  const updated = await PlayersCollection.updateAsync(selector, {
+    $set: { connectionId, connected: true, ...extraSet, ...(enroll ? { reconnectTokenHash: hash } : {}) },
+  });
+  if (!updated) throw new Meteor.Error('not-yours', 'This reconnect credential does not belong to that player');
+}
+
 if (Meteor.isServer && !global._gameMethodsInitialized) {
   global._gameMethodsInitialized = true;
   Meteor.methods({
@@ -220,33 +251,44 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       gameId = null,
       lobbyPlayerId = null,
       isBattleRoyale = false,
-      accountId = null
+      accountId = null,
+      reconnectToken = null
     ) {
       const connectionId = this.connection?.id ?? null;
       const sessionId = requireBrowserSession(this.connection);
       await assertEntryAllowed(gameId, this.connection);
       const boundAt = new Date();
+      const room = await RoomsCollection.findOneAsync({ pin: gameId });
+      const round = await RoundsCollection.findOneAsync(roundId);
+      if (connectionId) {
+        if (!room || !round || round.gameId !== gameId) {
+          throw new Meteor.Error('invalid-game', 'Choose a round in your game');
+        }
+        // Older callers omit the lobby ID. Derive it only from their own room
+        // membership, rather than allowing another unbound player to be minted.
+        if (!lobbyPlayerId) {
+          lobbyPlayerId = room.players?.find((p) => p.connectionId === connectionId && p.name === playerName)?.id;
+          if (!lobbyPlayerId) throw new Meteor.Error('not-yours', 'Join the lobby before entering the game');
+        }
+      }
       if (lobbyPlayerId) {
         const existing = await PlayersCollection.findOneAsync({ gameId, lobbyPlayerId });
         if (existing) {
           if (sessionId && existing.guard?.browserSessionId && existing.guard.browserSessionId !== sessionId) {
             throw new Meteor.Error('not-yours', 'That is not your player');
           }
-          await PlayersCollection.updateAsync(existing._id, {
-            $set: {
-              connectionId,
-              connected: true,
-              'guard.browserSessionId': sessionId || existing.guard?.browserSessionId || null,
-              'guard.boundAt': boundAt,
-              'guard.botStrikes': existing.guard?.botStrikes ?? 0,
-            },
-          });
+          await rebindPlayer(existing, connectionId, reconnectToken, guardOnBind(existing, sessionId, boundAt));
           return existing._id;
         }
       }
 
-      const room = await RoomsCollection.findOneAsync({ pin: gameId });
-      const round = await RoundsCollection.findOneAsync(roundId);
+      if (connectionId && lobbyPlayerId) {
+        const member = room?.players?.find((p) => p.id === lobbyPlayerId);
+        if (!member || member.connectionId !== connectionId) {
+          throw new Meteor.Error('not-yours', 'That lobby player does not belong to your connection');
+        }
+      }
+      const reconnectTokenHash = connectionId || reconnectToken ? reconnectHash(reconnectToken) : null;
       const startingLives = room?.customSettings?.startingLives
         ? room.customSettings.startingLives
         : DEFAULT_STARTING_LIVES;
@@ -271,10 +313,10 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         roundStatus: 'Playing',
         gameFinished: false,
         isBattleRoyale,
-        slowMotionActive: false,
         eliminatedAt: null,
         connectionId,
         connected: true,
+        ...(reconnectTokenHash ? { reconnectTokenHash } : {}),
         // Only ever published to this player's own connection (players.secret).
         secret: { sequence: round ? sequenceState(roundId, round.sequence) : null, hand: [] },
         // Strikes, the open attempt, and which browser owns this player. Not published.
@@ -284,25 +326,19 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
 
     // Point a player at the caller's connection again. A DDP reconnect opens a new
     // connection, and without this the disconnect grace timer removes the player.
-    async 'players.rebind'(playerId) {
+    async 'players.rebind'(playerId, reconnectToken) {
       if (typeof playerId !== 'string' || !playerId) throw new Meteor.Error('invalid', 'Invalid player');
+      const connectionId = this.connection?.id ?? null;
       const player = await PlayersCollection.findOneAsync(playerId);
       if (!player) throw new Meteor.Error('not-found', 'Player not found');
-      // The new connection does not own the player yet. The browser session does.
+      // The new connection does not own the player yet. The browser session and the
+      // per-tab reconnect credential do.
       const sessionId = requireBrowserSession(this.connection);
       if (sessionId && player.guard?.browserSessionId && player.guard.browserSessionId !== sessionId) {
         throw new Meteor.Error('not-yours', 'That is not your player');
       }
       await assertEntryAllowed(player.gameId, this.connection);
-      await PlayersCollection.updateAsync(playerId, {
-        $set: {
-          connectionId: this.connection?.id ?? null,
-          connected: true,
-          'guard.browserSessionId': sessionId || player.guard?.browserSessionId || null,
-          'guard.boundAt': new Date(),
-          'guard.botStrikes': player.guard?.botStrikes ?? 0,
-        },
-      });
+      await rebindPlayer(player, connectionId, reconnectToken, guardOnBind(player, sessionId, new Date()));
       return true;
     },
 
@@ -499,8 +535,6 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         ...(draft ? { draft } : {}),
       });
 
-      const grantsSlowMotion = currentRound.roundNumber === 5;
-
       // move active players into next round
       await PlayersCollection.updateAsync(
         {
@@ -513,7 +547,6 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
             completeRound: false,
             roundStatus: 'Playing',
             attemptedSequence: [],
-            slowMotionActive: grantsSlowMotion,
             'secret.sequence': sequenceState(nextRoundId, nextSequence),
           },
           // Reroll and Scramble only last the round they were dealt for.

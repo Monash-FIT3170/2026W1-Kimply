@@ -1,5 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FLASH_SPEEDS } from '../constants';
+import { BG, TILE } from './components/design';
+import { playbackTiming } from '../api/abilityRules';
+import { LIGHTS_OUT_CYCLE_MS } from '../constants';
+
+// What Slo-Mo, 2x Speed and Lights Out show the player they have been hit with.
+const EFFECT_LABELS = { slow: 'Slo-mo', fast: '2x speed', lightsOut: 'Lights out' };
 
 const SHAPE_ICONS = {
   red: () => <rect x="18" y="18" width="28" height="28" rx="4" fill="none" stroke="white" strokeWidth="3" />,
@@ -37,6 +42,8 @@ export const ColourSequence = ({
   playerCanInput,
   onColourClick,
   flashingSpeed = 'medium',
+  speed = null,
+  lightsOut = false,
   autoPlay = true,
 }) => {
   const [activeColour, setActiveColour] = useState(null);
@@ -44,6 +51,11 @@ export const ColourSequence = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [isDone, setIsDone] = useState(false);
   const hasRunRef = useRef(false);
+  const effects = [speed, lightsOut && 'lightsOut'].filter(Boolean);
+  // Read on every flash rather than once per playback: a Slo-Mo or 2x Speed reaches the
+  // client over DDP and can land a beat after the round opens.
+  const timingRef = useRef(playbackTiming(flashingSpeed, speed));
+  timingRef.current = playbackTiming(flashingSpeed, speed);
 
   useEffect(() => {
     if (!sequence || sequence.length === 0) return;
@@ -59,15 +71,15 @@ export const ColourSequence = ({
 
     let i = 0;
     let cancelled = false;
+    let timer = null;
 
     setIsPlaying(true);
     setIsDone(false);
     setActiveColour(null);
 
-    const { flash, gap } = FLASH_SPEEDS[flashingSpeed] ?? FLASH_SPEEDS.medium;
-
     const showNext = () => {
       if (cancelled) return;
+      const { flash, gap } = timingRef.current;
 
       if (i >= sequence.length) {
         setActiveColour(null);
@@ -84,18 +96,18 @@ export const ColourSequence = ({
       const colour = sequence[i];
       setActiveColour(colour);
 
-      setTimeout(() => {
+      timer = setTimeout(() => {
         setActiveColour(null);
         i++;
-        setTimeout(showNext, gap);
+        timer = setTimeout(showNext, gap);
       }, flash);
     };
 
-    const startDelay = setTimeout(showNext, 800);
+    timer = setTimeout(showNext, 800);
 
     return () => {
       cancelled = true;
-      clearTimeout(startDelay);
+      clearTimeout(timer);
     };
   }, [roundId, replayKey]);
   const playClickSound = () => {
@@ -172,67 +184,101 @@ export const ColourSequence = ({
       >
         {isPlaying && 'WATCH THE SEQUENCE'}
         {isDone && 'YOUR TURN! CLICK THE COLOURS'}
+        {effects.length > 0 && (
+          // Its own centred line on phones, where it would not fit beside the instruction.
+          <span
+            className={`flex justify-center gap-3 align-middle xs:inline-flex ${isPlaying || isDone ? 'xs:ml-3' : ''}`}
+          >
+            {effects.map((effect) => (
+              <span
+                key={effect}
+                data-testid={`playback-effect-${effect}`}
+                className="inline-flex items-center gap-1.5 whitespace-nowrap font-mono text-[11px] font-semibold uppercase tracking-[0.12em]"
+                style={{ color: TILE.violet }}
+              >
+                <span className="h-1.5 w-1.5 animate-kimply-pulse rounded-full" style={{ background: TILE.violet }} />
+                {EFFECT_LABELS[effect]}
+              </span>
+            ))}
+          </span>
+        )}
       </p>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: '8px',
-          width: 'var(--tile-grid)',
-          margin: '0 auto',
-        }}
-      >
-        {TILE_ORDER.map((colourId) => {
-          const ShapeIcon = SHAPE_ICONS[colourId];
-          const isActive = activeColour === colourId || clickedColour === colourId;
-          const bg = isActive ? COLOURS[colourId].active : COLOURS[colourId].dim;
+      <div className="relative mx-auto" style={{ width: 'var(--tile-grid)' }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '8px',
+            width: 'var(--tile-grid)',
+          }}
+        >
+          {TILE_ORDER.map((colourId) => {
+            const ShapeIcon = SHAPE_ICONS[colourId];
+            const isActive = activeColour === colourId || clickedColour === colourId;
+            const bg = isActive ? COLOURS[colourId].active : COLOURS[colourId].dim;
 
-          return (
-            <button
-              key={colourId}
-              data-testid={`colour-tile-${colourId}`}
-              disabled={!playerCanInput}
-              onClick={() => handleTileClick(colourId)}
-              style={{
-                width: 'calc(var(--tile-grid) / 2 - 4px)',
-                height: 'calc(var(--tile-grid) / 2 - 4px)',
-                backgroundColor: bg,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: '16px',
-                transition: 'all 0.15s ease',
-                boxShadow: isActive
-                  ? `0 0 60px ${COLOURS[colourId].active}, 0 0 20px ${COLOURS[colourId].active}`
-                  : 'none',
-                border: `3px solid ${isActive ? COLOURS[colourId].active : 'rgba(255,255,255,0.08)'}`,
-                cursor: playerCanInput ? 'pointer' : 'not-allowed',
-                opacity: playerCanInput || isPlaying ? 1 : 0.7,
-                transform: isActive ? 'scale(0.95)' : 'scale(1)',
-                position: 'relative',
-              }}
-            >
-              <svg width="36%" height="36%" viewBox="0 0 64 64">
-                <ShapeIcon />
-              </svg>
-
-              <span
+            return (
+              <button
+                key={colourId}
+                data-testid={`colour-tile-${colourId}`}
+                disabled={!playerCanInput}
+                onClick={() => handleTileClick(colourId)}
                 style={{
-                  position: 'absolute',
-                  bottom: '8px',
-                  left: '10px',
-                  fontSize: '10px',
-                  fontWeight: 'bold',
-                  color: 'rgba(255,255,255,0.8)',
-                  letterSpacing: '1px',
+                  width: 'calc(var(--tile-grid) / 2 - 4px)',
+                  height: 'calc(var(--tile-grid) / 2 - 4px)',
+                  backgroundColor: bg,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '16px',
+                  transition: 'all 0.15s ease',
+                  // No glow under Lights Out: it would spill out past the darkened board.
+                  boxShadow:
+                    isActive && !lightsOut
+                      ? `0 0 60px ${COLOURS[colourId].active}, 0 0 20px ${COLOURS[colourId].active}`
+                      : 'none',
+                  border: `3px solid ${isActive ? COLOURS[colourId].active : 'rgba(255,255,255,0.08)'}`,
+                  cursor: playerCanInput ? 'pointer' : 'not-allowed',
+                  opacity: playerCanInput || isPlaying ? 1 : 0.7,
+                  transform: isActive ? 'scale(0.95)' : 'scale(1)',
+                  position: 'relative',
                 }}
               >
-                {KEY_LABELS[colourId]}
-              </span>
-            </button>
-          );
-        })}
+                <svg width="36%" height="36%" viewBox="0 0 64 64">
+                  <ShapeIcon />
+                </svg>
+
+                <span
+                  style={{
+                    position: 'absolute',
+                    bottom: '8px',
+                    left: '10px',
+                    fontSize: '10px',
+                    fontWeight: 'bold',
+                    color: 'rgba(255,255,255,0.8)',
+                    letterSpacing: '1px',
+                  }}
+                >
+                  {KEY_LABELS[colourId]}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        {lightsOut && (
+          // Fades the board to the page background and back. It starts lit so the first
+          // flash is always seen, and lets clicks through.
+          <div
+            aria-hidden="true"
+            data-testid="lights-out"
+            className="pointer-events-none absolute -inset-1 rounded-[20px]"
+            style={{
+              background: BG,
+              animation: `lightsOut ${LIGHTS_OUT_CYCLE_MS}ms ease-in-out infinite`,
+            }}
+          />
+        )}
       </div>
     </div>
   );

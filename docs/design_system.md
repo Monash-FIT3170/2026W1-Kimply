@@ -2,7 +2,7 @@
 
 Multiplayer memory challenge. This document is the single source of truth for how Kimply looks, sounds, and behaves. Check here before designing or building anything new.
 
-**Status:** v0.3 · Active
+**Status:** v0.6 · Active
 **Owner:** Design
 
 ---
@@ -210,7 +210,23 @@ Motion conveys state. It does not decorate.
   50%, 100% { opacity: 0; }
 }
 /* Active text input — 1s steps(2) infinite */
+
+@keyframes lightsOut {
+  0%, 15%   { opacity: 0; }
+  45%, 65%  { opacity: 0.97; }
+  95%, 100% { opacity: 0; }
+}
+/* Lights Out ability: a --bg overlay over the tile grid — 2600ms ease-in-out infinite */
 ```
+
+`lightsOut` is the one animation that hides state on purpose: it is a hostile card's effect, not decoration.
+It starts lit so the first flash is always seen, and its period is not a multiple of any flash and gap, so a replay loses different flashes.
+The overlay sits 4px outside the grid with no feathered edge, and lit tiles drop their outer glow while it runs, so the instruction line and the `Selected` count above and below stay readable.
+
+### Playback effect chip
+
+When Slo-Mo, 2x Speed or Lights Out has landed on a player, the instruction line above the tiles gains a pulse-meta chip per effect (`SLO-MO`, `2X SPEED`, `LIGHTS OUT`): Mono 600 11px uppercase in `--tile-violet` with a pulsing 6px dot.
+Below `xs` the chips take their own centred line under the instruction, because they do not fit beside it; from `xs` up they sit inline after it.
 
 ---
 
@@ -271,11 +287,12 @@ Avatar (32px circle, gradient from assigned tile color, `--bg` initial) → name
 `--surface-2` fill, hairline border, 14px radius, 16px padding with 20px on top, and a 4px band across the top edge in the card's tile accent.
 Label in Outfit 700 18px, description in Manrope 500 13px `--fg-2`, then mono 10px uppercase tags (`PICK A PLAYER`, `SAVED UNTIL USED`) in the accent.
 A key hint (`1`, `2`, `3`) sits top right. Hover and focus lift 2px and turn the border to the accent.
+Read-only where nothing is being chosen (the Ability guide): same card, no key hint, no lift.
 
 | Accent | Cards | Meaning |
 |---|---|---|
 | `--tile-pink` | Steal, Strike | Hurts another player |
-| `--tile-violet` | Scramble, Jump | Changes someone's sequence or level |
+| `--tile-violet` | Scramble, Slo-Mo, 2x Speed, Lights Out, Jump | Changes someone's sequence, its playback, or a level |
 | `--tile-teal` | Shield | Protection |
 | `--tile-amber` | Free Pass, Reroll | Helps yourself |
 
@@ -315,6 +332,8 @@ Panel with a 4px tile-gradient band across the top edge, mono uppercase label, 5
 
 ### Ability draft
 A modal over the game screen, which stays visible behind a blurred `--bg` scrim.
+The draft and held-card shell use a native modal dialog: the background is inert, Tab and Shift+Tab stay in the dialog, and closing restores focus to the opener when it is still present.
+Escape retains its contextual behavior (skip, back, or close).
 Surface card (18px radius) holding a mono eyebrow (`LEVEL 3 · ABILITY DRAFT`), an H2, a pulse-meta countdown at the top right, then 3 ability cards (one column on phones, three from `xs`), then a footer line and a Skip ghost button with an `Esc` key hint.
 Picking a card that needs a target replaces the cards with the target picker in the same card, with a Back ghost button.
 After a pick, the card shows what was locked in until the draft closes.
@@ -324,6 +343,14 @@ Surface panel (16px radius, `--surface` at 82% over a blur) with an H2-sized "Li
 Each row is a 12px-radius card with a 4px left edge in the card's tile accent (pink for eliminations), the sentence in Manrope 13px, and a mono 10px uppercase line: `ROUND 3 · STRIKE · BLOCKED`.
 Rows involving the viewer are raised (`--surface-2`, `--fg-3` border, semibold text, a `YOU` chip); rows aimed at the viewer use a pink edge and an `AT YOU` chip.
 A drawer from the left above `xs`, a bottom sheet below; open by default from 1280px. The Feed button carries an unread badge, amber, or pink when an unread row was aimed at the viewer.
+
+### Ability guide
+A lobby button, `SEE THE CARDS` with a mono count of the cards this game can deal, opens a modal in the Ability draft's shell.
+Mono eyebrow (`ABILITIES · 9 CARDS`), the H2 `Know your cards`, one Manrope 14px line on how the draft deals, then a section per timing (`BEFORE THE ROUND`, `DURING THE ROUND`): a mono label, one Manrope 13px note, and read-only ability cards, one column on phones and two from `xs`.
+A close icon button (44px, hairline, 10px radius, as on the Live feed) sits top right, and a Close ghost button with `Esc` ends it too.
+Only the cards scroll, so the header and the footer stay in reach on a phone.
+The button is a 44px pill beside the host's Switch, and a 36px pill inside a 44px hit target beside the joined view's chips, so it sits level with them.
+It shows only while abilities are on.
 
 ### Target picker
 Mono label with the count (`PLAYERS (7)`), a text input that filters by name, then player rows (avatar, name, mono `LEVEL 4 · 2 LIVES`).
@@ -451,3 +478,5 @@ The system grows by addition, not by drift.
 | v0.2 | 2026-09-21 | Spacing scale gains a phone screen-edge value (`--s-5`, 24px); breakpoint table gains a screen-edge column, the `min(100%, ...)` grid-track rule, and the `xs` (481px) Tailwind boundary. |
 | v0.3 | 2026-09-22 | Adds the Third-party sign-in pattern for Google sign-in on the Account page. |
 | v0.4 | 2026-10-11 | Adds the Ability card, Key hint, Segmented toggle and Switch components, and the Ability draft, Target picker and Live feed patterns, for round abilities. |
+| v0.5 | 2026-10-12 | Adds the `lightsOut` animation and the Playback effect chip for the Slo-Mo, 2x Speed and Lights Out abilities. |
+| v0.6 | 2026-10-13 | Adds the Ability guide pattern and the read-only Ability card, so the lobby can show every card before the game. |

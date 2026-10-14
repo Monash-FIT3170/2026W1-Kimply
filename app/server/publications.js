@@ -8,7 +8,7 @@ import { FEED_EVENT_LIMIT } from '../imports/constants.js';
 
 // attemptedSequence holds a submitted answer and secret holds a player's sequence,
 // draft and hand. Neither may reach other players.
-const PRIVATE_PLAYER_FIELDS = { attemptedSequence: 0, secret: 0, guard: 0 };
+const PRIVATE_PLAYER_FIELDS = { attemptedSequence: 0, secret: 0, guard: 0, reconnectTokenHash: 0 };
 
 // Also imported by tests. Plain `meteor test` never loads server/main.js.
 if (Meteor.isServer && !global._publicationsInitialized) {

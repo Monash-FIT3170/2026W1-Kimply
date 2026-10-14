@@ -20,6 +20,68 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-14 - Bot detection merged with reconnect credentials
+
+Bot detection (#142) and reconnect ownership (#150) were built in parallel, and both changed `players.join` and `players.rebind`.
+The merge keeps both checks rather than choosing one: a rebind must come from the browser session that owns the player, from an address the room has not banned, and with the per-tab reconnect credential.
+The bot guard's fields (`guard.browserSessionId`, `boundAt`, `botStrikes`) are written by `rebindPlayer` in the same credential-guarded update, so a refused credential never moves the guard.
+`players` and `eliminations` exclude both `guard` and `reconnectTokenHash`.
+A banned or removed player who resumes a saved game after a refresh now sees the removal screen, as on a DDP reconnect, instead of a generic reconnect error.
+
+The bot branch had recorded its defect as D22, which `dev` had already given to the Battle Royale leaderboard.
+It is D43 now: D26 to D42 are the ECS architecture decisions in [ecs-target-architecture.md](ecs-target-architecture.md), so D43 is the first ID neither list uses.
+Anything citing "D22" for machine-speed play means D43.
+
+---
+
+## 2026-10-13 - Reconnect ownership and ability-dialog keyboard focus
+
+PR #141 review reproduced a guest rebinding the host's public player ID, receiving the host's private sequence and picking the host's card (D24).
+The game now supplies a random per-tab credential to `players.join` and `players.rebind`, with only its SHA-256 hash stored on the server and excluded from publications.
+Both rebinding paths verify that credential.
+A first client join checks lobby connection ownership and round membership; omitting the lobby ID derives only the caller's own membership.
+Anonymous play is preserved.
+Session storage survives refresh; an in-memory fallback still handles network reconnects when storage is blocked.
+Legacy players without a hash can enroll only on the original owning connection; a legacy session that already lost that connection must join a new game.
+The gameplay load harness supplies the new credential while retaining the string player-ID return value.
+
+Three Tab presses in the held-card dialog reached the obscured Feed button (D25).
+The shared ability shell now uses a native modal `dialog`, which makes the background inert and contains keyboard focus.
+The draft and hand keep their existing Escape behavior, and focus returns to the opener on close when it remains mounted.
+
+Validation: the original ownership regressions failed before the fix, and all 204 server tests passed in full-app mode afterward.
+Two real DDP connections verified rejected takeover attempts and a valid reconnect surviving the disconnect grace period.
+Browser checks verified anonymous entry, refresh preserving the player, modal focus cycling, Escape restoration, and a 375px layout.
+
+Files: `app/imports/api/gameMethods.js`, `app/server/publications.js`, `app/imports/ui/gameReconnect.js`, `app/imports/ui/pages/GamePage.jsx`, `app/imports/ui/abilities/AbilityDialog.jsx`, `app/tests/playerReconnect.test.js`, `loadtest/ddp-gameplayLoadTest.mjs`, `AGENTS.md`, `docs/defect-register.md`, `docs/design_system.md`.
+
+---
+
+## 2026-10-13 - Ability guide in the lobby
+
+Players were reading cards for the first time inside a 20-second draft (#148).
+Both lobby views now carry a `SEE THE CARDS` button, shown while abilities are on, that opens every card the room can deal, grouped into before-the-round and during-the-round cards, with one line on how the draft deals.
+The list comes from `eligibleAbilities` with the room's mode and starting lives, the same call the server deals from, so Jump appears only in Battle Royale and Steal disappears whenever players start on 1 life (Hard and Battle Royale), with a line saying why.
+The draft-order note names only the cards that are dealt, so a 1-life room does not promise Steals first.
+`AbilityCard` renders a read-only `div` when it has no `onClick`, so the guide reuses the draft's card instead of a copy.
+The joined view's button draws a 36px pill inside its 44px hit target to sit level with the mode and abilities chips.
+In the same lobby, a player row truncated a short name like "Guest" to "Gue..." to keep the "· you" suffix; the suffix now gives way first, since the tinted row already marks you.
+Files: `app/imports/ui/abilities/LobbyAbilities.jsx`, `app/imports/ui/abilities/abilityFeed.js`, `app/imports/ui/abilities/AbilityDialog.jsx`, `app/imports/ui/pages/PlayerLobby.jsx`, `app/tests/abilityFeed.test.js`, `docs/design_system.md`, `AGENTS.md`.
+
+---
+
+## 2026-10-13 - ECS deploys wait out the canary alarm bake
+
+Every `dev` deploy since 2026-10-06 failed in **Deploy to ECS** with `rollout still IN_PROGRESS after 1800s`, although each release went live and ECS later marked it `COMPLETED` (#146).
+With alarm-based rollback (D31 in [ecs-target-architecture.md](ecs-target-architecture.md)), ECS keeps a rolling deployment `IN_PROGRESS` until it has watched the canary alarm for its period x evaluation periods after the new tasks are healthy.
+The canary runs every 15 minutes and the alarm needs 2 periods, so that is 30 minutes, and the seven rollouts measured completed 32m15s to 32m35s after their task started, today's 2m48s after the script gave up.
+`ROLLOUT_TIMEOUT` in `deploy/ecs-deploy.sh` was 1800 from `update-service`, so the script could never see the outcome. It is now 2700.
+The ceiling is the GitHub OIDC session: both `*-github-deploy` roles allow 1 hour, and the readiness probe and failure diagnostics still have to run after the wait.
+A green deploy job therefore now takes about 35 minutes. That is the price of the bake: returning before `COMPLETED` would report success for a release the alarm can still roll back.
+Changing `canary_rate_minutes` moves the bake with it. The canary alarm in `infra/terraform/modules/kimply-ecs/monitoring.tf` now says so.
+
+---
+
 ## 2026-10-12 - Bot detection blocks a browser session and a room's address
 
 Three consecutive machine-speed attempts remove that player before the attempt is graded (#142).
@@ -32,6 +94,43 @@ Things that are not obvious from the diff:
 - **`HTTP_FORWARDED_COUNT` is 1 behind Nginx and the ALB, and 0 on the local direct connection.** Meteor's own proxy handling picks the address. A spoofed `X-Forwarded-For` prefix is not what `connection.clientAddress` returns.
 - **`BOT_DETECTION_ENABLED=false` works only in development.** In production the flag is logged once and ignored, so a deployed environment cannot turn detection off by setting it.
 - **Detection is built on the ability-system player.** The sequence being graded is `players.secret.sequence`, and an attempt cannot start while that round's draft is still open.
+
+---
+
+## 2026-10-12 - Slo-Mo, 2x Speed and Lights Out abilities; round-6 Slow Motion removed
+
+Three hostile pre-round cards change how another player's sequence plays back: Slo-Mo (half speed), 2x Speed (double speed, floored at `MIN_FLASH_MS` / `MIN_GAP_MS` so a fast room stays watchable) and Lights Out (the board fades to dark and back all round).
+They are picked in the draft like Strike, so they land before the target's first watch and last for every replay that round. Shield blocks them.
+The effect lives in `players.secret.playback`, keyed by `roundId` like `shieldRoundId`, so nothing has to clear it: a new round or level makes it stale.
+A target takes one speed change and one Lights Out per round. The guard is in the update filter, not a read-then-write, so racing Battle Royale picks can not both land.
+In a standard draft playback cards resolve after Steals and Strikes, so one aimed at a player struck out in the same draft misses.
+In Battle Royale a pick resolves immediately but the target's current level is already playing, so it is stored with `roundId: null` and `moveToLevel` binds it to their next level in the same write that moves them.
+`ColourSequence` reads its timing on every flash, because the effect reaches the client on `players.secret` and can arrive a beat after `rounds.draft.resolved` opens playback.
+Lights Out's period (2600ms) is deliberately not a multiple of any flash and gap, so a replay loses different flashes to the dark and replays stay worth using.
+
+The hidden round-6 Slow Motion powerup (`slowMotionActive`, set for everyone by `rounds.advance` and shown as a raw blue popup) is gone, so "slow" only ever means someone played Slo-Mo on you.
+
+Files: `app/imports/api/abilityRules.js`, `abilityEngine.js`, `gameEngine.js`, `gameMethods.js`, `app/imports/constants.js`, `app/imports/ui/ColourSequence.jsx`, `pages/GamePage.jsx`, `abilities/abilityFeed.js`, `styles.css`, and their tests. `docs/design_system.md` v0.5 adds the `lightsOut` animation and the playback effect chip.
+
+## 2026-10-12 - Local Docker hot reload exposes Rspack's development port
+
+`docker-compose.yml` now publishes backend port 8080 alongside Meteor's app port 3000 (D23).
+Rspack was already listening on all container interfaces at port 8080, but the browser's separate hot reload WebSocket could not reach it through Docker.
+Reproduced during browser playtesting: the game loaded while the browser logged repeated WebSocket connection failures, and a host request to port 8080 failed.
+The mapping requires backend recreation rather than a container restart; it does not change production networking.
+`docs/dev-environment.md` records the local ports and verification procedure, and `AGENTS.md` and `docs/defect-register.md` record the resolved defect.
+
+## 2026-10-12 - Battle Royale leaderboard follows each player's level
+
+The live leaderboard in `app/imports/ui/leaderboardModels.js` now derives each active Battle Royale player's displayed level from their own `currentLevel`.
+The shared initial round remains current while those players advance independently, so using its `roundNumber` left every active row at level 1 (D22).
+The internal sequence length 4 maps to displayed level 1; `eliminatedRound` already stores a displayed level and must not be converted again.
+Standard modes retain the shared round's level, including Easy mode.
+
+Reproduced in a browser with three real DDP bot players advancing while the browser player remained on the initial level.
+`app/tests/leaderboardModel.test.js` adds regressions for independent levels, recorded elimination levels, and standard players with stale `currentLevel`.
+The independent-level regression failed against the original model and passed after the fix.
+`AGENTS.md` and `docs/defect-register.md` record the coverage and resolved defect.
 
 ## 2026-10-11 - Host lobby: only the player list scrolls
 
