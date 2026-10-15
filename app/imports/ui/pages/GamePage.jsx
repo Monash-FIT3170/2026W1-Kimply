@@ -32,6 +32,7 @@ export const GamePage = () => {
   const [correctGlow, setCorrectGlow] = useState(false);
   const [completedRoundId, setCompletedRoundId] = useState(null);
   const [replayKey, setReplayKey] = useState(0);
+  const [showHelp, setShowHelp] = useState(false);
   // Keep player preferences between rounds and future visits to the game.
   const [soundEnabled, setSoundEnabled] = useState(() => {
     if (typeof window === 'undefined') return true;
@@ -91,6 +92,8 @@ export const GamePage = () => {
     if (!playerId) return null;
     return PlayersCollection.findOne(playerId);
   }, [playerId]);
+  const connectionStatus = useTracker(() => Meteor.status().status);
+  const isConnected = connectionStatus === 'connected';
   useEffect(() => {
     const eventsSub = Meteor.subscribe('gameEvents', gameId);
     return () => {
@@ -343,6 +346,52 @@ export const GamePage = () => {
       }}
     >
       <TileLattice opacity={0.06} />
+      {showHelp && (
+        <div
+          id="how-to-play-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="how-to-play-title"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 100,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px',
+            background: 'rgba(5, 8, 24, 0.78)',
+          }}
+        >
+          <div
+            style={{
+              width: 'min(460px, 100%)',
+              borderRadius: '18px',
+              padding: '28px',
+              background: '#171a38',
+              border: '1px solid rgba(255,255,255,0.2)',
+              boxShadow: '0 24px 70px rgba(0,0,0,0.45)',
+              color: 'white',
+            }}
+          >
+            <h2 id="how-to-play-title" style={{ margin: '0 0 14px', fontFamily: 'Outfit, sans-serif' }}>
+              How to play
+            </h2>
+            <ol style={{ margin: '0 0 22px', paddingLeft: '22px', lineHeight: 1.65 }}>
+              <li>Watch the colour tiles as they flash.</li>
+              <li>When it is your turn, repeat the pattern using the tiles.</li>
+              <li>Use Clear to correct a selection, then Submit the completed sequence.</li>
+              <li>You have three lives and 30 seconds for each attempt.</li>
+            </ol>
+            <p style={{ color: '#cbd5ff', fontSize: '0.9rem', lineHeight: 1.5 }}>
+              You can play with a keyboard: use Tab to focus a tile, then Enter or Space to select it.
+            </p>
+            <button type="button" onClick={() => setShowHelp(false)} style={{ ...preferenceButtonStyle, marginTop: '10px' }}>
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
       {/* Announces level-up notifications without moving keyboard focus. */}
       <div
         role="status"
@@ -394,6 +443,22 @@ export const GamePage = () => {
           KIMPLY
         </span>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }} aria-label="Game preferences">
+          <span
+            role="status"
+            aria-live="polite"
+            style={{ color: isConnected ? '#8af7a8' : '#ffd369', fontSize: '0.75rem', fontWeight: 700 }}
+          >
+            {isConnected ? 'Connected' : 'Reconnecting…'}
+          </span>
+          <button
+            type="button"
+            aria-expanded={showHelp}
+            aria-controls="how-to-play-dialog"
+            onClick={() => setShowHelp(true)}
+            style={preferenceButtonStyle}
+          >
+            How to play
+          </button>
           <button
             type="button"
             aria-pressed={soundEnabled}

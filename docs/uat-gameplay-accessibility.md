@@ -21,6 +21,9 @@ more players in the same room where possible.
 7. If available, repeat a round with a screen reader and verify the sequence
    state, turn prompt, selection progress, game messages, and low-time alerts
    are announced.
+8. Open **How to play**, confirm the instructions are understandable, then
+   close it and verify the game can continue. Briefly disconnect the browser
+   network and verify the connection indicator changes to **Reconnecting**.
 
 ## Record for each tester
 
