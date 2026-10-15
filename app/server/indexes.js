@@ -3,6 +3,8 @@ import { RoundsCollection } from '../imports/api/rounds.js';
 import { PlayersCollection } from '../imports/api/players.js';
 import { LeaderboardCollection } from '../imports/api/leaderboard.js';
 import { PlayerAccountsCollection } from '../imports/api/playerAccounts.js';
+import { BrowserSessionsCollection } from '../imports/api/browserSessions.js';
+import { BROWSER_SESSION_TTL_SECONDS } from '../imports/constants.js';
 
 const DAY_SECONDS = 60 * 60 * 24;
 const WEEK_SECONDS = DAY_SECONDS * 7;
@@ -31,6 +33,22 @@ const INDEXES = [
     options: { expireAfterSeconds: WEEK_SECONDS, name: 'leaderboard_ttl' },
   },
   { collection: PlayerAccountsCollection, keys: { email: 1 }, options: { unique: true, name: 'email_unique' } },
+  { collection: PlayerAccountsCollection, keys: { 'sessions.hash': 1 }, options: { name: 'sessions_hash' } },
+  {
+    collection: PlayerAccountsCollection,
+    keys: { googleSub: 1 },
+    options: { unique: true, sparse: true, name: 'googleSub_unique' },
+  },
+  {
+    collection: BrowserSessionsCollection,
+    keys: { tokenHash: 1 },
+    options: { unique: true, name: 'browser_token_hash' },
+  },
+  {
+    collection: BrowserSessionsCollection,
+    keys: { lastSeenAt: 1 },
+    options: { expireAfterSeconds: BROWSER_SESSION_TTL_SECONDS, name: 'browser_sessions_ttl' },
+  },
 ];
 
 export async function ensureIndexes() {

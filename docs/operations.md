@@ -3,6 +3,9 @@
 Day-2 operations for the production deployment: monitoring, backups, cost, and incident response.
 
 Setup and deployment are in [deployment-manual.md](deployment-manual.md).
+
+> **Partly superseded by ECS.** Traffic is now served by ECS Fargate, so container health, restarts, rolling deploys and rollback are described in [ecs-target-architecture.md](ecs-target-architecture.md) and [`infra/terraform/README.md`](../infra/terraform/README.md).
+> Monitoring is now a CloudWatch Synthetics canary on `/health/ready` with an SNS email alarm, rather than an external uptime monitor to be set up. Atlas backups and cost sections below still apply.
 Known application defects are in [defect-register.md](defect-register.md).
 
 **Last updated:** 2026-08-05

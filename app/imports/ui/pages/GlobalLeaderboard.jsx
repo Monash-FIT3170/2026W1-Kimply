@@ -1,18 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Meteor } from 'meteor/meteor';
 import { useSubscribe, useTracker } from 'meteor/react-meteor-data';
 import { GlobalLeaderboardCollection } from '/imports/api/globalLeaderboard';
 import { MEDAL } from '../EndLeaderboard';
-import {
-  PRIMARY,
-  HAIRLINE,
-  TileLattice,
-  Avatar,
-  avatarColor,
-  TopBar,
-  RainbowBar,
-} from '../components/design';
+import { useSignedInAccount } from '../accountSession';
+import { PRIMARY, HAIRLINE, TileLattice, Avatar, avatarColor, TopBar, RainbowBar } from '../components/design';
 
 const RANK_ACCENT = {
   1: MEDAL[0].color,
@@ -46,13 +39,38 @@ function RankBadge({ rank }) {
   );
 }
 
+// Shared by the header and every row so the columns line up. Avatars are dropped below
+// `xs` so a phone has room for the player's name.
+const ROW_GRID =
+  'grid grid-cols-[32px_minmax(0,1fr)_repeat(3,40px)] gap-1.5 px-2.5 xs:grid-cols-[32px_minmax(0,1fr)_repeat(3,64px)] xs:gap-3 xs:px-3.5';
+const STAT_CELL = 'flex items-center justify-center self-stretch border-l border-hairline';
+const STATS = [
+  { key: 'bestRound', label: 'Level' },
+  { key: 'wins', label: 'Wins' },
+  { key: 'gamesPlayed', label: 'Games' },
+];
+
+function LeaderboardHeader() {
+  const label = 'font-mono text-[10px] uppercase tracking-wider text-fg3 xs:text-[11px] xs:tracking-widest';
+  return (
+    <div className={`${ROW_GRID} border border-transparent pb-1`}>
+      <span className={`${label} text-center`}>#</span>
+      <span className={label}>Player</span>
+      {STATS.map((stat) => (
+        <span key={stat.key} className={`${STAT_CELL} ${label}`}>
+          {stat.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function LeaderboardRow({ entry, rank, isYou }) {
   const accent = RANK_ACCENT[rank];
   return (
     <div
-      className="grid items-center gap-3 rounded-xl border px-3.5 py-3 transition-colors"
+      className={`${ROW_GRID} items-center rounded-xl border py-2.5 transition-colors xs:py-3`}
       style={{
-        gridTemplateColumns: '40px 1fr 72px 72px',
         background: accent
           ? `color-mix(in oklab, ${accent} 7%, transparent)`
           : isYou
@@ -70,46 +88,36 @@ function LeaderboardRow({ entry, rank, isYou }) {
       <RankBadge rank={rank} />
 
       <div className="flex min-w-0 items-center gap-3">
-        <Avatar letter={entry.displayName[0]?.toUpperCase()} color={avatarColor(entry.displayName)} size={32} />
-        <div className="min-w-0">
-          <div className="truncate font-outfit text-sm font-semibold text-fg">
-            {entry.displayName}
-            {isYou && (
-              <span
-                className="ml-2 rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest"
-                style={{
-                  color: PRIMARY,
-                  background: `color-mix(in oklab, ${PRIMARY} 16%, transparent)`,
-                  border: `1px solid color-mix(in oklab, ${PRIMARY} 38%, transparent)`,
-                }}
-              >
-                You
-              </span>
-            )}
-          </div>
-          <div className="font-mono text-[11px] uppercase tracking-widest text-fg3">
-            {entry.gamesPlayed} {entry.gamesPlayed === 1 ? 'game' : 'games'}
-          </div>
+        <div className="hidden xs:block">
+          <Avatar letter={entry.displayName[0]?.toUpperCase()} color={avatarColor(entry.displayName)} size={32} />
         </div>
+        <span className="truncate font-outfit text-sm font-semibold text-fg">{entry.displayName}</span>
+        {isYou && (
+          <span
+            className="shrink-0 rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest"
+            style={{
+              color: PRIMARY,
+              background: `color-mix(in oklab, ${PRIMARY} 16%, transparent)`,
+              border: `1px solid color-mix(in oklab, ${PRIMARY} 38%, transparent)`,
+            }}
+          >
+            You
+          </span>
+        )}
       </div>
 
-      <div className="text-right">
-        <div className="font-outfit text-base font-extrabold text-fg">{entry.bestRound}</div>
-        <div className="font-mono text-[11px] uppercase tracking-widest text-fg3">Level</div>
-      </div>
-
-      <div className="text-right">
-        <div className="font-outfit text-base font-extrabold text-fg">{entry.wins}</div>
-        <div className="font-mono text-[11px] uppercase tracking-widest text-fg3">Wins</div>
-      </div>
+      {STATS.map((stat) => (
+        <div key={stat.key} className={`${STAT_CELL} font-outfit text-base font-extrabold text-fg`}>
+          {entry[stat.key]}
+        </div>
+      ))}
     </div>
   );
 }
 
 export function GlobalLeaderboard() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const myAccountId = location.state?.playerAccount?._id || null;
+  const myAccountId = useSignedInAccount()?._id || null;
 
   const isLoading = useSubscribe('globalLeaderboard')();
   const entries = useTracker(
@@ -139,11 +147,13 @@ export function GlobalLeaderboard() {
 
       <TopBar onBack={() => navigate(-1)} />
 
-      <div className="relative flex flex-1 flex-col items-center overflow-y-auto px-7 pb-14">
+      <div className="relative flex flex-1 flex-col items-center overflow-y-auto px-4 pb-10 xs:px-7 xs:pb-14">
         <div className="w-full max-w-xl">
           <div className="mb-7 text-center">
-            <h1 className="font-outfit text-5xl font-extrabold tracking-tight text-fg">Global Leaderboard</h1>
-            <p className="mt-2 font-manrope text-2sm text-fg3">Top 50 players, ranked by highest round reached.</p>
+            <h1 className="font-outfit text-4xl font-extrabold tracking-tight text-fg xs:text-5xl">
+              Global Leaderboard
+            </h1>
+            <p className="text-2sm mt-2 font-manrope text-fg3">Top 50 players, ranked by highest round reached.</p>
 
             {announcement && (
               <div
@@ -160,7 +170,7 @@ export function GlobalLeaderboard() {
             )}
           </div>
 
-          <div className="rounded-[22px] border border-hairline bg-surface p-4">
+          <div className="rounded-[22px] border border-hairline bg-surface p-3 xs:p-4">
             <RainbowBar className="mb-4 h-1 rounded-full" />
 
             {isLoading ? (
@@ -171,6 +181,7 @@ export function GlobalLeaderboard() {
               </p>
             ) : (
               <div className="flex flex-col gap-2">
+                <LeaderboardHeader />
                 {entries.map((entry, index) => (
                   <LeaderboardRow
                     key={entry._id}

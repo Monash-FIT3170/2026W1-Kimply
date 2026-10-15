@@ -20,6 +20,447 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-14 - Bot detection merged with reconnect credentials
+
+Bot detection (#142) and reconnect ownership (#150) were built in parallel, and both changed `players.join` and `players.rebind`.
+The merge keeps both checks rather than choosing one: a rebind must come from the browser session that owns the player, from an address the room has not banned, and with the per-tab reconnect credential.
+The bot guard's fields (`guard.browserSessionId`, `boundAt`, `botStrikes`) are written by `rebindPlayer` in the same credential-guarded update, so a refused credential never moves the guard.
+`players` and `eliminations` exclude both `guard` and `reconnectTokenHash`.
+A banned or removed player who resumes a saved game after a refresh now sees the removal screen, as on a DDP reconnect, instead of a generic reconnect error.
+
+The bot branch had recorded its defect as D22, which `dev` had already given to the Battle Royale leaderboard.
+It is D43 now: D26 to D42 are the ECS architecture decisions in [ecs-target-architecture.md](ecs-target-architecture.md), so D43 is the first ID neither list uses.
+Anything citing "D22" for machine-speed play means D43.
+
+---
+
+## 2026-10-13 - Reconnect ownership and ability-dialog keyboard focus
+
+PR #141 review reproduced a guest rebinding the host's public player ID, receiving the host's private sequence and picking the host's card (D24).
+The game now supplies a random per-tab credential to `players.join` and `players.rebind`, with only its SHA-256 hash stored on the server and excluded from publications.
+Both rebinding paths verify that credential.
+A first client join checks lobby connection ownership and round membership; omitting the lobby ID derives only the caller's own membership.
+Anonymous play is preserved.
+Session storage survives refresh; an in-memory fallback still handles network reconnects when storage is blocked.
+Legacy players without a hash can enroll only on the original owning connection; a legacy session that already lost that connection must join a new game.
+The gameplay load harness supplies the new credential while retaining the string player-ID return value.
+
+Three Tab presses in the held-card dialog reached the obscured Feed button (D25).
+The shared ability shell now uses a native modal `dialog`, which makes the background inert and contains keyboard focus.
+The draft and hand keep their existing Escape behavior, and focus returns to the opener on close when it remains mounted.
+
+Validation: the original ownership regressions failed before the fix, and all 204 server tests passed in full-app mode afterward.
+Two real DDP connections verified rejected takeover attempts and a valid reconnect surviving the disconnect grace period.
+Browser checks verified anonymous entry, refresh preserving the player, modal focus cycling, Escape restoration, and a 375px layout.
+
+Files: `app/imports/api/gameMethods.js`, `app/server/publications.js`, `app/imports/ui/gameReconnect.js`, `app/imports/ui/pages/GamePage.jsx`, `app/imports/ui/abilities/AbilityDialog.jsx`, `app/tests/playerReconnect.test.js`, `loadtest/ddp-gameplayLoadTest.mjs`, `AGENTS.md`, `docs/defect-register.md`, `docs/design_system.md`.
+
+---
+
+## 2026-10-13 - Ability guide in the lobby
+
+Players were reading cards for the first time inside a 20-second draft (#148).
+Both lobby views now carry a `SEE THE CARDS` button, shown while abilities are on, that opens every card the room can deal, grouped into before-the-round and during-the-round cards, with one line on how the draft deals.
+The list comes from `eligibleAbilities` with the room's mode and starting lives, the same call the server deals from, so Jump appears only in Battle Royale and Steal disappears whenever players start on 1 life (Hard and Battle Royale), with a line saying why.
+The draft-order note names only the cards that are dealt, so a 1-life room does not promise Steals first.
+`AbilityCard` renders a read-only `div` when it has no `onClick`, so the guide reuses the draft's card instead of a copy.
+The joined view's button draws a 36px pill inside its 44px hit target to sit level with the mode and abilities chips.
+In the same lobby, a player row truncated a short name like "Guest" to "Gue..." to keep the "· you" suffix; the suffix now gives way first, since the tinted row already marks you.
+Files: `app/imports/ui/abilities/LobbyAbilities.jsx`, `app/imports/ui/abilities/abilityFeed.js`, `app/imports/ui/abilities/AbilityDialog.jsx`, `app/imports/ui/pages/PlayerLobby.jsx`, `app/tests/abilityFeed.test.js`, `docs/design_system.md`, `AGENTS.md`.
+
+---
+
+## 2026-10-13 - ECS deploys wait out the canary alarm bake
+
+Every `dev` deploy since 2026-10-06 failed in **Deploy to ECS** with `rollout still IN_PROGRESS after 1800s`, although each release went live and ECS later marked it `COMPLETED` (#146).
+With alarm-based rollback (D31 in [ecs-target-architecture.md](ecs-target-architecture.md)), ECS keeps a rolling deployment `IN_PROGRESS` until it has watched the canary alarm for its period x evaluation periods after the new tasks are healthy.
+The canary runs every 15 minutes and the alarm needs 2 periods, so that is 30 minutes, and the seven rollouts measured completed 32m15s to 32m35s after their task started, today's 2m48s after the script gave up.
+`ROLLOUT_TIMEOUT` in `deploy/ecs-deploy.sh` was 1800 from `update-service`, so the script could never see the outcome. It is now 2700.
+The ceiling is the GitHub OIDC session: both `*-github-deploy` roles allow 1 hour, and the readiness probe and failure diagnostics still have to run after the wait.
+A green deploy job therefore now takes about 35 minutes. That is the price of the bake: returning before `COMPLETED` would report success for a release the alarm can still roll back.
+Changing `canary_rate_minutes` moves the bake with it. The canary alarm in `infra/terraform/modules/kimply-ecs/monitoring.tf` now says so.
+
+---
+
+## 2026-10-12 - Chrome automation remains below the timing detector threshold
+
+Ran three real point-and-click attempts in a fresh Chrome Incognito session with detection enabled.
+The Chrome agent retained five of eight fixture lives, accumulated zero bot strikes, and stayed connected.
+A machine-speed DDP control against the same app was removed on its third attempt.
+Recorded the comparison and screenshot in `docs/bot-detection-test-results.md` and `docs/test-evidence/bot-detection/chrome-agent-gameplay.png`.
+This verifies a limitation of the chosen heuristic, not coverage of the Claude Chrome extension itself.
+
+## 2026-10-12 - Bot-detection verification finds IP-ban and CSS blockers
+
+Executed the worktree's test plan with isolated MongoDB, real DDP clients, a local Nginx proxy, and browser interaction.
+Both Meteor server test modes pass 200 tests and the worktree's formatting check passes.
+A spoofed forwarding header makes removal omit the IP ban; a fresh browser session can then evade it (D44).
+The local production simulation returns HTTP 500 for its main CSS chunk and renders unstyled (D45).
+Recorded evidence and explicit coverage limits in `docs/bot-detection-test-results.md`, linked it from the test plan, and synchronized the defect register and AGENTS.md.
+No application or deployment source was changed, and no deployment was performed.
+
+---
+
+## 2026-10-12 - Bot detection blocks a browser session and a room's address
+
+Three consecutive machine-speed attempts remove that player before the attempt is graded (#142).
+The browser session is blocked for the life of the room, and the connection's address is banned from that room for 15 minutes. Both are stored on `rooms.security`, so they disappear with the room's existing 24-hour TTL and are never published.
+
+Things that are not obvious from the diff:
+
+- **A shared address does not drop the other people already in the room.** Their current connection keeps playing. Joining, reconnecting, or rebinding from that address is refused until the ban's `expiresAt`, including a brand-new browser session.
+- **A missing address stores a session block and no placeholder ban.** One connection without `clientAddress` cannot lock every other anonymous player out of the room.
+- **`HTTP_FORWARDED_COUNT` is 1 behind Nginx and the ALB, and 0 on the local direct connection.** Meteor's own proxy handling picks the address. A spoofed `X-Forwarded-For` prefix is not what `connection.clientAddress` returns.
+- **`BOT_DETECTION_ENABLED=false` works only in development.** In production the flag is logged once and ignored, so a deployed environment cannot turn detection off by setting it.
+- **Detection is built on the ability-system player.** The sequence being graded is `players.secret.sequence`, and an attempt cannot start while that round's draft is still open.
+
+---
+
+## 2026-10-12 - Slo-Mo, 2x Speed and Lights Out abilities; round-6 Slow Motion removed
+
+Three hostile pre-round cards change how another player's sequence plays back: Slo-Mo (half speed), 2x Speed (double speed, floored at `MIN_FLASH_MS` / `MIN_GAP_MS` so a fast room stays watchable) and Lights Out (the board fades to dark and back all round).
+They are picked in the draft like Strike, so they land before the target's first watch and last for every replay that round. Shield blocks them.
+The effect lives in `players.secret.playback`, keyed by `roundId` like `shieldRoundId`, so nothing has to clear it: a new round or level makes it stale.
+A target takes one speed change and one Lights Out per round. The guard is in the update filter, not a read-then-write, so racing Battle Royale picks can not both land.
+In a standard draft playback cards resolve after Steals and Strikes, so one aimed at a player struck out in the same draft misses.
+In Battle Royale a pick resolves immediately but the target's current level is already playing, so it is stored with `roundId: null` and `moveToLevel` binds it to their next level in the same write that moves them.
+`ColourSequence` reads its timing on every flash, because the effect reaches the client on `players.secret` and can arrive a beat after `rounds.draft.resolved` opens playback.
+Lights Out's period (2600ms) is deliberately not a multiple of any flash and gap, so a replay loses different flashes to the dark and replays stay worth using.
+
+The hidden round-6 Slow Motion powerup (`slowMotionActive`, set for everyone by `rounds.advance` and shown as a raw blue popup) is gone, so "slow" only ever means someone played Slo-Mo on you.
+
+Files: `app/imports/api/abilityRules.js`, `abilityEngine.js`, `gameEngine.js`, `gameMethods.js`, `app/imports/constants.js`, `app/imports/ui/ColourSequence.jsx`, `pages/GamePage.jsx`, `abilities/abilityFeed.js`, `styles.css`, and their tests. `docs/design_system.md` v0.5 adds the `lightsOut` animation and the playback effect chip.
+
+## 2026-10-12 - Local Docker hot reload exposes Rspack's development port
+
+`docker-compose.yml` now publishes backend port 8080 alongside Meteor's app port 3000 (D23).
+Rspack was already listening on all container interfaces at port 8080, but the browser's separate hot reload WebSocket could not reach it through Docker.
+Reproduced during browser playtesting: the game loaded while the browser logged repeated WebSocket connection failures, and a host request to port 8080 failed.
+The mapping requires backend recreation rather than a container restart; it does not change production networking.
+`docs/dev-environment.md` records the local ports and verification procedure, and `AGENTS.md` and `docs/defect-register.md` record the resolved defect.
+
+## 2026-10-12 - Battle Royale leaderboard follows each player's level
+
+The live leaderboard in `app/imports/ui/leaderboardModels.js` now derives each active Battle Royale player's displayed level from their own `currentLevel`.
+The shared initial round remains current while those players advance independently, so using its `roundNumber` left every active row at level 1 (D22).
+The internal sequence length 4 maps to displayed level 1; `eliminatedRound` already stores a displayed level and must not be converted again.
+Standard modes retain the shared round's level, including Easy mode.
+
+Reproduced in a browser with three real DDP bot players advancing while the browser player remained on the initial level.
+`app/tests/leaderboardModel.test.js` adds regressions for independent levels, recorded elimination levels, and standard players with stale `currentLevel`.
+The independent-level regression failed against the original model and passed after the fix.
+`AGENTS.md` and `docs/defect-register.md` record the coverage and resolved defect.
+
+## 2026-10-11 - Host lobby: only the player list scrolls
+
+The host lobby in `app/imports/ui/pages/PlayerLobby.jsx` now keeps the room panel and the Start button at full size and scrolls only the player list (#143).
+The panel is also more compact: the game mode badge and the abilities switch share a row, the room code tiles are smaller, and the game name and invite link are single rows on phones.
+
+Things that are not obvious from the diff:
+
+- **Centring uses auto margins, not `justify-center`.** In a scrolling flex column, `justify-center` pushes overflow above the top edge where it cannot be scrolled to. That is what squashed the panel and hid the invite link once a few players joined.
+- **The player section has an explicit minimum (heading plus one row).** Its automatic minimum would be the whole list, so the list would never shrink. On a screen too short for the panel plus one row, the page itself scrolls as a fallback.
+- **Player rows lost their "Player" sub-label and have a fixed height**, in both the host and joined views, so a row with a kick button matches the host's own row.
+- **From `lg` up both lobby views go full screen.** The host view becomes a grid: panel and Start in a fixed 26rem left column, players filling the rest as cards (at least 12rem wide). The joined view drops its `max-w-2xl` cap. In both, only the player grid scrolls, so a big lobby never pushes the panel, title or waiting line away.
+- **Your own row is tinted with the primary colour**, matching the leaderboards, because in a narrow grid card the "· you" suffix truncates away.
+- **The abilities switch hides its one-line description below `xs`** so it fits beside the mode badge on a phone. The badge shows the short mode name ("Battle Royale") for the same reason.
+
+## 2026-10-11 - Round abilities: a pick-1-of-3 draft, and private per-player sequences
+
+Players now draft an ability before each round (#140).
+From round 2 of a standard game every surviving player is dealt 3 of Steal, Strike, Shield, Free Pass, Reroll and Scramble, and picks 1 or skips within `DRAFT_SECONDS` (20 seconds).
+Battle Royale players draft on each level-up, where Jump (move to a random other player's level) joins the pool.
+The host can turn abilities off in the lobby; they are on by default for new rooms.
+A persistent live feed lists every ability event and elimination; its Me / All toggle defaults to Me because a full room produces more events than anyone can read.
+
+New files: `app/imports/api/abilities.js`, `abilityEngine.js`, `abilityRules.js`, `gameEngine.js`, and `app/imports/ui/abilities/`.
+`gameMethods.js` now holds only method definitions; its helpers moved to `gameEngine.js` so the ability code can share them without a circular import.
+
+Things that are not obvious from the diff:
+
+- **Every player's sequence is now private, in every mode.** Reroll and Scramble give one player a different sequence from the rest of the room, so the sequence moved from the shared round to `players.secret.sequence`, which only its owner receives (`players.secret`, keyed on the connection). The `rounds` publication stops sending `sequence` altogether. This also closes a leak: Battle Royale level rounds are never marked `advanced`, so every level's answer was reaching every client (D20).
+- **`players.secret` depends on the connection binding being current.** A DDP reconnect opens a new connection, so `GamePage` now calls the new `players.rebind` when the connection comes back. Without it the player stops receiving their sequence, and the server removes them after the 15-second disconnect grace period anyway (D21, which predates this change).
+- **Drafts are resolved on the server, once.** `rounds.advance` puts `draft` on the new round at insert time, so no client starts playback before it sees the draft. A server timer closes it; clients ask again through `abilities.closeDraft` if their own countdown runs out first, in case a restart lost the timer. Whoever flips `draft.resolved` does the work, so the timer, the fallback and an early close (everyone has chosen) can race safely.
+- **Resolution order is a rule, not an accident.** Every Steal lands before any Strike, each in pick order, so a Steal is judged on the lives a player went into the round with. A player struck out in the same resolution still lands their own card.
+- **Ability methods are the first ones bound to the caller's connection.** They can hurt other players, so they apply the D3 fix to themselves only. Every older method still trusts the `playerId` it is given.
+- **Lives now move with `$inc` everywhere.** A Battle Royale Strike can land while its target submits, so wrong answers, timeouts and Steals no longer write lives computed from an earlier read. That closes the life-deduction part of D4.
+- **Steal is only dealt when the room starts players on more than 1 life**, because it never takes a last life. Battle Royale now starts on 1 life (#116), so it is not dealt there; a Battle Royale streak can still bank extra lives, which a Strike can then take.
+- **Lives can exceed the starting count through Steal**, which the heart row from #116 already handles by drawing `max(startingLives, lives)` hearts. The #116 streak life moved into the shared `clearRound` with the rest of the correct-answer path, and a Free Pass does not count towards a streak.
+- **Rooms created before this change have no `abilitiesEnabled` and play without abilities**, so a deploy mid-game does not start dealing cards into it.
+
+Changed after playtesting with bot players (same day):
+
+- **The draft is 20 seconds, not 10.** Reading three cards and finding a target took longer than 10 seconds in practice.
+- **Ability events live in a persistent, scrollable live feed** instead of vanishing toasts, so a player can see who came for them and answer back. It keeps every ability event (`gameFeed`, capped at `FEED_EVENT_LIMIT`) and every elimination for the whole game. Me shows only rows involving you; All shows everything with yours highlighted and the ones aimed at you edged in pink. The feed is open by default only from 1280px, where it fits beside the play area; narrower screens open it from a Feed button that badges unread rows (pink when one was aimed at you). On phones the feed and the leaderboard are bottom sheets in the same place, so opening one closes the other.
+- **Toasts only carry things about you**: cards played on or by you, life awards and the replay bonus, so an attack is still noticed with the feed closed. Toasts about other players' progress ("X has reached level 8", "X has submitted the correct sequence") are gone; the server no longer writes `level-up` or `correct-submission` events (about one per player per round), and the `gameEvents` publication that fed them was removed, so `gameEvents` holds ability events only. In-game elimination toasts went too, since eliminations are in the feed.
+- **A draft is marked resolved only after its effects have landed.** It used to flip `draft.resolved` first, so for a few hundred milliseconds clients could see the round open while lives and feed rows were still changing. A separate `draft.resolving` claim keeps the server timer, client fallbacks and an early close from resolving twice.
+- **Two final answers arriving together no longer create two next rounds** (D4). Seen live: round 5's last two answers landed 3ms apart and produced two round-6 documents, the orphan left `isCurrent`.
+- **"Already watched this sequence" is per tab** (`sessionStorage`), not per browser. It only exists so a refresh skips the replay, and two players in one browser were skipping each other's sequences.
+- **The play column centres with an auto margin, not `justify-content: center`.** A held card adds a row; centring pushed the overflow off the top of the screen, where it could not be scrolled to, and the hearts disappeared.
+- **A submit's result is ignored for round state once the round has moved on.** The last answer is what advances the round, so its result arrives after the next round has started and used to write "please wait for other players" and a stale submitted flag into it.
+- **A refresh no longer awards a replay.** The replay bonus compared the streak with 0 on load, so any page load mid-streak counted as a new streak and gave a free replay with a toast.
+- **The "FINAL LIFE" banner is gone**, as it duplicated the hearts.
+
+## 2026-10-11 - A life for every streak of correct rounds
+
+Every `STREAK_BONUS_LIFE_THRESHOLD` (3) correct rounds in a row now earns a life, granted by `players.submitSequence` in `app/imports/api/gameMethods.js` and returned to the submitter as `lifeAward` (#116).
+`GamePage` shows it as a toast and a flash on the newest heart.
+
+Things that are not obvious from the diff:
+
+- **The cap depends on the mode.** Outside battle royale a streak only tops a player back up to the room's starting lives (`customSettings.startingLives`, else `DEFAULT_STARTING_LIVES`), so a player at full lives earns nothing and the next chance is the next multiple of the threshold. Battle royale has no cap, so a streak there banks lives above the start.
+- **Battle royale now starts on 1 life.** `GAME_MODE_PRESETS.battle_royale.startingLives` drops from 3 to 1, so a streak is the only way to gain a cushion there. The in-game banner loses its "1 LIFE ONLY" suffix, which had been wrong while the preset was 3 and would be wrong again as soon as a streak adds a life.
+- **The hearts row grows past the starting count.** It draws `max(startingLives, lives)` hearts and wraps, because a battle royale streak (and the round 7 bonus, which was never capped) can exceed the start.
+- **The streak earns a replay too.** With `REPLAY_BONUS_STREAK` at 1, the third correct round in a row pays out a replay and a life, each with its own toast.
+
+## 2026-10-10 - Replay tunables moved to constants, bonus every correct round
+
+The replay button's two numbers now live in `app/imports/constants.js` next to the other gameplay tunables: `STARTING_REPLAYS` (1) and `REPLAY_BONUS_STREAK`, which drops from 3 to 1.
+A player now earns an extra replay on every correct round instead of every third one in a row.
+
+Things that are not obvious from the diff:
+
+- **Replays are client state only.** `replaysRemaining` lives in `GamePage` React state, so a refresh resets it to `STARTING_REPLAYS`, the same way D7 loses `playerId`.
+- **The bonus toast's wording depends on the threshold.** At 1 it reads "Correct! Extra replay earned", because "1 correct in a row" reads badly.
+
+## 2026-10-09 - Keyboard hints on the game controls, and an Undo button
+
+The game screen now has three controls, each showing the key that triggers it: CLEAR (Space), UNDO (Backspace), and SUBMIT (Enter), matching the W/A/S/D letters on the tiles (#115).
+UNDO is new as a button; Backspace already removed the last tile, so mouse and touch players now get the same action.
+All three share one `ControlButton` in `app/imports/ui/pages/GamePage.jsx`, and the keyboard and the button both call `handleUndo`.
+
+Things that are not obvious from the diff:
+
+- **The window-level Enter handler calls `preventDefault()`.**
+  After a mouse click, that button keeps focus, and the browser turns Enter into a click on it.
+  Without this, pressing Enter after clicking UNDO would remove a second tile, and after a full sequence it would submit and then undo.
+- **Each button has an `aria-label`**, so screen readers announce "UNDO" rather than "UNDOBACKSPACE". The key is announced through `aria-keyshortcuts` instead.
+
+## 2026-10-06 - Spectators can leave a live game without blocking it
+
+The spectator view now offers a confirmed **Leave game** action. It marks the
+player eliminated, retains their game and leaderboard records, and then
+rechecks the winner and whether the current round can advance before returning
+them to the play screen.
+
+Navigating alone would have left an active player document behind because the
+DDP connection remains open; that could keep other players waiting
+indefinitely. Marking the player eliminated removes them from active-round
+calculations while preserving their final score for the end leaderboard.
+
+Files: `app/imports/ui/pages/GamePage.jsx`, `app/imports/api/gameMethods.js`,
+`app/tests/leaveGame.test.js`, `AGENTS.md`.
+
+## 2026-09-22 - Google sign-in
+
+Players can sign up and sign in with Google from `/account` (#105).
+It is off unless `GOOGLE_CLIENT_ID` is set, and when it is off the Account page looks exactly as it did before.
+
+Things that are not obvious from the diff:
+
+- **It plugs into the hand-rolled accounts rather than replacing them with `accounts-google`.**
+  Meteor's package would have meant `accounts-base`, `Meteor.userId()`, and a migration of every existing account for one button.
+  Instead the browser gets a signed ID token from Google Identity Services, `playerAccounts.googleSignIn` verifies it with `google-auth-library`, and the result is a normal session from #108.
+- **Linking by email is only done for a Google-verified email.**
+  A Google identity whose email matches an existing password account is linked to it, so the same player keeps one account and one history.
+  That is safe only because Google has proven the address; `email_verified: false` is refused outright.
+  An email already linked to a different Google subject is refused rather than silently re-linked.
+- **Linking removes the account's password and ends its sessions.**
+  Registration never proves who owns an email, so anyone can register a password account for someone else's address before they sign up.
+  If linking kept that password, whoever set it would share the real owner's account once the owner signed in with Google.
+  The cost is that a genuine owner who registered with a password signs in with Google from then on; `signIn` tells them so with `use-google`.
+- **The client ID comes from an environment variable, not `METEOR_SETTINGS`.**
+  `Meteor.settings` is read nowhere in the codebase, so `GOOGLE_CLIENT_ID` follows whatever path each stack already uses for configuration: plain `environment` in `infra/ecs/task-definition.{dev,prod}.json` on ECS, the root `.env` locally, and `/opt/kimply/.env` on the legacy instances.
+  It is public, unlike `MONGO_URL`, so it is not in Secrets Manager: it ships in the task definition and is visible in the page source anyway.
+  The browser reads it through `playerAccounts.googleClientId`, so a change is a task definition revision, not an image rebuild.
+- **`google-auth-library` is aliased away from the client build.**
+  `googleAuth.js` is imported by `playerAccounts.js`, which the client bundle includes through `globalLeaderboard.js`.
+  A dynamic import alone is not enough: Rspack still tries to bundle the Node-only library for the browser and fails with 14 errors, so `rspack.config.js` resolves it to nothing for the client.
+- **The verifier has a test seam**, `setGoogleVerifierForTests`, so the tests cover create, link, and refusal paths without a network call or a real Google token.
+  The override is stored on `global`, not in a module variable, because CI's `meteor test --full-app` evaluates the module twice and registers the methods from the other copy. A module variable passed locally under `npm test` and failed all six stubbed tests in CI.
+  The real verification path was exercised against the running dev server: a malformed token reaches `google-auth-library` and is rejected with its own error, which is logged server-side.
+
+Setup is in [`docs/google-sign-in.md`](google-sign-in.md): one OAuth client, its origins, and where the value lives in each stack. The new UI pattern is in `docs/design_system.md` under Third-party sign-in.
+
+Files: `app/imports/api/googleAuth.js` (new), `app/imports/api/playerAccounts.js`, `app/server/indexes.js`, `app/imports/ui/pages/Account.jsx`, `app/rspack.config.js`, `app/package.json`, `app/package-lock.json`, `app/tests/playerAccounts.test.js`, `infra/ecs/task-definition.dev.json`, `infra/ecs/task-definition.prod.json`, `docker-compose.yml`, `docker-compose.prod.yml`, `.env.production.example`, `docs/google-sign-in.md` (new), `docs/deployment-manual.md`, `docs/design_system.md`, `AGENTS.md`.
+
+## 2026-09-21 - Phones get a 24px screen-edge gutter and 44px touch targets
+
+Phone screens were cramped in two different ways and the fix is different for each.
+The game screen had no horizontal gutter at all and sized its gaps in `vw`, so the hearts, the progress dots and the Clear / Submit buttons all collapsed towards each other as the viewport narrowed.
+The room-code slots were the opposite problem: fixed at 76px and 56px, five of them plus gaps overflowed every phone width and flexbox squeezed them back down to something narrower than the design system allows.
+
+`docs/design_system.md` only ever named a *desktop* screen-edge value, so the phone gutter was whatever each screen happened to use. It is now `--s-5` (24px), recorded in the spacing table and the breakpoint table, and applied on every route. That is the value `Splash.jsx` already used, so this standardises on existing precedent rather than inventing a number.
+
+Three things that are not obvious from the diff:
+
+- **The 480px boundary is a real Tailwind screen now, not an arbitrary variant.**
+  `tailwind.config.js` declares the full `screens` object with `xs: '481px'` ahead of Tailwind's untouched defaults. The explicit object is there for ordering: `theme.extend.screens` would have appended `xs` after `2xl`, and the resulting CSS would let `xs:` beat `sm:` on the same property. Phone styles are the unprefixed base and `xs:` is everything above, so `sm:` (640px) must not be used to mean "not a phone" - that would leave 481-639px on the phone treatment.
+- **`ColourSequence`'s `--tile-grid` still hard-codes the page gutter, and has to.**
+  It is `min(360px, calc(100vw - 48px), 38dvh)`, where 48px is GamePage's 24px gutter doubled, so the two have to be changed together. The obvious cleanup - swapping the viewport term for `100%` so the grid just tracks its container - does not work and was reverted after it shipped flat tiles to the phone layout. The same variable is consumed on both axes (`width` and `height` on every tile), and in the height context a percentage resolves against the grid's own indefinite height, so the whole `min()` collapses to `auto` and each tile falls back to its content height. Any replacement has to stay percentage-free; `100cqw` with `container-type: inline-size` would work, but was not taken because it is untested here.
+- **The live leaderboard is a bottom sheet on phones and a side rail above 480px.**
+  It is one `<aside>`, not two: the closed state translates on a different axis per band (`translate-y-[120%]` under 481px, `xs:translate-x-[120%]` above), which works because Tailwind composes transforms through separate `--tw-translate-x` / `--tw-translate-y` variables. `Leaderboard` also takes its height cap from the caller now - the rail wants `max-h-[80vh]`, the sheet wants `max-h-[52vh]` so the tiles stay visible behind it - because two competing `max-h-*` classes on one element do not resolve by author order.
+- **Room-code entry and room-code display are held to different floors on purpose.**
+  Entry (`JoinRoom`) stays inside the documented 56-76 x 72-96 slot range at every common phone width. The lobby's display tiles are allowed down to 48px, because the Room code display pattern specifies no dimensions and the panel that holds them has its own padding; at 360px the documented 56px floor would not fit inside both.
+
+Files: `app/tailwind.config.js`, `docs/design_system.md`, `app/imports/ui/components/design.jsx`, `app/imports/ui/components/ConfirmationPopup.jsx`, `app/imports/ui/ColourSequence.jsx`, `app/imports/ui/Leaderboard.jsx`, `app/imports/ui/EndLeaderboard.jsx`, and `Splash.jsx`, `PlayRoute.jsx`, `JoinRoom.jsx`, `PlayerLobby.jsx`, `GameModeSelector.jsx`, `CustomGameSettings.jsx`, `GamePage.jsx`, `GlobalLeaderboard.jsx`, `Account.jsx` under `app/imports/ui/pages/`.
+
+---
+## 2026-09-22 - Production target moves to ECS on Fargate, with Terraform for the infrastructure
+
+The production design for replacing the single EC2 instance was worked out and recorded in `docs/ecs-target-architecture.md` (decisions D1-D39), and the Terraform to build it now exists under `infra/terraform/`.
+Nothing has been applied yet, and the EC2 stack is still what serves `kimply.online`.
+
+Things that are not obvious from the diff:
+
+- **The ALB health check is `/health/live`, not `/health/ready`.**
+  In ECS a failing load balancer check also replaces the task, so a Mongo-dependent check would restart every task in a loop through an Atlas outage.
+  `/health/ready` moves to the external canary, which can roll a deploy back but can never restart a task.
+- **The canonical host becomes `www.kimply.online`.**
+  DNS stays at GoDaddy, which cannot alias the apex to a load balancer, so GoDaddy forwards the apex to `www` and `ROOT_URL` changes with it.
+- **The task definition template is shared by Terraform and the pipeline.**
+  Terraform renders it once for the first revision and then ignores the service's revision, so an apply never undoes a deploy.
+  Because the template hard-codes names and ARNs, preconditions fail the plan if it and the infrastructure drift apart.
+- **Until cutover the stack serves `ecs.kimply.online`, against the live database.**
+  The EC2 stack keeps `kimply.online` and `www` untouched, so nothing about production DNS changes until the ECS stack has been played on.
+  The certificate covers `www` from the start so cutover does not wait on validation.
+  GoDaddy forwarding was tested first: it serves HTTPS but drops paths and query strings, so after cutover apex deep links land on a GoDaddy 404.
+- **The secret is referenced by its full ARN, random suffix and all.**
+  The first deploy referenced it by name, and ECS read that as an SSM Parameter Store parameter and failed with `ssm:GetParameters` denied.
+  A precondition now fails the plan if the template's `valueFrom` is not the secret's ARN.
+- **The polling interval drops to 3s through `METEOR_POLLING_INTERVAL_MS`, with no code change.**
+  Atlas M0 has no oplog, so with two tasks a write on one only reaches the other's subscribers at its next poll.
+- **Four application issues surfaced that matter more with two tasks**, recorded as I1-I4 in the architecture document rather than fixed here.
+  The most serious is that an in-game DDP reconnect may never re-bind `connectionId`, so a player who reconnects could be removed after the 15s grace window.
+  It needs an end-to-end reproduction before it goes in the defect register.
+
+- **Development reuses the same module and borrows production's NAT gateway.**
+  `envs/dev` differs from `envs/prod` only in values: `FARGATE_SPOT`, 1-2 tasks, its own cluster, ECR repository, secret, log group and domain (`ecs-dev.kimply.online`).
+  A second NAT gateway would have cost more than the whole dev environment, so dev routes through production's and reads its ID from production's Terraform state.
+  That is the one resource the environments share, and the cost is a real coupling: replacing production's NAT cuts dev off from its database until dev is re-applied.
+- **Development shares production's load balancer, and both canaries slow to 15 minutes (D42).**
+  The bill was about US$160/month once credits run out, and the application itself was only about an eighth of it: the rest was a NAT gateway, two load balancers, nine public IPv4 addresses and two canaries.
+  Development's own ALB cost more than its compute, so it now serves from production's by host header and runs 0.25 vCPU / 0.5 GB, against measured usage of about 105 MB at ~1% CPU.
+  Production stays at 0.5 vCPU: its peak is idle-dominated, autoscaling needs four to five minutes to add a task, and DDP connections stick to the task they landed on, so a burst has to be absorbed by the tasks already running rather than by scaling out.
+  The cost is coupling: development now depends on production's listener and security group as well as its NAT gateway, and ECS waits longer on a slower canary before completing a deployment.
+  The migration has one trap, now in the runbook: deleting the old ALB's security group stalls until the task group's ingress rule stops referencing it, and Terraform does not order those two against each other.
+- **DNS moves to Route 53, because GoDaddy forwarding broke deep links (D41).**
+  `https://kimply.online/play` reached a GoDaddy 404: forwarding keeps the domain but drops the path, which A3 recorded as a known limitation and which turned out to matter as soon as anyone shared a link.
+  No record type at GoDaddy can point a bare domain at a load balancer; Route 53's ALIAS can, so the registrar stays and only the nameservers move.
+  Terraform now writes the certificate validation records too, so a renewal can no longer fail because someone deleted a hand-pasted CNAME.
+  The zone is created and fully populated before the nameservers change, so the switch is a cutover rather than a build.
+- **`www.kimply.online` and `dev.kimply.online` now point at the load balancers.**
+  `ROOT_URL`, the Terraform `domain_name` and the workflow's `service_url` moved together, because the app tells the browser where to open its DDP socket and a Terraform precondition keeps the first two in step.
+  DNS moves before the deploy: a `ROOT_URL` the DNS does not yet serve gives a page that loads and a game that cannot connect, and it fails the canary, which now rolls deploys back.
+  The apex keeps its GoDaddy forwarding to `www`, so apex links with a path reach a GoDaddy 404 (A3). `ecs.kimply.online` and `ecs-dev.kimply.online` stay as second names that bypass the redirect.
+  `deployment-manual.md` and `dev-environment.md` now carry a banner saying they describe the superseded EC2 stack.
+- **`elasticloadbalancing:DescribeTargetHealth` cannot be scoped to a target group.**
+  The statement named the exact ARN and was still denied: the action does not support resource-level permissions, so it has to be `Resource: "*"`. It reads health and can change nothing.
+- **The rollout log prints only when something changes.**
+  ECS holds a deployment `IN_PROGRESS` while it bakes the new tasks against the canary alarm, so a healthy rollout repeated the same block every 15s and looked like a stuck loop. It now prints on change, notes once that the bake has started, and otherwise emits a one-line heartbeat each minute.
+- **Reporting in the deploy script can never fail a deploy.**
+  A denied `elasticloadbalancing:DescribeTargetHealth` killed a dev deploy that ECS had already completed: under `set -o pipefail` the AWS CLI's exit 254 became the pipeline's status even though the rest of the pipeline succeeded.
+  The reporting and diagnostic functions now run without `-e` and `-o pipefail` and always return 0, and print what is missing instead.
+- **A failed deploy now prints why, in the run itself.**
+  `deploy/ecs-deploy.sh` writes a summary table to the GitHub run page (revision, image, deployment id, duration, tasks and their AZs), groups its noisy output, and on failure dumps the service events plus the task's CloudWatch logs.
+  That needed three read-only permissions on the deploy role, scoped to one cluster and one log group: `ecs:ListTasks`, `ecs:DescribeTasks` and `logs:FilterLogEvents`.
+  Without the logs, a failure showed ECS's view ("tasks failed to start") but never the application's own error.
+- **The pipeline deploys only to ECS. The SSM path is gone.**
+  Keeping both targets would have kept the EC2 stacks in step until cutover, at the cost of a workflow that had to reason about two deployment systems.
+  The consequence is accepted deliberately: `kimply.online` and `dev.kimply.online` now lag their branches until each cutover, and shipping to one in the meantime means running `deploy/deploy.sh` on that instance by hand.
+- **The deploy workflow resolves every branch-specific value in one `config` job.**
+  A `case` on the branch name maps it to the ECR repository, roles, cluster, service, task definition template, smoke-test URL and EC2 target, and an unrecognised branch fails there.
+  The previous `github.ref_name == 'main' && ... || ...` expressions treated every non-main branch as development, which would have silently pointed a future `staging` branch at the dev stack.
+- **GitHub roles trust exact OIDC subject prefixes, not repository names.**
+  The first pipeline run from the fork failed to assume `GitHubActionsECRPush` because the fork uses GitHub's immutable subject format, `repo:owner@<id>/name@<id>`, while the upstream repository still sends `repo:owner/name`.
+  `StringEquals` needs the exact string, so each repository is listed by the prefix GitHub reports for it.
+- **During the parallel run, `main` deploys to both production stacks.**
+  The deploy workflow is split into build, ECS and EC2 jobs so `kimply.online` and `ecs.kimply.online` always run the same image.
+  `deploy/ecs-deploy.sh` waits on the outcome of its own deployment ID rather than `aws ecs wait services-stable`, because after a circuit-breaker rollback the service is stable again on the old revision and that waiter would report success.
+
+Files: `docs/ecs-target-architecture.md` (new), `infra/` (new), `deploy/ecs-deploy.sh` (new), `.github/workflows/deploy.yml`, `scripts/health-check.sh`, `AGENTS.md`, `.gitignore`.
+
+## 2026-09-21 - Finished players now remain in the live round as spectators
+
+`GamePage.jsx` no longer sends a player who has completed a round or been
+eliminated to a static result screen while the game is still active. Instead it
+shows the live leaderboard and continues to follow the current shared round as
+the remaining players progress.
+
+The spectator branch intentionally does not render `ColourSequence`, its tiles,
+or selected-colour progress. This keeps the spectator interface focused on
+public player status rather than visually revealing the round sequence or any
+other player's answer.
+
+Files: `app/imports/ui/pages/GamePage.jsx`, `AGENTS.md`.
+
+## 2026-09-21 - Players now expose a safe live round status
+
+`gameMethods.js` now maintains a public `roundStatus` on each player as they
+play, complete a sequence, are eliminated, or enter the next round. The
+leaderboard model and its tests use that status instead of treating a correct
+answer as a generic completion.
+
+The status is deliberately a short label only. `attemptedSequence` remains
+excluded from every player publication, so the multiplayer activity UI can
+describe progress without exposing anyone's answer.
+
+Files: `app/imports/api/gameMethods.js`, `app/imports/ui/leaderboardModels.js`,
+`app/tests/lifeDeduction.test.js`, `app/tests/roundAdvance.test.js`,
+`app/tests/leaderboardModel.test.js`, `AGENTS.md`.
+## 2026-09-22 - Account sessions persist instead of riding on router state
+
+Testers were signed out when a game ended and when they rejoined one (#108).
+The signed-in account lived only in `location.state.playerAccount`, handed from page to page by hand.
+Any navigation that did not forward it dropped it: the reconnect popup's Rejoin, the lobby's kicked and room-gone redirects, typing `/play` into the address bar, or opening an invite link in a new tab.
+Once dropped, the rest of that game ran without an `accountId`, so its result was not recorded against the account either.
+
+`register` and `signIn` now return a random session token.
+The client keeps it in `localStorage`, resumes it at startup through `playerAccounts.resume`, and every page reads the account from `useSignedInAccount()` in `imports/ui/accountSession.js`.
+`playerAccount` is gone from every `navigate(..., { state })` call.
+`/play` has a Sign out link.
+
+Things that are not obvious from the diff:
+
+- **Only the SHA-256 of a token is stored.**
+  A copy of the `playerAccounts` collection does not contain a usable session.
+  Plain SHA-256 is enough here, unlike for passwords, because the token is 43 random characters and there is nothing to brute-force.
+- **Each sign-in is its own session.**
+  Signing in on a phone does not sign out the laptop, and Sign out ends only the session it was pressed in.
+  Expired sessions are pruned whenever a new one is issued, so the array cannot grow without bound.
+- **A failed resume clears the token only on `invalid-session`.**
+  A dropped connection at startup keeps the token for the next load, rather than signing the player out because the network blinked.
+- **`GamePage` waits for a pending resume before calling `players.join`.**
+  Without that, a reload that lands on `/game` could join without the account, and the late resume would re-run the effect and join a second time.
+- **This is a session, not an authorization boundary.**
+  `rooms.create`, `rooms.join`, and `players.join` still take a client-supplied `accountId`, so a hostile client can still record results against someone else's account.
+  Moving those methods to accept the token and resolve the account server-side is the follow-up.
+- **The account's display name fills the username field when it arrives, unless the player has typed one.**
+  The session resumes after the first render, so `/play` and `/play/join` fill the name in late.
+  Checking for an empty field would let any prefilled name block it, including a remembered username from a previous player on a shared device (#119), so both pages track whether the player has typed instead.
+  `JoinRoom` also never replaces a name passed from `/play`.
+
+Files: `app/imports/api/playerAccounts.js`, `app/server/indexes.js`, `app/imports/ui/accountSession.js` (new), `app/client/main.jsx`, `app/imports/ui/pages/{Account,PlayRoute,JoinRoom,PlayerLobby,GamePage,GlobalLeaderboard}.jsx`, `app/imports/ui/EndLeaderboard.jsx`, `app/tests/playerAccounts.test.js`, `AGENTS.md`.
+
+## 2026-09-22 - The last username is remembered between visits
+
+Players had to type their username on every visit (#119).
+The last name used is now kept in `localStorage` under `kimply.username` and prefilled on `/play` and on `/play/join`, including when `/play/join` is opened from an invite link with no router state.
+
+Things that are not obvious from the diff:
+
+- **The name is saved when it is used, not while it is typed.**
+  It is written on Create Room, on Join Room from `/play`, and after a successful `rooms.join`, so a half-typed or abandoned name never replaces the last one that actually got someone into a game.
+- **A signed-in account's display name still wins over the saved name on `/play`.**
+  On a shared device, the saved name belongs to whoever played last, while a signed-in account is a stronger statement of who is at the keyboard.
+- **Storage failures are silent.**
+  Every read and write is wrapped, so private browsing or blocked site data just means the field starts empty, as it did before.
+- `JoinRoom.handleJoin` now refuses to submit with a blank name.
+  Before, pressing Enter in the code slots could call `rooms.join` with an empty name even though the button was disabled.
+
+Files: `app/imports/ui/savedUsername.js` (new), `app/imports/ui/pages/PlayRoute.jsx`, `app/imports/ui/pages/JoinRoom.jsx`, `app/tests/uiHelpers.test.js`, `AGENTS.md`.
+
+
 ## 2026-09-04 - The Quality Assurance Plan is now a document in the repo
 
 The QA plan existed only as a submission document, written before most of the machinery it described was built.
@@ -122,6 +563,12 @@ Two inconsistencies surfaced while checking the source, both left alone as out o
 Skills live once under `.agents/skills/` (`git`, `test`, `ui`, `review`). `.claude/skills` and `.cursor/skills` are directory symlinks to that folder — do not copy skills into a vendor directory.
 Removed the Claude-only memory-file protocol (those files were never in the repo). `.gitignore` no longer ignores all of `.claude/`, only `settings.local.json` and `worktrees/`.
 Tables refreshed against `dev`: live leaderboard subscribes to `players` + `rounds` (not the `leaderboard` pub), `publications.test.js` and `leaderboardModel.test.js` exist, `GamePage` has no `'demo'` gameId.
+
+## 2026-08-24 - Custom flash speed choices
+
+The custom game settings page offers Fast, Med and Slow flash-speed choices, mapped to 200 ms, 500 ms and 1000 ms. The existing numeric `flashSpeed` setting passed through navigation is unchanged.
+
+Carried over from the Feature Log in `CLAUDE.md` on `battle-royale-status-ui-trisha`, which became a symlink to `AGENTS.md` when that branch merged `dev`. The entry would otherwise have been lost with the file.
 
 ## 2026-08-21 - A development environment that mirrors production, deployed from `dev`
 `dev.kimply.online` is now a second, fully independent copy of the production stack on its own `t4g.small`, with its own Elastic IP, ECR repository, IAM roles and Atlas cluster.

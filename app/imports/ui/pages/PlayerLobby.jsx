@@ -3,6 +3,7 @@ import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { Meteor } from 'meteor/meteor';
 import { useSubscribe, useTracker } from 'meteor/react-meteor-data';
 import { RoomsCollection } from '/imports/api/rooms';
+import { AbilitiesChip, AbilitiesSwitch, AbilityGuideButton } from '../abilities/LobbyAbilities.jsx';
 import { ConfirmationPopup } from '../components/ConfirmationPopup';
 import {
   PRIMARY,
@@ -22,6 +23,7 @@ import {
 
 function getGameModeColor(mode) {
   const colors = {
+    default: 'oklch(0.70 0.22 70)',
     easy: 'oklch(0.75 0.20 120)',
     medium: 'oklch(0.70 0.22 70)',
     hard: 'oklch(0.65 0.22 25)',
@@ -31,11 +33,20 @@ function getGameModeColor(mode) {
   return colors[mode] || 'oklch(0.60 0.20 270)';
 }
 
+function getGameModeName(mode) {
+  if (mode === 'battle_royale') return 'Battle Royale';
+  return `${(mode || 'default').charAt(0).toUpperCase()}${(mode || 'default').slice(1)}`;
+}
+
+function getGameModeLabel(mode) {
+  return `${getGameModeName(mode)} Mode`;
+}
+
 function BackButton({ onClick }) {
   return (
     <button
       onClick={onClick}
-      className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-[10px] border border-hairline bg-surface"
+      className="inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-[10px] border border-hairline bg-surface xs:h-9 xs:w-9"
     >
       <BackChevron size={14} stroke={FG2} />
     </button>
@@ -45,20 +56,33 @@ function BackButton({ onClick }) {
 function PlayerRow({ player, isYou, onKick }) {
   const color = avatarColor(player.name);
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-hairline bg-surface px-3.5 py-2.5">
-      <Avatar letter={player.name[0]?.toUpperCase()} color={color} size={32} />
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-outfit text-sm font-semibold text-fg">
-          {player.name}
-          {isYou && <span className="ml-1.5 font-medium text-fg3">· you</span>}
-        </div>
-        <div className="font-mono text-[9px] uppercase tracking-widest text-fg3">Player</div>
+    // Fixed height so rows with a kick button match the host's own row. The kick button's
+    // touch target already carries its own space, so those rows need less right padding.
+    // Your own row is tinted like the leaderboards do, since in a narrow grid card the
+    // "· you" suffix can truncate away. It gives way before the name does.
+    <div
+      className={`flex h-[52px] shrink-0 items-center gap-3 rounded-xl border border-hairline bg-surface pl-3.5 xs:h-12 ${
+        onKick ? 'pr-1 xs:pr-2' : 'pr-3.5'
+      }`}
+      style={
+        isYou
+          ? {
+              background: `color-mix(in oklab, ${PRIMARY} 10%, oklch(0.20 0.02 270))`,
+              borderColor: `color-mix(in oklab, ${PRIMARY} 48%, transparent)`,
+            }
+          : undefined
+      }
+    >
+      <Avatar letter={player.name[0]?.toUpperCase()} color={color} size={28} />
+      <div className="flex min-w-0 flex-1 items-baseline font-outfit text-sm font-semibold text-fg">
+        <span className="max-w-full shrink-0 truncate">{player.name}</span>
+        {isYou && <span className="ml-1.5 min-w-0 truncate font-medium text-fg3">· you</span>}
       </div>
       {onKick ? (
         <button
           onClick={onKick}
           title={`Kick ${player.name}`}
-          className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border-none opacity-40 transition-opacity hover:opacity-100"
+          className="inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg border-none opacity-60 transition-opacity hover:opacity-100 xs:h-8 xs:w-8 xs:opacity-40"
           style={{
             background: 'color-mix(in oklab, oklch(0.65 0.19 20) 15%, transparent)',
             color: 'oklch(0.65 0.19 20)',
@@ -83,11 +107,11 @@ function SharePanel({ link }) {
     setTimeout(() => setCopied(false), 2000);
   };
   return (
-    <div className="flex w-full items-center gap-2 rounded-xl border border-hairline bg-surface px-3 py-2">
-      <span className="flex-1 select-all truncate font-mono text-[11px] text-fg3">{link}</span>
+    <div className="flex w-full items-center gap-2 rounded-xl border border-hairline bg-surface py-1.5 pl-3 pr-1.5">
+      <span className="min-w-0 flex-1 select-all truncate font-mono text-[11px] text-fg3">{link}</span>
       <button
         onClick={copy}
-        className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 font-outfit text-[11px] font-semibold uppercase tracking-wider transition-all"
+        className="inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg border px-3 py-2 font-outfit text-[11px] font-semibold uppercase tracking-wider transition-all xs:min-h-0 xs:py-1.5"
         style={{
           background: copied ? `color-mix(in oklab, ${PRIMARY} 16%, transparent)` : 'transparent',
           color: copied ? PRIMARY : 'oklch(0.72 0.01 270)',
@@ -118,7 +142,7 @@ function SharePanel({ link }) {
   );
 }
 
-function HostView({ room, playerName, playerId, playerAccount, onBack, navigate, gameMode, customSettings }) {
+function HostView({ room, playerName, playerId, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
   const joinLink = `${window.location.origin}/play/join?code=${room.pin}`;
   const [editing, setEditing] = useState(true);
@@ -132,7 +156,7 @@ function HostView({ room, playerName, playerId, playerAccount, onBack, navigate,
         console.error(err);
         return;
       }
-      navigate('/game', { state: { playerName, playerId, pin: room.pin, gameMode, playerAccount } });
+      navigate('/game', { state: { playerName, playerId, pin: room.pin, gameMode } });
     });
   };
 
@@ -149,20 +173,26 @@ function HostView({ room, playerName, playerId, playerAccount, onBack, navigate,
     <div className="relative flex h-full w-full flex-col overflow-hidden bg-bg text-fg">
       <TileLattice opacity={0.05} />
 
-      <div className="relative flex shrink-0 items-center justify-between px-7 py-5">
+      <div className="relative flex shrink-0 items-center justify-between gap-3 px-6 py-4 xs:gap-4 xs:px-7 xs:py-5">
         <Wordmark />
         <BackButton onClick={onBack} />
       </div>
 
-      <div className="relative flex flex-1 flex-col items-center justify-center gap-7 overflow-y-auto px-7 pb-7">
+      {/* The room panel and Start button keep their size; only the player list scrolls, so a
+          full lobby never squashes the room code. Auto margins centre the group when it fits;
+          justify-center would push the top out of reach once it overflows. The outer scroll is
+          a fallback for screens too short to fit the panel plus a minimum list height.
+          From lg up it becomes a full-screen grid: panel and Start in a left column, and the
+          players filling the rest of the screen. */}
+      <div className="relative flex min-h-0 flex-1 flex-col items-center gap-4 overflow-y-auto px-4 pb-6 pt-2 xs:gap-5 xs:px-7 lg:grid lg:grid-cols-[26rem_minmax(0,1fr)] lg:grid-rows-[auto_auto_minmax(0,1fr)] lg:items-start lg:gap-x-10 lg:gap-y-5 lg:px-10 lg:pb-10">
         {/* room code panel */}
-        <div className="relative flex w-full max-w-lg flex-col items-center gap-4 overflow-hidden rounded-[22px] border border-hairline bg-surface px-6 pb-5 pt-8">
+        <div className="relative mt-auto flex w-full max-w-lg shrink-0 flex-col items-center gap-4 overflow-hidden rounded-[22px] border border-hairline bg-surface px-4 pb-5 pt-6 xs:px-6 lg:col-start-1 lg:row-start-1 lg:mt-0">
           {/* tile band */}
           <RainbowBar className="absolute left-0 right-0 top-0 h-1" />
 
           {/* Game Name */}
-          <div className="flex items-center gap-1">
-            <p className="height-[32px] shrink-0 whitespace-nowrap text-center font-mono text-[11px] uppercase leading-none tracking-[0.16em] text-fg3">
+          <div className="flex min-h-11 w-full min-w-0 items-center justify-center gap-2 xs:min-h-8 xs:gap-1">
+            <p className="shrink-0 whitespace-nowrap font-mono text-[11px] uppercase leading-none tracking-[0.16em] text-fg3">
               Game Name:{' '}
             </p>
 
@@ -175,17 +205,18 @@ function HostView({ room, playerName, playerId, playerAccount, onBack, navigate,
                 onKeyDown={(e) => e.key === 'Enter' && saveGameName()}
                 placeholder={`Game${room.pin}`}
                 maxLength={30}
-                className="w-48 rounded-[12px] border border-hairline bg-surface px-3 py-1 text-center font-outfit text-base font-semibold text-fg outline-none placeholder:text-fg3"
+                className="w-40 min-w-0 rounded-[12px] border border-hairline bg-surface px-3 py-1.5 text-center font-outfit text-base font-semibold text-fg outline-none placeholder:text-fg3 xs:w-48 xs:py-1"
                 style={{ caretColor: PRIMARY }}
               />
             ) : (
-              <div className="flex items-center gap-1">
-                <span className="font-outfit text-base font-semibold text-fg">
+              <div className="flex min-w-0 items-center gap-1">
+                <span className="truncate font-outfit text-base font-semibold text-fg">
                   {hasGameName ? trimmedGameName : `Game${room.pin}`}
                 </span>
                 <button
                   onClick={() => setEditing(true)}
-                  className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent text-fg2"
+                  aria-label="Rename game"
+                  className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent text-fg2 xs:h-8 xs:w-8"
                 >
                   <PencilIcon size={14} />
                 </button>
@@ -193,26 +224,35 @@ function HostView({ room, playerName, playerId, playerAccount, onBack, navigate,
             )}
           </div>
 
-          {/* Game Mode Badge */}
-          <div
-            className="flex items-center gap-2 rounded-full px-4 py-2"
-            style={{ background: getGameModeColor(gameMode) }}
-          >
-            <span className="font-outfit text-sm font-semibold text-bg">
-              {gameMode === 'battle_royale'
-                ? 'Battle Royale Mode'
-                : gameMode.charAt(0).toUpperCase() + gameMode.slice(1) + ' Mode'}
-            </span>
+          {/* Game mode and abilities share a row */}
+          <div className="flex flex-wrap items-start justify-center gap-2">
+            <div
+              className="flex min-h-11 items-center rounded-full px-4"
+              style={{ background: getGameModeColor(gameMode) }}
+            >
+              <span className="whitespace-nowrap font-outfit text-sm font-semibold text-bg">
+                {getGameModeName(gameMode)}
+              </span>
+            </div>
+            <AbilitiesSwitch pin={room.pin} enabled={room.abilitiesEnabled === true} />
+            {room.abilitiesEnabled === true && (
+              <AbilityGuideButton gameMode={gameMode} startingLives={room.customSettings?.startingLives} />
+            )}
           </div>
 
           <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-fg3">Your Room Code</p>
 
-          <div className="flex gap-2.5">
+          <div className="flex w-full justify-center gap-2 xs:gap-2.5">
             {room.pin.split('').map((ch, i) => (
               <div
                 key={i}
                 className="relative flex items-center justify-center rounded-xl border border-hairline font-mono font-bold text-fg"
-                style={{ width: 56, height: 72, fontSize: 42, background: 'oklch(0.24 0.02 270)' }}
+                style={{
+                  width: 'clamp(40px, 12vw, 48px)',
+                  height: 'clamp(52px, 15vw, 60px)',
+                  fontSize: 'clamp(28px, 8vw, 34px)',
+                  background: 'oklch(0.24 0.02 270)',
+                }}
               >
                 {ch}
                 <div
@@ -228,27 +268,26 @@ function HostView({ room, playerName, playerId, playerAccount, onBack, navigate,
             ))}
           </div>
 
-          <div className="mt-1 w-full">
+          <div className="w-full">
             <p className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-fg3">Invite link</p>
             <SharePanel link={joinLink} />
           </div>
         </div>
 
         {/* players */}
-        <div className="flex w-full max-w-lg flex-col gap-3">
-          <div className="flex items-center justify-between">
+        {/* min-h is the heading plus one row: the list gives up space before the panel does,
+            but never disappears entirely */}
+        <div className="flex min-h-[4.75rem] w-full max-w-lg flex-col gap-3 lg:col-start-2 lg:row-span-3 lg:row-start-1 lg:h-full lg:max-w-none">
+          <div className="flex shrink-0 items-center justify-between">
             <p className="font-outfit text-[13px] font-bold uppercase tracking-widest text-fg2">
-              Players{' '}
-              <span className="text-fg3">
-                ({players.length})
-              </span>
+              Players <span className="text-fg3">({players.length})</span>
             </p>
             <div className="inline-flex items-center gap-1.5 font-mono text-[11px]" style={{ color: TILE.amber }}>
               <span className="h-1.5 w-1.5 animate-kimply-pulse rounded-full" style={{ background: TILE.amber }} />
               Waiting for players
             </div>
           </div>
-          <div className="flex flex-col gap-2">
+          <div className="-mr-1.5 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1.5 lg:grid lg:grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] lg:content-start lg:gap-3">
             {players.map((p, i) => (
               <PlayerRow
                 key={p.id || i}
@@ -263,7 +302,7 @@ function HostView({ room, playerName, playerId, playerAccount, onBack, navigate,
         <button
           onClick={handleStart}
           disabled={players.length < 1}
-          className="w-full max-w-lg rounded-xl px-7 py-4 font-outfit text-sm font-extrabold uppercase tracking-[0.14em] transition-all"
+          className="mb-auto w-full max-w-lg shrink-0 rounded-xl px-7 py-4 font-outfit text-sm font-extrabold uppercase tracking-[0.14em] transition-all lg:col-start-1 lg:row-start-2 lg:mb-0"
           style={{
             background: players.length >= 1 ? PRIMARY : `color-mix(in oklab, ${PRIMARY} 30%, oklch(0.14 0.02 270))`,
             color: 'oklch(0.14 0.02 270)',
@@ -280,8 +319,9 @@ function HostView({ room, playerName, playerId, playerAccount, onBack, navigate,
   );
 }
 
-function JoinedView({ room, playerName, playerId, playerAccount, onBack, navigate, gameMode, customSettings }) {
+function JoinedView({ room, playerName, playerId, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
+  const selectedGameMode = room.gameMode || gameMode || 'default';
 
   const stillInRoom = !playerName || players.some((p) => p.name === playerName);
   useEffect(() => {
@@ -303,7 +343,7 @@ function JoinedView({ room, playerName, playerId, playerAccount, onBack, navigat
   useEffect(() => {
     if (room?.status === 'in_progress') {
       navigate('/game', {
-        state: { playerName, playerId, pin: room.pin, gameMode: room.gameMode || 'standard', playerAccount },
+        state: { playerName, playerId, pin: room.pin, gameMode: selectedGameMode },
       });
     }
   }, [room?.status]);
@@ -312,18 +352,20 @@ function JoinedView({ room, playerName, playerId, playerAccount, onBack, navigat
     <div className="relative flex h-full w-full flex-col overflow-hidden bg-bg text-fg">
       <TileLattice opacity={0.04} />
 
-      <div className="relative flex shrink-0 items-center justify-between px-7 py-5">
+      <div className="relative flex shrink-0 items-center justify-between gap-3 px-6 py-4 xs:gap-4 xs:px-7 xs:py-5">
         <Wordmark />
         <BackButton onClick={onBack} />
       </div>
 
-      <div className="relative flex flex-1 flex-col items-center overflow-y-auto px-7 pb-6">
-        <div className="flex w-full max-w-2xl flex-1 flex-col gap-4">
+      {/* The title, mode and waiting line stay put and only the player grid scrolls, so a
+          big lobby never pushes them away. From lg up the view uses the full width. */}
+      <div className="relative flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-6 pb-8 pt-4 xs:px-7 xs:pt-0 lg:px-10">
+        <div className="flex min-h-0 w-full max-w-2xl flex-1 flex-col gap-5 xs:gap-4 lg:max-w-none">
           {/* title row */}
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <div>
               <p className="mb-1 font-mono text-[11px] uppercase tracking-[0.18em] text-fg3">You're in</p>
-              <h1 className="font-outfit text-4xl font-extrabold leading-none tracking-tight text-fg">
+              <h1 className="font-outfit text-4xl font-extrabold leading-tight tracking-tight text-fg xs:leading-none">
                 {room.gameName}
               </h1>
             </div>
@@ -334,22 +376,21 @@ function JoinedView({ room, playerName, playerId, playerAccount, onBack, navigat
           </div>
 
           {/* Game Mode Badge */}
-          <div
-            className="flex w-fit items-center gap-2 rounded-full px-4 py-2"
-            style={{ background: getGameModeColor(gameMode) }}
-          >
-            <span className="font-outfit text-sm font-semibold text-bg">
-              {gameMode === 'battle_royale'
-                ? 'Battle Royale Mode'
-                : gameMode.charAt(0).toUpperCase() + gameMode.slice(1) + ' Mode'}
-            </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              className="flex w-fit items-center gap-2 rounded-full px-4 py-2"
+              style={{ background: getGameModeColor(selectedGameMode) }}
+            >
+              <span className="font-outfit text-sm font-semibold text-bg">{getGameModeLabel(selectedGameMode)}</span>
+            </div>
+            <AbilitiesChip enabled={room.abilitiesEnabled === true} />
+            {room.abilitiesEnabled === true && (
+              <AbilityGuideButton gameMode={selectedGameMode} startingLives={room.customSettings?.startingLives} slim />
+            )}
           </div>
           <div className="flex items-center justify-between">
             <p className="font-outfit text-sm font-bold uppercase tracking-widest text-fg2">
-              Players{' '}
-              <span className="text-fg3">
-                ({players.length})
-              </span>
+              Players <span className="text-fg3">({players.length})</span>
             </p>
             <span className="font-mono text-[11px] text-fg3">
               {players.length}/{players.length} ready
@@ -357,7 +398,10 @@ function JoinedView({ room, playerName, playerId, playerAccount, onBack, navigat
           </div>
 
           {/* players grid */}
-          <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
+          <div
+            className="-mr-1.5 grid min-h-12 shrink content-start gap-3 overflow-y-auto pr-1.5"
+            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 12rem), 1fr))' }}
+          >
             {players.map((p, i) => (
               <PlayerRow key={p.id || i} player={p} isYou={p.name === playerName} />
             ))}
@@ -384,19 +428,18 @@ export function PlayerLobby() {
   const playerName = state?.playerName || '';
   const playerId = state?.playerId || '';
   const isHost = state?.isHost === true;
-  const playerAccount = state?.playerAccount;
-  const gameMode = state?.gameMode || 'standard';
-  const customSettings = state?.customSettings || null;
   const gameStarted = useRef(false);
   const [showExitPopup, setShowExitPopup] = useState(false);
   const isLoading = useSubscribe('rooms.lobby', pin);
   const room = useTracker(() => RoomsCollection.findOne({ pin }));
+  const gameMode = room?.gameMode || state?.gameMode || 'default';
+  const customSettings = room?.customSettings || state?.customSettings || null;
 
   useEffect(() => {
     if (room?.status === 'in_progress' && !gameStarted.current) {
       gameStarted.current = true;
       navigate('/game', {
-        state: { playerName, playerId, pin: room.pin, gameMode: room.gameMode || 'standard', playerAccount },
+        state: { playerName, playerId, pin: room.pin, gameMode },
       });
     }
   }, [room?.status]);
@@ -425,8 +468,7 @@ export function PlayerLobby() {
           Meteor.call('rooms.disconnect', pin, playerId);
 
           localStorage.removeItem('reconnectData');
-          navigate('/play', { replace: true, state: { playerAccount } });
-
+          navigate('/play', { replace: true });
         }}
         onCancel={() => {
           setShowExitPopup(false);
@@ -444,7 +486,6 @@ export function PlayerLobby() {
           room={room}
           playerName={playerName}
           playerId={playerId}
-          playerAccount={playerAccount}
           onBack={onBack}
           navigate={navigate}
           gameMode={gameMode}
@@ -455,7 +496,6 @@ export function PlayerLobby() {
           room={room}
           playerName={playerName}
           playerId={playerId}
-          playerAccount={playerAccount}
           onBack={onBack}
           navigate={navigate}
           gameMode={gameMode}

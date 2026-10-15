@@ -1,5 +1,21 @@
 # Kimply Development Environment
 
+> **Superseded by ECS.** `www.kimply.online` and `dev.kimply.online` are served by ECS Fargate behind load balancers, built and operated from [`infra/terraform`](../infra/terraform/README.md) and described in [ecs-target-architecture.md](ecs-target-architecture.md).
+> Sections 1-6 cover the EC2 instances that preceded it.
+> They still exist but no longer receive deploys, and their runbook stays here until they are retired.
+
+## Local Docker development
+
+`docker-compose.yml` publishes the Meteor app on port 3000 and Rspack's development server on port 8080.
+Open the app at `http://localhost:3000`; the browser connects separately to port 8080 for hot module replacement.
+Both ports must be published or the game still loads while the browser repeatedly fails to connect for hot reload (D23).
+
+After changing published ports, recreate the backend with `docker compose up -d --no-deps backend`.
+`docker compose restart backend` does not apply a new port mapping.
+Verify the development WebSocket at `ws://localhost:8080/ws` and confirm the browser no longer reports connection failures to port 8080.
+
+## Legacy EC2 development environment
+
 A second, fully independent copy of the production stack, deployed automatically on every push to `dev`.
 
 **This document is a delta.**
@@ -67,6 +83,7 @@ The host directory stays `/opt/kimply` on both boxes on purpose.
 `deploy/deploy.sh` and `deploy/sync-config.sh` both default to it, the workflow's SSM command hardcodes `/opt/kimply/deploy/deploy.sh`, and these are separate machines so there is nothing to collide with.
 
 The dev `/opt/kimply/.env` differs from production's in exactly four values: `DOMAIN`, `ROOT_URL`, `ECR_REPOSITORY`, and `MONGO_URL`.
+`HTTP_FORWARDED_COUNT` is `1` on both, because both sit behind one proxy. Local `docker compose` sets it to `0`, because nothing is in front of Meteor there. `BOT_DETECTION_ENABLED=false` is honoured only by a development Meteor process, so it can be set in the local `.env` when an agent needs to play, and it must not be set on this box.
 `AWS_REGION` and `ECR_REGISTRY` are the same, and `APP_IMAGE` is rewritten by `deploy.sh` on every deploy.
 
 ---

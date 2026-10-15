@@ -4,7 +4,14 @@ import { BG, PRIMARY, TILE, TileLattice } from '../components/design';
 function BigLogo() {
   return (
     <div className="flex flex-col items-center gap-3 sm:gap-4">
-      <div className="grid" style={{ gridTemplateColumns: 'clamp(22px, 3.5vw, 28px) clamp(22px, 3.5vw, 28px)', gridTemplateRows: 'clamp(22px, 3.5vw, 28px) clamp(22px, 3.5vw, 28px)', gap: 5 }}>
+      <div
+        className="grid"
+        style={{
+          gridTemplateColumns: 'clamp(22px, 3.5vw, 28px) clamp(22px, 3.5vw, 28px)',
+          gridTemplateRows: 'clamp(22px, 3.5vw, 28px) clamp(22px, 3.5vw, 28px)',
+          gap: 5,
+        }}
+      >
         <div
           className="rounded-lg"
           style={{
@@ -59,7 +66,7 @@ export function Splash() {
       />
 
       {/* top bar */}
-      <div className="relative flex shrink-0 justify-between px-6 py-4 sm:px-7 sm:py-5">
+      <div className="relative flex shrink-0 justify-between px-6 py-4 xs:px-7 xs:py-5">
         <span className="font-outfit text-xl font-extrabold tracking-tight text-fg sm:text-2xl">KIMPLY</span>
       </div>
 

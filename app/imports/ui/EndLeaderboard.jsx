@@ -2,7 +2,7 @@ import { Meteor } from 'meteor/meteor';
 import { useTracker } from 'meteor/react-meteor-data';
 import { PlayersCollection } from '../api/players';
 import { useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { BG, PRIMARY, FG2, TileLattice, Avatar, TopBar, ArrowIcon, avatarColor } from './components/design';
 
 export const MEDAL = [
@@ -21,10 +21,11 @@ function accuracyPercent(player) {
   return Math.round((player.correctGuesses / player.totalGuesses) * 100);
 }
 
+const RESULTS_GRID =
+  'grid grid-cols-[2rem_minmax(0,1fr)_4rem_2.5rem_3rem] items-center gap-x-2 px-3 xs:grid-cols-[2rem_minmax(0,1fr)_5rem_3rem_3.5rem] xs:gap-x-3';
+
 export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
   const navigate = useNavigate();
-  const { state } = useLocation();
-  const playerAccount = state?.playerAccount;
 
   // Game is over: drop reconnect data so /play doesn't offer to rejoin it.
   useEffect(() => {
@@ -80,7 +81,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
 
   if (players.length === 0) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-bg text-fg">
+      <div className="flex h-full items-center justify-center bg-bg text-fg">
         <p className="font-mono text-sm uppercase tracking-widest">No leaderboard results yet</p>
       </div>
     );
@@ -88,7 +89,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
 
   return (
     <div
-      className="relative flex min-h-screen w-full flex-col"
+      className="relative flex h-full w-full flex-col overflow-hidden"
       style={{ background: BG, color: 'oklch(0.93 0.01 270)' }}
     >
       <div className="pointer-events-none fixed inset-0" style={{ zIndex: 0 }}>
@@ -100,15 +101,15 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
       />
 
       <div className="relative z-10">
-        <TopBar onBack={() => navigate('/play', { state: { playerAccount } })} />
+        <TopBar onBack={() => navigate('/play')} />
       </div>
 
-      <div className="relative z-10 flex flex-1 flex-col items-center px-6 pb-12">
+      <div className="relative z-10 flex flex-1 flex-col items-center overflow-y-auto px-6 pb-10 xs:px-7 xs:pb-12">
         <div
           className="mb-7 flex flex-col items-center text-center"
           style={{ animation: 'leaderboardTitleIn 0.7s ease both' }}
         >
-          <h1 className="font-outfit text-5xl font-extrabold tracking-tight">Final Leaderboard</h1>
+          <h1 className="font-outfit text-4xl font-extrabold tracking-tight xs:text-5xl">Final Leaderboard</h1>
           {currentRank && (
             <div
               className="mt-4 flex flex-col items-center gap-2"
@@ -182,7 +183,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
                     : `${group[0].name}${group.length > 1 ? ` +${group.length - 1}` : ''}`}
                 </span>
                 <span
-                  className="rounded-full px-2 py-1 text-center font-mono font-bold text-[11px] uppercase tracking-widest"
+                  className="rounded-full px-2 py-1 text-center font-mono text-[11px] font-bold uppercase tracking-widest"
                   style={{
                     color: medal.color,
                     background: `color-mix(in oklab, ${medal.color} ${medalIndex === 0 ? 22 : medalIndex === 1 ? 14 : 18}%, transparent)`,
@@ -223,23 +224,16 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
         </div>
 
         <div className="flex w-full max-w-md flex-col gap-2">
-          {/* header */}
-          <div className="mb-1 flex px-3" style={{ animation: 'rowSlideIn 0.45s ease 3.5s both' }}>
-            <span className="w-12 font-mono text-[11px] uppercase tracking-widest" style={{ color: FG2 }}>
-              Rank
-            </span>
-            <span className="flex-1 font-mono text-[11px] uppercase tracking-widest" style={{ color: FG2 }}>
-              Player
-            </span>
-            <span className="w-24 text-right font-mono text-[11px] uppercase tracking-widest" style={{ color: FG2 }}>
-              Score
-            </span>
-            <span className="w-24 text-right font-mono text-[11px] uppercase tracking-widest" style={{ color: FG2 }}>
-              Streak
-            </span>
-            <span className="w-20 text-right font-mono text-[11px] uppercase tracking-widest" style={{ color: FG2 }}>
-              Acc
-            </span>
+          {/* Use the same tracks and border inset as the result rows. */}
+          <div
+            className={`${RESULTS_GRID} mb-1 border border-transparent font-mono text-[10px] uppercase tracking-wide xs:text-[11px] xs:tracking-widest`}
+            style={{ color: FG2, animation: 'rowSlideIn 0.45s ease 3.5s both' }}
+          >
+            <span>Rank</span>
+            <span>Player</span>
+            <span className="text-right">Score</span>
+            <span className="text-right">Streak</span>
+            <span className="text-right">Acc</span>
           </div>
 
           {sorted.map((player, index) => {
@@ -253,7 +247,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
             return (
               <div
                 key={player.name}
-                className="flex items-center gap-3 rounded-xl px-3 py-3"
+                className={`${RESULTS_GRID} rounded-xl py-3`}
                 style={{
                   animation: `scoreboardRowIn 0.55s cubic-bezier(0.22,1,0.36,1) ${rowDelay}s both`,
                   background: medal
@@ -265,52 +259,55 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
                     isCurrentPlayer
                       ? `color-mix(in oklab, ${PRIMARY} 48%, transparent)`
                       : medal
-                        ? `color-mix(in oklab, ${medal.color} 30%, transparent)`
+                        ? `color-mix(in oklab, ${medal.color} ${rank === 0 ? 60 : 30}%, transparent)`
                         : `color-mix(in oklab, white 8%, transparent)`
                   }`,
                   boxShadow: isCurrentPlayer ? `0 0 22px color-mix(in oklab, ${PRIMARY} 18%, transparent)` : 'none',
                 }}
               >
-                <span className="w-12 shrink-0 font-outfit text-sm font-extrabold" style={{ color: rowColor }}>
+                <span className="font-outfit text-sm font-extrabold" style={{ color: rowColor }}>
                   {tied ? '=' : ''}
                   {rank + 1}
                 </span>
 
-                <Avatar letter={player.name[0]} color={avatarColor(player.name)} size={32} />
-
-                <span className="flex-1 font-outfit text-[15px] font-semibold" style={{ color: rowColor }}>
-                  {player.name}
-                  {rank === 0 && (
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className="hidden shrink-0 xs:block">
+                    <Avatar letter={player.name[0]} color={avatarColor(player.name)} size={32} />
+                  </div>
+                  <div className="min-w-0 flex-1">
                     <span
-                      className="ml-2 font-mono text-[10px] uppercase tracking-widest"
-                      style={{ color: PRIMARY, animation: 'winnerPulse 1.5s ease-in-out infinite' }}
+                      className="block truncate font-outfit text-[13px] font-semibold xs:text-[15px]"
+                      style={{ color: rowColor }}
+                      title={player.name}
                     >
-                      Winner
+                      {player.name}
                     </span>
-                  )}
-                  {isCurrentPlayer && (
-                    <span
-                      className="ml-2 rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest"
-                      style={{
-                        color: PRIMARY,
-                        background: `color-mix(in oklab, ${PRIMARY} 16%, transparent)`,
-                        border: `1px solid color-mix(in oklab, ${PRIMARY} 38%, transparent)`,
-                      }}
-                    >
-                      You
-                    </span>
-                  )}
-                </span>
+                    {isCurrentPlayer && (
+                      <div className="mt-1 flex items-center gap-1 font-mono text-[9px] uppercase tracking-wide xs:text-[10px]">
+                        <span
+                          className="rounded-full px-1.5 py-0.5"
+                          style={{
+                            color: PRIMARY,
+                            background: `color-mix(in oklab, ${PRIMARY} 16%, transparent)`,
+                            border: `1px solid color-mix(in oklab, ${PRIMARY} 38%, transparent)`,
+                          }}
+                        >
+                          You
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
 
-                <span className="w-24 text-right font-mono text-sm" style={{ color: FG2 }}>
+                <span className="whitespace-nowrap text-right font-mono text-xs xs:text-sm" style={{ color: FG2 }}>
                   {player.isWinner ? `Won Rd ${playerScore(player)}` : `Rd ${playerScore(player)}`}
                 </span>
 
-                <span className="w-24 text-right font-mono text-sm" style={{ color: FG2 }}>
+                <span className="whitespace-nowrap text-right font-mono text-xs xs:text-sm" style={{ color: FG2 }}>
                   {player.longestStreak}
                 </span>
 
-                <span className="w-20 text-right font-mono text-sm" style={{ color: FG2 }}>
+                <span className="whitespace-nowrap text-right font-mono text-xs xs:text-sm" style={{ color: FG2 }}>
                   {accuracyPercent(player)}%
                 </span>
               </div>
@@ -323,10 +320,10 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
             if (gameId) {
               Meteor.call('game.resetSequences', gameId, (err) => {
                 if (err) console.error('Failed to reset sequences:', err);
-                navigate('/play', { state: { playerAccount } });
+                navigate('/play');
               });
             } else {
-              navigate('/play', { state: { playerAccount } });
+              navigate('/play');
             }
           }}
           className="mt-8 inline-flex items-center gap-2 rounded-full px-5 py-3 font-outfit text-[13px] font-extrabold uppercase tracking-[0.16em] transition-transform hover:scale-[1.02]"

@@ -2,7 +2,7 @@
 
 Multiplayer memory challenge. This document is the single source of truth for how Kimply looks, sounds, and behaves. Check here before designing or building anything new.
 
-**Status:** v0.1 · Active
+**Status:** v0.6 · Active
 **Owner:** Design
 
 ---
@@ -140,20 +140,28 @@ Mono uppercase tracked labels sit above titles — they are the game's HUD voice
 | `--s-2` | 8 | Icon-to-text gap, tight inline rows |
 | `--s-3` | 12 | Standard gap between siblings |
 | `--s-4` | 16 | Compact card padding, button vertical padding |
-| `--s-5` | 24 | Default card padding |
+| `--s-5` | 24 | Default card padding, phone screen-edge padding |
 | `--s-6` | 32 | Between major blocks |
 | `--s-7` | 48 | Desktop screen-edge padding |
 | `--s-8` | 64 | Hero breathing room |
 
 ### Breakpoints
 
-| Range | Layout |
-|---|---|
-| ≤ 480px | Single column. Route cards stack. Player list 1 col. CTAs full-width. |
-| 481–1024px | 2-col route cards. Player list 1–2 cols. |
-| ≥ 1025px | 2-col route cards. Player list `auto-fill, minmax(260px, 1fr)`. Max content 720–1080px. |
+| Range | Layout | Screen-edge padding |
+|---|---|---|
+| ≤ 480px | Single column. Route cards stack. Player list 1 col. CTAs full-width. | `--s-5` (24) |
+| 481–1024px | 2-col route cards. Player list 1–2 cols. | `--s-7` (48), or 28 where a screen predates this rule |
+| ≥ 1025px | 2-col route cards. Player list `auto-fill, minmax(260px, 1fr)`. Max content 720–1080px. | `--s-7` (48) |
 
 Use flex/grid with `gap`. Never margin-based spacing between siblings.
+
+**Auto-placed grids must collapse before they overflow.** Write the track floor as
+`minmax(min(100%, 280px), 1fr)`, never `minmax(280px, 1fr)` — a bare minimum forces
+horizontal scroll once the container is narrower than the floor.
+
+In Tailwind the 480px boundary is the `xs` screen (`481px`), so phone styles are the
+unprefixed base and `xs:` is everything above. Do not reach for `sm:` (640px) to mean
+"not a phone"; that leaves 481–639px on the phone treatment.
 
 ---
 
@@ -202,7 +210,23 @@ Motion conveys state. It does not decorate.
   50%, 100% { opacity: 0; }
 }
 /* Active text input — 1s steps(2) infinite */
+
+@keyframes lightsOut {
+  0%, 15%   { opacity: 0; }
+  45%, 65%  { opacity: 0.97; }
+  95%, 100% { opacity: 0; }
+}
+/* Lights Out ability: a --bg overlay over the tile grid — 2600ms ease-in-out infinite */
 ```
+
+`lightsOut` is the one animation that hides state on purpose: it is a hostile card's effect, not decoration.
+It starts lit so the first flash is always seen, and its period is not a multiple of any flash and gap, so a replay loses different flashes.
+The overlay sits 4px outside the grid with no feathered edge, and lit tiles drop their outer glow while it runs, so the instruction line and the `Selected` count above and below stay readable.
+
+### Playback effect chip
+
+When Slo-Mo, 2x Speed or Lights Out has landed on a player, the instruction line above the tiles gains a pulse-meta chip per effect (`SLO-MO`, `2X SPEED`, `LIGHTS OUT`): Mono 600 11px uppercase in `--tile-violet` with a pulsing 6px dot.
+Below `xs` the chips take their own centred line under the instruction, because they do not fit beside it; from `xs` up they sit inline after it.
 
 ---
 
@@ -258,6 +282,36 @@ Avatar (32px circle, gradient from assigned tile color, `--bg` initial) → name
 
 **Action card** — `--primary` fill, `--bg` text, 18px radius, primary glow. For the one primary route choice only.
 
+### Ability card
+
+`--surface-2` fill, hairline border, 14px radius, 16px padding with 20px on top, and a 4px band across the top edge in the card's tile accent.
+Label in Outfit 700 18px, description in Manrope 500 13px `--fg-2`, then mono 10px uppercase tags (`PICK A PLAYER`, `SAVED UNTIL USED`) in the accent.
+A key hint (`1`, `2`, `3`) sits top right. Hover and focus lift 2px and turn the border to the accent.
+Read-only where nothing is being chosen (the Ability guide): same card, no key hint, no lift.
+
+| Accent | Cards | Meaning |
+|---|---|---|
+| `--tile-pink` | Steal, Strike | Hurts another player |
+| `--tile-violet` | Scramble, Slo-Mo, 2x Speed, Lights Out, Jump | Changes someone's sequence, its playback, or a level |
+| `--tile-teal` | Shield | Protection |
+| `--tile-amber` | Free Pass, Reroll | Helps yourself |
+
+### Key hint
+
+24px tall, min 24px wide, hairline border, 6px radius, Mono 600 11px `--fg-2`.
+Shows the keyboard key next to an action (`1`, `Esc`, `E`).
+
+### Segmented toggle
+
+Pill, `--surface` fill, hairline border. Each option is a 44px-tall pill in Outfit 700 12px uppercase: selected `--surface-2` with `--fg` text, unselected `--fg-3`.
+An optional Mono 10px uppercase label (`FEED`) leads it from `xs` up. Used for the live feed's Me / All choice.
+
+### Switch
+
+A 40×24 track in `--hairline` that turns `--tile-teal` when on, with a 20px `--fg` knob that moves on `--ease-spring`.
+The whole row, label and one-line description included, is the 44px-tall hit target.
+Lime stays reserved for the screen's primary CTA, which is why the on state is teal.
+
 ---
 
 ## Patterns
@@ -275,6 +329,40 @@ Player count always renders as `n/cap`, e.g. `PLAYERS (5/8)`. Unfilled seats use
 
 ### Room code display
 Panel with a 4px tile-gradient band across the top edge, mono uppercase label, 5 code tiles each with a tile-colored underline, then Copy / Share ghost buttons.
+
+### Ability draft
+A modal over the game screen, which stays visible behind a blurred `--bg` scrim.
+The draft and held-card shell use a native modal dialog: the background is inert, Tab and Shift+Tab stay in the dialog, and closing restores focus to the opener when it is still present.
+Escape retains its contextual behavior (skip, back, or close).
+Surface card (18px radius) holding a mono eyebrow (`LEVEL 3 · ABILITY DRAFT`), an H2, a pulse-meta countdown at the top right, then 3 ability cards (one column on phones, three from `xs`), then a footer line and a Skip ghost button with an `Esc` key hint.
+Picking a card that needs a target replaces the cards with the target picker in the same card, with a Back ghost button.
+After a pick, the card shows what was locked in until the draft closes.
+
+### Live feed
+Surface panel (16px radius, `--surface` at 82% over a blur) with an H2-sized "Live feed" title, a mono event count, the Me / All segmented toggle and a close icon button, then a scrolling list, newest first.
+Each row is a 12px-radius card with a 4px left edge in the card's tile accent (pink for eliminations), the sentence in Manrope 13px, and a mono 10px uppercase line: `ROUND 3 · STRIKE · BLOCKED`.
+Rows involving the viewer are raised (`--surface-2`, `--fg-3` border, semibold text, a `YOU` chip); rows aimed at the viewer use a pink edge and an `AT YOU` chip.
+A drawer from the left above `xs`, a bottom sheet below; open by default from 1280px. The Feed button carries an unread badge, amber, or pink when an unread row was aimed at the viewer.
+
+### Ability guide
+A lobby button, `SEE THE CARDS` with a mono count of the cards this game can deal, opens a modal in the Ability draft's shell.
+Mono eyebrow (`ABILITIES · 9 CARDS`), the H2 `Know your cards`, one Manrope 14px line on how the draft deals, then a section per timing (`BEFORE THE ROUND`, `DURING THE ROUND`): a mono label, one Manrope 13px note, and read-only ability cards, one column on phones and two from `xs`.
+A close icon button (44px, hairline, 10px radius, as on the Live feed) sits top right, and a Close ghost button with `Esc` ends it too.
+Only the cards scroll, so the header and the footer stay in reach on a phone.
+The button is a 44px pill beside the host's Switch, and a 36px pill inside a 44px hit target beside the joined view's chips, so it sits level with them.
+It shows only while abilities are on.
+
+### Target picker
+Mono label with the count (`PLAYERS (7)`), a text input that filters by name, then player rows (avatar, name, mono `LEVEL 4 · 2 LIVES`).
+The first 9 rows carry key hints `1`-`9` while the filter is empty, so a name containing digits can still be typed.
+On touch screens the input is not focused on open, so the keyboard does not cover the list.
+
+### Third-party sign-in
+Sits below the form's primary CTA, never above it: email and password stays the primary path.
+A divider separates the two: 1px `--hairline` rules either side of a mono uppercase `OR` label in `--fg-3`, with 20px above and below.
+The provider button is the provider's own rendered button, not a restyled one, because brand rules forbid altering it.
+For Google that is the `filled_black` theme, `pill` shape, `large` size, full card width up to Google's 400px cap, with "Sign up with Google" in Register mode and "Sign in with Google" in Sign in mode.
+The divider and button are absent entirely when the provider is not configured, rather than disabled.
 
 ---
 
@@ -387,3 +475,8 @@ The system grows by addition, not by drift.
 | Version | Date | Change |
 |---|---|---|
 | v0.1 | 2026-08-29 | Initial system. Covers brand, tokens, components, and patterns for the room create / join flow. |
+| v0.2 | 2026-09-21 | Spacing scale gains a phone screen-edge value (`--s-5`, 24px); breakpoint table gains a screen-edge column, the `min(100%, ...)` grid-track rule, and the `xs` (481px) Tailwind boundary. |
+| v0.3 | 2026-09-22 | Adds the Third-party sign-in pattern for Google sign-in on the Account page. |
+| v0.4 | 2026-10-11 | Adds the Ability card, Key hint, Segmented toggle and Switch components, and the Ability draft, Target picker and Live feed patterns, for round abilities. |
+| v0.5 | 2026-10-12 | Adds the `lightsOut` animation and the Playback effect chip for the Slo-Mo, 2x Speed and Lights Out abilities. |
+| v0.6 | 2026-10-13 | Adds the Ability guide pattern and the read-only Ability card, so the lobby can show every card before the game. |

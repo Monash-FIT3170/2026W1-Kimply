@@ -58,3 +58,12 @@ lib-cov
 # (that path is a symlink to .agents/skills).
 .claude/settings.local.json
 .claude/worktrees/
+
+# Terraform. The lock file (.terraform.lock.hcl) IS committed.
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfplan
+terraform.tfvars
+infra/terraform/**/build/

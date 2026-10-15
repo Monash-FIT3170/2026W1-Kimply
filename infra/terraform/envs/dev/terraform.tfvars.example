@@ -1,0 +1,10 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+alert_email        = "you@example.com"
+monthly_budget_usd = 50
+
+# Latest image on dev, from:
+#   aws ecr describe-images --repository-name kimply-dev \
+#     --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags[0]' --output text
+initial_image_tag = "0000000000000000000000000000000000000000"
+
+canary_enabled = false

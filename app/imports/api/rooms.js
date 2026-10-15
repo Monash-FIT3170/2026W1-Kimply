@@ -33,6 +33,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
           hostName: 1,
           customSettings: 1,
           gameMode: 1,
+          abilitiesEnabled: 1,
           'players.name': 1,
           'players.id': 1,
           'players.connected': 1,
@@ -40,6 +41,15 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       }
     );
   });
+
+  // roomBans imports this module's collection, so the ban check is loaded on call.
+  async function gateRoom(connection, pin = null) {
+    const { requireBrowserSession } = await import('./playerAccess.js');
+    const { assertEntryAllowed } = await import('./roomBans.js');
+    const sessionId = requireBrowserSession(connection);
+    if (pin) await assertEntryAllowed(pin, connection);
+    return sessionId;
+  }
 
   Meteor.methods({
     async 'rooms.create'(hostName, accountId) {
@@ -49,6 +59,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       const name = hostName.trim();
       const hostId = Random.id();
       const hostAccountId = typeof accountId === 'string' && accountId.trim() ? accountId.trim() : null;
+      const browserSessionId = await gateRoom(this.connection);
 
       let pin;
       for (let i = 0; i < 10; i++) {
@@ -65,10 +76,20 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
         hostName: name,
         gameName: `Game${pin}`,
         status: 'lobby',
-        players: [{ id: hostId, name, accountId: hostAccountId, connected: true, connectionId: this.connection?.id ?? null }],
+        players: [
+          {
+            id: hostId,
+            name,
+            accountId: hostAccountId,
+            connected: true,
+            connectionId: this.connection?.id ?? null,
+            browserSessionId,
+          },
+        ],
         createdAt: new Date(),
         gameMode: 'default',
         customSettings: { ...GAME_MODE_PRESETS.default },
+        abilitiesEnabled: true,
       });
 
       return { pin: pin, hostId: hostId };
@@ -85,7 +106,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
 
       const update = { gameMode };
       if (GAME_MODE_PRESETS[gameMode]) {
-        update.customSettings = GAME_MODE_PRESETS[gameMode];
+        update.customSettings = { ...GAME_MODE_PRESETS[gameMode] };
       }
 
       await RoomsCollection.updateAsync(
@@ -96,10 +117,24 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       );
     },
 
+    // Turn the pick-1-of-3 ability draft on or off for the next game.
+    async 'rooms.setAbilities'(pin, enabled) {
+      if (typeof pin !== 'string' || !pin.trim()) throw new Meteor.Error('invalid', 'Invalid PIN');
+      if (typeof enabled !== 'boolean') throw new Meteor.Error('invalid', 'enabled must be true or false');
+      const room = await RoomsCollection.findOneAsync({ pin: pin.trim() });
+      if (!room) throw new Meteor.Error('not-found', 'Room not found');
+      if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
+
+      await RoomsCollection.updateAsync({ _id: room._id }, { $set: { abilitiesEnabled: enabled } });
+    },
+
     async 'rooms.updateSettings'(pin, settings) {
       const room = await RoomsCollection.findOneAsync({ pin });
       if (room?.gameMode !== 'custom') {
         throw new Meteor.Error('not-custom-mode', 'Settings only apply in custom game mode');
+      }
+      if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+        throw new Meteor.Error('invalid-settings', 'Invalid settings');
       }
 
       const validSpeeds = ['slow', 'medium', 'fast'];
@@ -116,17 +151,25 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       ) {
         throw new Meteor.Error('invalid-length', 'startingSequenceLength must be a positive integer');
       }
+      if (
+        settings.sequenceGrowth != null &&
+        (!Number.isInteger(settings.sequenceGrowth) || settings.sequenceGrowth < 1)
+      ) {
+        throw new Meteor.Error('invalid-growth', 'sequenceGrowth must be a positive integer');
+      }
 
-      await RoomsCollection.updateAsync({ pin }, { $set: { customSettings: settings } });
+      const customSettings = { ...GAME_MODE_PRESETS.custom, ...room.customSettings, ...settings };
+      await RoomsCollection.updateAsync({ pin }, { $set: { customSettings } });
     },
 
-    async 'rooms.start'(pin, gameMode = 'standard') {
+    async 'rooms.start'(pin, gameMode = null) {
       if (typeof pin !== 'string' || !pin.trim()) {
         throw new Meteor.Error('invalid', 'Invalid PIN');
       }
       const room = await RoomsCollection.findOneAsync({ pin: pin.trim() });
       if (!room) throw new Meteor.Error('not-found', 'Room not found');
       if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
+      const selectedGameMode = gameMode || room.gameMode || 'default';
 
       // Drop anyone who disconnected in the lobby and did not reconnect.
       await RoomsCollection.updateAsync({ _id: room._id }, { $pull: { players: { connected: false } } });
@@ -135,7 +178,10 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       await PlayersCollection.removeAsync({ gameId: pin });
       await RoundsCollection.removeAsync({ gameId: pin });
 
-      await RoomsCollection.updateAsync({ _id: room._id }, { $set: { status: 'in_progress', gameMode } });
+      await RoomsCollection.updateAsync(
+        { _id: room._id },
+        { $set: { status: 'in_progress', gameMode: selectedGameMode } }
+      );
       await Meteor.callAsync('rounds.generate', room.pin);
     },
 
@@ -179,11 +225,11 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       }
       const room = await RoomsCollection.findOneAsync({ pin: pin.trim() });
       if (!room) throw new Meteor.Error('not-found', 'Room not found');
+      const browserSessionId = await gateRoom(this.connection, room.pin);
       if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
 
       const nameTaken = (room.players || []).some((p) => p.name.toLowerCase() === playerName.trim().toLowerCase());
       if (nameTaken) throw new Meteor.Error('name-taken', 'Name already taken');
-
       const playerId = Random.id();
       const joinAccountId = typeof accountId === 'string' && accountId.trim() ? accountId.trim() : null;
 
@@ -197,12 +243,18 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
               accountId: joinAccountId,
               connected: true,
               connectionId: this.connection?.id ?? null,
+              browserSessionId,
             },
           },
         }
       );
 
-      return { roomId: room.pin, playerId: playerId };
+      return {
+        roomId: room.pin,
+        playerId: playerId,
+        gameMode: room.gameMode,
+        customSettings: room.customSettings,
+      };
     },
 
     async 'rooms.updateGameName'(pin, gameName) {
@@ -237,6 +289,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
 
       const room = await RoomsCollection.findOneAsync({ pin: pin.trim() });
       if (!room) throw new Meteor.Error('not-found', 'Room not found');
+      const browserSessionId = await gateRoom(this.connection, room.pin);
       if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
 
       const player = room.players.find((p) => p.id === playerId);
@@ -245,9 +298,19 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
         throw new Meteor.Error('player-not-found');
       }
 
+      if (browserSessionId && player.browserSessionId && player.browserSessionId !== browserSessionId) {
+        throw new Meteor.Error('not-yours', 'That is not your player');
+      }
+
       await RoomsCollection.updateAsync(
         { pin: pin.trim(), 'players.id': playerId },
-        { $set: { 'players.$.connected': true, 'players.$.connectionId': this.connection?.id ?? null } }
+        {
+          $set: {
+            'players.$.connected': true,
+            'players.$.connectionId': this.connection?.id ?? null,
+            'players.$.browserSessionId': browserSessionId || player.browserSessionId || null,
+          },
+        }
       );
 
       return {

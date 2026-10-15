@@ -1,0 +1,97 @@
+provider "aws" {
+  region = "ap-southeast-2"
+
+  default_tags {
+    tags = {
+      App       = "kimply"
+      Env       = "production"
+      ManagedBy = "terraform"
+    }
+  }
+}
+
+# The default VPC and its public subnets already exist and are reused (D18).
+data "aws_vpc" "default" {
+  default = true
+}
+
+data "aws_subnets" "public" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
+
+  filter {
+    name   = "default-for-az"
+    values = ["true"]
+  }
+}
+
+data "aws_subnet" "nat" {
+  vpc_id            = data.aws_vpc.default.id
+  availability_zone = "ap-southeast-2a"
+  default_for_az    = true
+}
+
+module "kimply" {
+  source = "../../modules/kimply-ecs"
+
+  name = "kimply-prod"
+
+  vpc_id               = data.aws_vpc.default.id
+  public_subnet_ids    = data.aws_subnets.public.ids
+  nat_public_subnet_id = data.aws_subnet.nat.id
+
+  # Above the default subnets (172.31.0.0/20, .16.0/20, .32.0/20).
+  private_subnets = {
+    "ap-southeast-2a" = "172.31.128.0/20"
+    "ap-southeast-2b" = "172.31.144.0/20"
+  }
+
+  # domain_name is what the app serves as ROOT_URL, and it must match the
+  # template (a precondition enforces it). The certificate covers the apex as
+  # well, because Route 53 points it straight at this load balancer (D41) and it
+  # becomes the canonical name once ROOT_URL follows.
+  # ecs.kimply.online was the temporary name the stack was built on (D39); it is
+  # retired here, so its DNS record and validation record can go too.
+  domain_name       = "www.kimply.online"
+  certificate_names = ["kimply.online", "www.kimply.online"]
+  apex_domain       = "kimply.online"
+
+  task_definition_template = "${path.root}/../../../ecs/task-definition.prod.json"
+  ecr_repository_name      = "kimply"
+  initial_image_tag        = var.initial_image_tag
+  secret_name              = "kimply/prod/mongo-url"
+
+  capacity_provider = "FARGATE"
+  min_tasks         = 1
+  max_tasks         = 4
+
+  alert_email         = var.alert_email
+  monthly_budget_usd  = var.monthly_budget_usd
+  canary_enabled      = var.canary_enabled
+  check_apex_redirect = var.check_apex_redirect
+
+  # Exact OIDC subject prefixes. The upstream repository uses the plain form; the
+  # migration fork uses GitHub's immutable form, with owner and repository IDs.
+  # The fork is listed only until it is merged upstream and deleted.
+  # Route 53 (D41). Production owns the hosted zone for the whole domain;
+  # development takes its id, as with the NAT gateway.
+  # Phase 1 creates the zone and every record while GoDaddy is still answering,
+  # so the nameserver switch is a cutover with nothing left to set up.
+  # redirect_hosts stays empty until the canonical name moves to the apex.
+  # Development borrows this load balancer (D42), as it borrows the NAT (D40).
+  canary_rate_minutes = 15
+
+  manage_dns         = true
+  create_hosted_zone = true
+  dns_zone_name      = "kimply.online"
+  dns_alias_names    = ["kimply.online", "www.kimply.online"]
+  redirect_hosts     = []
+
+  github_subject_prefixes = [
+    "repo:Monash-FIT3170/2026W1-Kimply",
+    "repo:R4chC0dE@140041789/2026W1-Kimply-ECS-Rollover@1380939227",
+  ]
+  github_ecr_push_role_name = "GitHubActionsECRPush"
+}

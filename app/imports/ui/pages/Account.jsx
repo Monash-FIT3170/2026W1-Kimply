@@ -1,8 +1,105 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Meteor } from 'meteor/meteor';
 import { useNavigate } from 'react-router-dom';
 import { BG, HAIRLINE, PRIMARY, TILE, TileLattice, TopBar } from '../components/design';
 import { submitOnEnter } from '../keyboard';
+import { setSession } from '../accountSession';
+
+const GOOGLE_SCRIPT_SRC = 'https://accounts.google.com/gsi/client';
+const GOOGLE_BUTTON_MAX_WIDTH = 400; // Google renders the button at most 400px wide.
+
+let googleScript = null;
+let googleInitializedFor = null;
+// Set by whichever GoogleSignIn is mounted, so Google's one-time callback reaches it.
+let handleGoogleCredential = null;
+
+// Google Identity Services must be initialized once per page, not on every render
+// of the button, or it logs a warning and may drop the earlier callback.
+function initializeGoogle(google, clientId) {
+  if (googleInitializedFor === clientId) return;
+  google.accounts.id.initialize({
+    client_id: clientId,
+    callback: ({ credential }) => handleGoogleCredential?.(credential),
+  });
+  googleInitializedFor = clientId;
+}
+
+// Loads Google Identity Services once per page load.
+function loadGoogleScript() {
+  if (!googleScript) {
+    googleScript = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = GOOGLE_SCRIPT_SRC;
+      script.async = true;
+      script.onload = () => resolve(window.google);
+      script.onerror = () => {
+        googleScript = null;
+        reject(new Error('Could not load Google sign-in.'));
+      };
+      document.head.appendChild(script);
+    });
+  }
+  return googleScript;
+}
+
+// Renders nothing until the server reports a Google client ID, so Google sign-in
+// stays invisible wherever GOOGLE_CLIENT_ID is not configured.
+function GoogleSignIn({ mode, onCredential }) {
+  const [clientId, setClientId] = useState(null);
+  const buttonRef = useRef(null);
+  const onCredentialRef = useRef(onCredential);
+  onCredentialRef.current = onCredential;
+
+  useEffect(() => {
+    handleGoogleCredential = (credential) => onCredentialRef.current(credential);
+    return () => {
+      handleGoogleCredential = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    Meteor.call('playerAccounts.googleClientId', (err, id) => {
+      if (!err && id) setClientId(id);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!clientId) return undefined;
+    let cancelled = false;
+    loadGoogleScript()
+      .then((google) => {
+        if (cancelled || !buttonRef.current) return;
+        initializeGoogle(google, clientId);
+        buttonRef.current.replaceChildren();
+        google.accounts.id.renderButton(buttonRef.current, {
+          theme: 'filled_black',
+          size: 'large',
+          shape: 'pill',
+          text: mode === 'register' ? 'signup_with' : 'signin_with',
+          width: Math.min(buttonRef.current.offsetWidth, GOOGLE_BUTTON_MAX_WIDTH),
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setClientId(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [clientId, mode]);
+
+  if (!clientId) return null;
+
+  return (
+    <>
+      <div className="my-5 flex items-center gap-3" aria-hidden="true">
+        <div className="h-px flex-1 bg-hairline" />
+        <span className="font-mono text-[10px] uppercase tracking-widest text-fg3">Or</span>
+        <div className="h-px flex-1 bg-hairline" />
+      </div>
+      <div ref={buttonRef} className="flex min-h-[44px] w-full justify-center" />
+    </>
+  );
+}
 
 export function Account() {
   const navigate = useNavigate();
@@ -37,7 +134,8 @@ export function Account() {
         return;
       }
 
-      navigate('/play', { state: { playerAccount: account } });
+      setSession(account);
+      navigate('/play');
     });
   };
 
@@ -53,7 +151,25 @@ export function Account() {
         return;
       }
 
-      navigate('/play', { state: { playerAccount: account } });
+      setSession(account);
+      navigate('/play');
+    });
+  };
+
+  const googleSignIn = (credential) => {
+    setSaving(true);
+    setError('');
+
+    Meteor.call('playerAccounts.googleSignIn', credential, (err, account) => {
+      setSaving(false);
+
+      if (err) {
+        setError(err.reason || 'Google sign-in failed. Please try again.');
+        return;
+      }
+
+      setSession(account);
+      navigate('/play');
     });
   };
 
@@ -71,14 +187,14 @@ export function Account() {
         right={
           <button
             onClick={() => navigate('/play')}
-            className="cursor-pointer rounded-lg border border-hairline bg-surface px-3 py-2 font-outfit text-[12px] font-semibold uppercase tracking-wider text-fg2"
+            className="inline-flex min-h-11 cursor-pointer items-center rounded-lg border border-hairline bg-surface px-3 py-2 font-outfit text-[12px] font-semibold uppercase tracking-wider text-fg2"
           >
             Back
           </button>
         }
       />
 
-      <div className="relative flex flex-1 items-center justify-center px-7 pb-10">
+      <div className="relative flex flex-1 items-center justify-center overflow-y-auto px-6 py-8 xs:px-7 xs:pb-10 xs:pt-0">
         <div className="w-full max-w-md rounded-[22px] border border-hairline bg-surface p-5">
           <div
             className="mb-5 h-1 rounded-full"
@@ -98,7 +214,7 @@ export function Account() {
           <div className="mb-5 grid grid-cols-2 gap-2">
             <button
               onClick={() => switchMode('register')}
-              className="cursor-pointer rounded-xl border px-4 py-2.5 font-outfit font-bold"
+              className="min-h-11 cursor-pointer rounded-xl border px-4 py-2.5 font-outfit font-bold"
               style={{
                 background: mode === 'register' ? PRIMARY : 'transparent',
                 color: mode === 'register' ? BG : 'oklch(0.72 0.01 270)',
@@ -110,7 +226,7 @@ export function Account() {
 
             <button
               onClick={() => switchMode('signin')}
-              className="cursor-pointer rounded-xl border px-4 py-2.5 font-outfit font-bold"
+              className="min-h-11 cursor-pointer rounded-xl border px-4 py-2.5 font-outfit font-bold"
               style={{
                 background: mode === 'signin' ? PRIMARY : 'transparent',
                 color: mode === 'signin' ? BG : 'oklch(0.72 0.01 270)',
@@ -188,11 +304,13 @@ export function Account() {
           <button
             onClick={submit}
             disabled={saving}
-            className="w-full cursor-pointer rounded-xl border-none px-4 py-3 font-outfit font-extrabold disabled:opacity-60"
+            className="min-h-11 w-full cursor-pointer rounded-xl border-none px-4 py-3 font-outfit font-extrabold disabled:opacity-60"
             style={{ background: PRIMARY, color: BG }}
           >
             {saving ? 'Please wait...' : mode === 'register' ? 'Create Account' : 'Sign In'}
           </button>
+
+          <GoogleSignIn mode={mode} onCredential={googleSignIn} />
         </div>
       </div>
     </div>

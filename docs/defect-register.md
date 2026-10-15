@@ -10,7 +10,7 @@ Keep the two in step: an ID means the same thing in both files, or neither file 
 
 There is no D13. The register and the summary table had drifted by one on the last three IDs; reconciling them on 2026-08-29 onto the summary table's numbering left the gap. Do not renumber to close it - the IDs are cited from skills and pull requests.
 
-**Last verified:** 2026-08-31
+**Last verified:** 2026-10-12
 
 ---
 
@@ -28,29 +28,19 @@ There is no D13. The register and the summary table had drifted by one on the la
 
 ---
 
-## D3 - The server trusts client-supplied player identifiers
+## D3 - Room host actions still trust client-supplied identifiers
 
-**Severity: high.** The most serious outstanding defect.
+**Severity: high.** Gameplay mutations are no longer in this defect.
 
-`imports/api/gameMethods.js:122`
-
-```js
-async 'players.submitSequence'(playerId, attemptedSequence) {
-  const player = await PlayersCollection.findOneAsync(playerId);
-  // ...no check that the caller owns this player
-}
-```
-
-Every player's `_id` is published to every client in the same room by the `players` publication.
-Any browser can therefore call `Meteor.call('players.submitSequence', '<someone else>', ['x'])` in a loop and drain another player's lives to zero.
+`players.startAttempt`, `players.submitSequence`, `players.timeoutTurn`, `players.timeoutRound`, `players.leaveGame`, `players.rebind`, and `abilities.pick` / `skip` / `use` now act only when the calling connection owns the player. A call with no connection, which is how the server and the existing tests invoke them, still runs.
 
 **Be precise about the framing.**
 Kimply is intentionally open to anyone, and accounts are optional by design.
 "There is no login" is therefore **not** the defect, and the fix is **not** a login wall.
 
-The defect is narrower: the server never checks that the connection sending an identifier is the connection that owns it.
+The defect that remains: room host actions still trust an identifier the client supplies.
 
-Related, all in the same category:
+Still in the same category:
 
 | Method | Location | Problem |
 |---|---|---|
@@ -85,12 +75,15 @@ This preserves anonymous play exactly as designed.
 
 Meteor's single-threaded event loop currently serialises many of these by accident, which is why they have not been noticed. They become much more likely with concurrent submissions, and much worse if a second replica is ever added.
 
-### Double round advance
+### Double round advance - **fixed 2026-10-11**
 `gameMethods.js:220 -> 227 -> 230` reads `currentRound`, checks `if (currentRound.advanced) return`, then sets `advanced: true`. Not atomic.
 Two concurrent submissions that both satisfy `allFinished` can both pass the guard and create **two `isCurrent: true` rounds** for one game, splitting the player set.
 The `advanced` flag is checked in three separate places (`:79`, `:206`, `:227`), all on stale snapshots.
 
 **Fix:** conditional update, `updateAsync({ _id, advanced: false }, { $set: { advanced: true } })`, and only proceed if `matchedCount === 1`.
+
+**Fixed 2026-10-11:** reproduced live while testing abilities with bots. Two final answers for round 5 landed 3ms apart and produced two round-6 documents; the orphan stayed `isCurrent: true`, so the live leaderboard read the wrong level from it.
+`rounds.advance` now claims the round with `updateAsync({ _id, advanced: { $ne: true } }, { $set: { advanced: true, isCurrent: false } })` and returns unless that update matched, so only one caller inserts the next round. `roundAdvance.test.js` fires two advances at once.
 
 ### Double winner
 `checkWinner` at `gameMethods.js:14 -> 22` fetches all players, computes `active.length === 1`, then writes `winner: true`.
@@ -99,11 +92,13 @@ The `active.length === 0` branch at `:39-53` uses a `{ multi: true }` update and
 
 **Fix:** `findOneAndUpdate` with the expected precondition in the selector.
 
-### Life deduction loses a life
+### Life deduction loses a life - **fixed 2026-10-11**
 `gameMethods.js:162` computes `const newLives = player.lives - 1` from a document read at `:124`, then writes `$set: { lives: newLives }` at `:171`.
 Two concurrent wrong submissions both read `lives: 3` and both write `lives: 2`, so one life is silently lost.
 
 **Fix:** `$inc: { lives: -1 }`. This is a one-line change and the cheapest win in this section.
+
+**Fixed 2026-10-11:** wrong answers, turn timeouts and Strikes go through `loseLife` in `gameEngine.js`, a guarded `$inc: { lives: -1 }` followed by an elimination check; Steal and the round-7 bonus use `$inc` too.
 
 ### Duplicate player names
 `rooms.js:113 -> 118` checks name uniqueness against a snapshot, then `$push`es.
@@ -162,7 +157,7 @@ A refresh is therefore a way to reset your lives, and it leaves duplicate rows i
 
 ## D8 - Password hashing is a single unstretched SHA-256
 
-`playerAccounts.js:20-22`
+`playerAccounts.js:22-24`
 
 ```js
 return createHash('sha256').update(`${salt}:${password}`).digest('hex');
@@ -177,7 +172,7 @@ Also in this file:
 - **Account enumeration oracle**: `:83` throws `not-found` for an unknown email but `:88` throws `wrong-password` for a known one, so the method confirms whether an address is registered.
 - **No rate limiting**, so credential stuffing and enumeration are both unbounded.
 - **No maximum password length**, so a client can post a very large string and force unbounded hashing work.
-- `signIn` issues **no session token** (`:91-94` returns a plain object), so authentication has no effect on any authorization decision anywhere in the app.
+- `signIn` now issues a session token (#108), but **no method checks it**: `rooms.create`, `rooms.join`, and `players.join` still accept a client-supplied `accountId`, so authentication still has no effect on any authorization decision.
 
 This becomes materially riskier now that the app is on a public IP.
 
@@ -248,6 +243,73 @@ The cost of leaving it is that every branch inherits the dirt, so no diff can be
 **Fix:** one dedicated commit that runs `meteor npm run format` and changes nothing else, so it can be reviewed as a no-op and skipped in `git blame`.
 
 ---
+
+## D43 - A script can play a round at machine speed - **fixed 2026-10-12**
+
+An automated client could subscribe, join, and submit a sequence as fast as the socket allowed. Short sequences and accuracy alone never distinguished that from a person.
+
+**Fix (applied):** `players.startAttempt` opens one attempt, and `players.submitSequence` requires its id plus per-colour offsets. An attempt of at least 4 colours is flagged when every interval is under 60 ms, the spread is at most 5 ms, and the server-observed elapsed time supports that speed. The third consecutive flagged attempt removes the player before grading, blocks that browser session for the room's lifetime, and bans the connection's address from that room for 15 minutes. A normal attempt of at least 4 colours resets the count. `BOT_DETECTION_ENABLED=false` is ignored outside development.
+
+What this does not catch: input with human-looking gaps, a new address, or an IPv6 prefix that rotates. Those stay out of the ban.
+
+## D25 - Ability dialogs let keyboard focus reach the background - **fixed 2026-10-13**
+
+The ability shell initially focused its panel but neither trapped focus nor made the game behind it inert.
+Reproduced in the browser: opening Play a card and pressing Tab three times focused the obscured Feed button.
+The shell now opens a native modal `dialog`, retains the draft and hand's Escape behavior, and restores focus to the mounted opener on close.
+
+## D24 - Public player IDs can take over private game state - **fixed 2026-10-13**
+
+`players.rebind` accepted any published player ID, and `players.join` could rebind an existing player from its public lobby ID.
+Reproduced with two DDP connections: a guest received the host's private sequence and chose the host's ability after rebinding.
+Both paths now require a random per-tab credential whose hash stays server-side.
+First client joins also verify lobby connection ownership and round membership.
+Legacy players can enroll a credential only on their existing owning connection, so an attacker cannot claim an uncredentialed player after a deploy.
+This fixes the new private-state takeover; D3 remains open for other game and room mutations.
+
+## D23 - Local hot reload cannot reach Rspack's WebSocket - **fixed 2026-10-12**
+
+The local app loaded on port 3000, but the browser's Rspack client repeatedly failed to connect to `ws://localhost:8080/ws`.
+The installed `@meteorjs/rspack` configuration starts the development server on port 8080, and the container was already listening on all interfaces at that port.
+`docker-compose.yml` published only port 3000, so a host request to port 8080 failed before reaching Rspack.
+
+**Fix (applied):** publish `8080:8080` alongside the existing backend mapping.
+Recreate the backend to apply the mapping; restarting an existing container does not change its published ports.
+`docs/dev-environment.md` records the two local ports and the verification procedure.
+The change applies only to local development, and the production compose file remains unchanged.
+
+## D22 - Battle Royale leaderboard stays at level 1 as players advance - **fixed 2026-10-12**
+
+The initial Battle Royale round stays `isCurrent: true` while players move independently to their own level rounds.
+`Leaderboard.jsx` selected that initial round, and `createLiveLeaderboardRows` assigned its `roundNumber` to every active player, ignoring their `currentLevel`.
+In room `8U5Z6`, three bot players reached sequence length 5 while the browser player remained at length 4, but the browser leaderboard showed level 1 for all four.
+The browser reproduction is saved at `docs/test-evidence/round-abilities/br-levels-before.png`.
+
+**Fix (applied):** `app/imports/ui/leaderboardModels.js` converts each active Battle Royale player's own sequence length to its displayed level (`currentLevel - 3`).
+An eliminated player's `eliminatedRound` is already a displayed level and is preserved.
+Standard modes continue to use the shared round's level.
+`app/tests/leaderboardModel.test.js` covers independent Battle Royale levels, elimination levels, and unchanged standard-mode behavior.
+The independent-level regression failed before the model change and passed afterward.
+
+## D21 - A network blip removes a player from the game - **fixed 2026-10-11**
+
+When a player's connection drops, the `Meteor.onConnection` close handler in `gameMethods.js` marks them `connected: false` and removes them after `DISCONNECT_GRACE_MS` (15 s) unless they reconnect.
+"Reconnect" meant `players.join` rewriting `connectionId`, but `GamePage` only calls `players.join` while it has no `playerId`.
+After a DDP auto-reconnect it already has one, so nothing rebound the player: a short Wi-Fi drop mid-round silently deleted them 15 seconds later, even though their tab had reconnected.
+
+**Fix (applied):** new `players.rebind(playerId)` sets `connectionId` and `connected: true` for the caller's connection, and `GamePage` calls it whenever `Meteor.status().connected` goes from false to true.
+It also keeps `players.secret`, which selects by `connectionId`, delivering the player's sequence after a reconnect.
+`app/imports/api/gameMethods.js`, `app/imports/ui/pages/GamePage.jsx`.
+
+## D20 - Battle Royale sent every level's sequence to every client - **fixed 2026-10-11**
+
+The `rounds` publication selected `{ gameId, advanced: false }` and published `sequence`.
+Standard rounds are marked `advanced` as the game moves on, but Battle Royale level rounds (`getOrCreateRound`) never are, so every level a leader had unlocked sat in every client's minimongo, answer included.
+A trailing player could read the next level's sequence from the browser console before reaching it.
+
+**Fix (applied):** `rounds` excludes `sequence` in every mode.
+Each player's sequence is written to `players.secret.sequence` and published only to their own connection through `players.secret`, and `players.submitSequence` grades against that copy.
+`app/server/publications.js`, `app/imports/api/gameEngine.js`, `app/imports/api/gameMethods.js`.
 
 ## D19 - The play column is taller than the screen, so CLEAR and SUBMIT vanish when the turn starts - **fixed 2026-09-01**
 
@@ -321,6 +383,29 @@ React evaluates a `useState` functional updater eagerly only when the fiber has 
 The ID is D15 because D13 is a deliberate gap (see the note at the top of this file).
 
 ---
+
+## D44 - Spoofed forwarded headers bypass the room IP ban
+
+**Reproduced 2026-10-12:** a raw DDP bot supplies an extra `X-Forwarded-For` prefix, and the trusted proxy appends the peer address.
+Meteor reports no `clientAddress` when the header length differs from its configured proxy count.
+`removeDetectedPlayer` logs `missing client address` and writes only the browser-session block.
+A fresh session on the same real address can join the disposable room when it is returned to lobby.
+Without the spoofed prefix, the real address is banned for exactly 15 minutes and a different address remains allowed.
+Both direct local transport and a real Nginx proxy reproduce the failure.
+
+**Fix:** enforce a trusted ingress/address policy that cannot convert spoofed forwarded headers into an IP-ban exemption.
+Validate the policy through the actual proxy chain and do not substitute an address supplied by a client.
+See [the executed test report](bot-detection-test-results.md) for the fixtures and remaining verification.
+
+## D45 - Production-mode main stylesheet returns HTTP 500
+
+**Reproduced 2026-10-12:** local `meteor run --production` serves `/build-chunks/main.b70987423f38e5ae.css` with HTTP 500.
+The server logs ENOENT for the CSS chunk under `programs/server/build-chunks`.
+The browser removal and join screens render without their intended styling.
+The deployed image has not been checked, so the confirmed scope is the local production simulation.
+
+**Fix:** correct the emitted CSS asset path and its server registration, then verify a clean production build and the removed-player screen.
+See [the executed test report](bot-detection-test-results.md) for browser evidence.
 
 ## Structural issues that are not bugs but shape future work
 

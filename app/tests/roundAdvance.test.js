@@ -26,6 +26,30 @@ if (Meteor.isServer) {
       assert.equal(nextRound.sequence.length, 5);
     });
 
+    it('uses custom sequence growth when advancing', async function () {
+      const roundId = await RoundsCollection.insertAsync({
+        gameMode: 'custom',
+        lengthOfSequence: 4,
+        lives: 4,
+        sequenceGrowth: 2,
+        roundNumber: 1,
+        sequence: ['red', 'blue', 'green', 'yellow'],
+        createdAt: new Date(),
+        advanced: false,
+        isCurrent: true,
+      });
+
+      const nextRoundId = await Meteor.callAsync('rounds.advance', roundId);
+
+      const nextRound = await RoundsCollection.findOneAsync(nextRoundId);
+      assert.equal(nextRound.lengthOfSequence, 6);
+      assert.equal(nextRound.sequence.length, 6);
+      assert.strictEqual(nextRound.gameMode, 'custom');
+      assert.strictEqual(nextRound.lives, 4);
+      assert.strictEqual(nextRound.sequenceGrowth, 2);
+      assert.strictEqual(nextRound.roundNumber, 2);
+    });
+
     it('marks the current round as advanced and not current', async function () {
       const roundId = await RoundsCollection.insertAsync({
         lengthOfSequence: 4,
@@ -57,6 +81,7 @@ if (Meteor.isServer) {
         lives: 3,
         eliminated: false,
         completeRound: true,
+        roundStatus: 'Correct',
         attemptedSequence: ['red'],
         winner: false,
       });
@@ -66,6 +91,7 @@ if (Meteor.isServer) {
       const player = await PlayersCollection.findOneAsync({ name: 'Player 1' });
       assert.equal(player.roundId, nextRoundId);
       assert.strictEqual(player.completeRound, false);
+      assert.strictEqual(player.roundStatus, 'Playing');
       assert.deepEqual(player.attemptedSequence, []);
     });
 
@@ -108,6 +134,31 @@ if (Meteor.isServer) {
 
       const roundCount = await RoundsCollection.find({}).countAsync();
       assert.equal(roundCount, 1); // no new round created
+    });
+
+    it('creates only one next round when two advances arrive together', async function () {
+      // Two final answers landing milliseconds apart both call rounds.advance (seen live
+      // on 2026-10-11: two round-6 documents, the orphan left isCurrent).
+      const roundId = await RoundsCollection.insertAsync({
+        gameId: 'RACE1',
+        lengthOfSequence: 4,
+        sequence: ['red', 'blue', 'green', 'yellow'],
+        roundNumber: 5,
+        createdAt: new Date(),
+        advanced: false,
+        isCurrent: true,
+      });
+      await PlayersCollection.insertAsync({ gameId: 'RACE1', roundId, name: 'P1', eliminated: false });
+
+      const results = await Promise.all([
+        Meteor.callAsync('rounds.advance', roundId),
+        Meteor.callAsync('rounds.advance', roundId),
+      ]);
+
+      const nextRounds = await RoundsCollection.find({ gameId: 'RACE1', roundNumber: 6 }).fetchAsync();
+      assert.equal(nextRounds.length, 1);
+      assert.equal(results.filter(Boolean).length, 1);
+      assert.equal(await RoundsCollection.find({ gameId: 'RACE1', isCurrent: true }).countAsync(), 1);
     });
 
     it('throws if round does not exist', async function () {

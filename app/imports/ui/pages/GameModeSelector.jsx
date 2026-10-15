@@ -6,7 +6,7 @@ function ModeCard({ title, description, color, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="relative flex min-h-[140px] flex-col gap-2.5 overflow-hidden rounded-[18px] p-5 text-left transition-opacity hover:opacity-80"
+      className="relative flex min-h-[140px] w-full flex-col gap-3 overflow-hidden rounded-[18px] p-5 text-left transition-all hover:-translate-y-0.5"
       style={{
         background: color,
         color: BG,
@@ -15,7 +15,7 @@ function ModeCard({ title, description, color, onClick }) {
         boxShadow: `0 12px 40px -10px color-mix(in oklab, ${color} 70%, transparent), inset 0 0 0 1px color-mix(in oklab, ${color} 50%, transparent)`,
       }}
     >
-      <div className="flex items-start justify-between">
+      <div className="flex items-start">
         <div
           className="flex h-11 w-11 items-center justify-center rounded-[10px]"
           style={{
@@ -23,14 +23,6 @@ function ModeCard({ title, description, color, onClick }) {
           }}
         >
           <ArrowIcon size={18} stroke={BG} />
-        </div>
-        <div
-          className="flex h-8 w-8 items-center justify-center rounded-lg"
-          style={{
-            background: `color-mix(in oklab, ${BG} 18%, transparent)`,
-          }}
-        >
-          <ArrowIcon size={14} stroke={BG} />
         </div>
       </div>
 
@@ -110,14 +102,14 @@ export function GameModeSelector() {
       <TileLattice opacity={0.05} />
 
       {/* top bar */}
-      <div className="relative flex shrink-0 items-center justify-between px-7 py-5">
+      <div className="relative flex shrink-0 items-center justify-between gap-3 px-6 py-4 xs:gap-4 xs:px-7 xs:py-5">
         <Wordmark />
-        <span className="font-mono text-[11px] uppercase tracking-widest text-fg3">v1.0.0</span>
+        <span className="hidden font-mono text-[11px] uppercase tracking-widest text-fg3 xs:inline">v1.0.0</span>
       </div>
 
-      <div className="relative flex flex-1 flex-col items-center justify-center gap-7 overflow-y-auto px-7 pb-14">
+      <div className="relative flex flex-1 flex-col items-center gap-6 overflow-y-auto px-6 pb-10 pt-6 xs:gap-7 xs:px-7 xs:pb-14 xs:pt-0">
         {/* title */}
-        <div className="w-full max-w-4xl text-center">
+        <div className="mt-auto w-full max-w-4xl text-center">
           <h1 className="font-outfit text-4xl font-extrabold leading-tight tracking-tight">Select Game Mode</h1>
           <p className="mt-3 font-manrope text-[15px] text-fg3">Choose how you want to play</p>
         </div>
@@ -125,7 +117,7 @@ export function GameModeSelector() {
         {/* mode cards grid */}
         <div
           className="grid w-full max-w-4xl gap-4"
-          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}
+          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))' }}
         >
           {gameModes.map((mode) => (
             <ModeCard
@@ -140,7 +132,7 @@ export function GameModeSelector() {
 
         <button
           onClick={handleBack}
-          className="rounded-full border border-hairline px-5 py-3 font-outfit text-[13px] font-bold uppercase tracking-[0.16em] text-fg2 transition-colors hover:text-fg"
+          className="mb-auto rounded-full border border-hairline px-5 py-3 font-outfit text-[13px] font-bold uppercase tracking-[0.16em] text-fg2 transition-colors hover:text-fg"
           style={{ background: 'color-mix(in oklab, oklch(0.20 0.02 270) 72%, transparent)' }}
         >
           Back

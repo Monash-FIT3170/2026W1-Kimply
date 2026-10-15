@@ -64,6 +64,7 @@ describe('Life Deduction', () => {
       const player = await PlayersCollection.findOneAsync(playerId);
       assert.strictEqual(player.currentStreak, 1);
       assert.strictEqual(player.longestStreak, 1);
+      assert.strictEqual(player.roundStatus, 'Correct');
     });
 
     it('incorrect guess resets current streak and keeps longest streak', async () => {
@@ -80,6 +81,17 @@ describe('Life Deduction', () => {
       const player = await PlayersCollection.findOneAsync(playerId);
       assert.strictEqual(player.currentStreak, 0);
       assert.strictEqual(player.longestStreak, 2);
+      assert.strictEqual(player.roundStatus, 'Playing');
+    });
+
+    it('marks a player as eliminated after their final incorrect guess', async () => {
+      await PlayersCollection.updateAsync(playerId, { $set: { lives: 1 } });
+
+      await Meteor.callAsync('players.submitSequence', playerId, ['blue', 'blue', 'blue', 'blue']);
+
+      const player = await PlayersCollection.findOneAsync(playerId);
+      assert.strictEqual(player.eliminated, true);
+      assert.strictEqual(player.roundStatus, 'Eliminated');
     });
   }
 });
