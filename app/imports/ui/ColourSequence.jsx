@@ -111,6 +111,23 @@ export const ColourSequence = ({
 
     onColourClick(colourId);
   };
+  useEffect(() => {
+    const shortcuts = { r: 'red', y: 'yellow', g: 'green', b: 'blue' };
+
+    const handleShortcut = (event) => {
+      if (!playerCanInput || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName)) return;
+
+      const colourId = shortcuts[event.key.toLowerCase()];
+      if (!colourId) return;
+
+      event.preventDefault();
+      handleTileClick(colourId);
+    };
+
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, [playerCanInput, soundEnabled, reduceMotion, onColourClick]);
   return (
     <section aria-label="Sequence controls">
       <p
@@ -152,10 +169,12 @@ export const ColourSequence = ({
               data-testid={`colour-tile-${colourId}`}
               disabled={!playerCanInput}
               onClick={() => handleTileClick(colourId)}
-              aria-label={`${colourId} tile${playerCanInput ? '' : ', unavailable while the sequence plays'}`}
+              aria-keyshortcuts={colourId[0]}
+              aria-label={`${colourId} tile${playerCanInput ? `. Press ${colourId[0].toUpperCase()} to select it` : ', unavailable while the sequence plays'}`}
               style={{
                 width: 'calc(min(360px, 90vw) / 2 - 3px)',
                 height: 'calc(min(360px, 90vw) / 2 - 3px)',
+                position: 'relative',
                 backgroundColor: bg,
                 display: 'flex',
                 alignItems: 'center',
@@ -174,6 +193,20 @@ export const ColourSequence = ({
               <svg width="64" height="64" viewBox="0 0 64 64">
                 <ShapeIcon />
               </svg>
+              <span
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  padding: '3px 6px',
+                  borderRadius: '5px',
+                  background: 'rgba(0,0,0,0.28)',
+                  color: 'white',
+                  fontSize: '0.7rem',
+                  fontWeight: 800,
+                }}
+              >
+                {colourId[0].toUpperCase()}
+              </span>
             </button>
           );
         })}

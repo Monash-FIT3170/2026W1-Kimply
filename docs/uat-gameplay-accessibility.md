@@ -8,8 +8,8 @@ more players in the same room where possible.
 
 1. Create a room, share its PIN, and join it from a second browser.
 2. Watch a sequence, then complete one round using only the keyboard. Tab to a
-   colour tile and activate it with `Enter` or `Space`; use **Clear** and
-   **Submit** the same way.
+   colour tile and activate it with `Enter` or `Space`, then repeat using the
+   `R`, `Y`, `G`, and `B` shortcuts; use **Clear** and **Submit** the same way.
 3. Explain, without being prompted, whether it is your turn, how many colours
    are selected, how many lives remain, and how long you have left.
 4. Toggle **Sound** off, begin the next turn, and confirm no game tones play.

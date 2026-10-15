@@ -384,7 +384,7 @@ export const GamePage = () => {
               <li>You have three lives and 30 seconds for each attempt.</li>
             </ol>
             <p style={{ color: '#cbd5ff', fontSize: '0.9rem', lineHeight: 1.5 }}>
-              You can play with a keyboard: use Tab to focus a tile, then Enter or Space to select it.
+              Keyboard: use Tab then Enter/Space, or press R, Y, G, and B to select a colour directly.
             </p>
             <button type="button" onClick={() => setShowHelp(false)} style={{ ...preferenceButtonStyle, marginTop: '10px' }}>
               Got it
