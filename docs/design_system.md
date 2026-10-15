@@ -2,7 +2,7 @@
 
 Multiplayer memory challenge. This document is the single source of truth for how Kimply looks, sounds, and behaves. Check here before designing or building anything new.
 
-**Status:** v0.6 · Active
+**Status:** v0.7 · Active
 **Owner:** Design
 
 ---
@@ -210,18 +210,15 @@ Motion conveys state. It does not decorate.
   50%, 100% { opacity: 0; }
 }
 /* Active text input — 1s steps(2) infinite */
-
-@keyframes lightsOut {
-  0%, 15%   { opacity: 0; }
-  45%, 65%  { opacity: 0.97; }
-  95%, 100% { opacity: 0; }
-}
-/* Lights Out ability: a --bg overlay over the tile grid — 2600ms ease-in-out infinite */
 ```
 
-`lightsOut` is the one animation that hides state on purpose: it is a hostile card's effect, not decoration.
-It starts lit so the first flash is always seen, and its period is not a multiple of any flash and gap, so a replay loses different flashes.
-The overlay sits 4px outside the grid with no feathered edge, and lit tiles drop their outer glow while it runs, so the instruction line and the `Selected` count above and below stay readable.
+### Lights Out overlay
+
+The one motion that hides state on purpose: it is a hostile card's effect, not decoration.
+A `--bg` overlay at 97% opacity covers the tile grid for the flashes Lights Out hides, a third of them rounded down and never the first, drawn again for every replay.
+It fades in during the gap before a hidden flash and out during the gap after it, over the shorter of that gap and 150ms `ease-in-out`, so the flash itself is fully covered.
+Between hidden flashes, and while the player enters the sequence, the board is lit.
+The overlay sits 4px outside the grid with no feathered edge, and a hidden flash drops its outer glow, so the instruction line and the `Selected` count above and below stay readable.
 
 ### Playback effect chip
 
@@ -326,6 +323,7 @@ CTA stays disabled until all 5 characters are entered.
 ### Lobby
 Title row (mono eyebrow + H1, room chip right) → gradient progress bar → player grid → primary CTA pinned bottom.
 Player count always renders as `n/cap`, e.g. `PLAYERS (5/8)`. Unfilled seats use the dashed Empty slot row.
+Joined players get the same mono `INVITE LINK` label and copy panel as the host, under the mode chips, so anyone in the room can share it.
 
 ### Room code display
 Panel with a 4px tile-gradient band across the top edge, mono uppercase label, 5 code tiles each with a tile-colored underline, then Copy / Share ghost buttons.
@@ -480,3 +478,4 @@ The system grows by addition, not by drift.
 | v0.4 | 2026-10-11 | Adds the Ability card, Key hint, Segmented toggle and Switch components, and the Ability draft, Target picker and Live feed patterns, for round abilities. |
 | v0.5 | 2026-10-12 | Adds the `lightsOut` animation and the Playback effect chip for the Slo-Mo, 2x Speed and Lights Out abilities. |
 | v0.6 | 2026-10-13 | Adds the Ability guide pattern and the read-only Ability card, so the lobby can show every card before the game. |
+| v0.7 | 2026-10-15 | Replaces the looping `lightsOut` animation with the Lights Out overlay, which covers only the hidden flashes, and gives joined players the invite link. |

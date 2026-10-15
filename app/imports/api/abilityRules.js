@@ -3,6 +3,7 @@ import {
   ABILITY_CARDS_OFFERED,
   ABILITY_WEIGHTS,
   FLASH_SPEEDS,
+  LIGHTS_OUT_EVERY,
   MIN_FLASH_MS,
   MIN_GAP_MS,
   PLAYBACK_SPEED_FACTORS,
@@ -62,7 +63,7 @@ export const ABILITIES = {
     hostile: true,
     kept: false,
     playback: { kind: 'lightsOut' },
-    description: "Another player's board fades to dark and back all round. Some flashes land in the dark.",
+    description: "Another player's board goes dark for a third of their flashes this round. Never the first.",
   },
   freePass: {
     label: 'Free Pass',
@@ -148,6 +149,19 @@ export function playbackFor(player) {
     speed: active(playback.speed) ? playback.speed.value : null,
     lightsOut: active(playback.lightsOut),
   };
+}
+
+// Which flashes of one playback Lights Out hides: floor(n / 3) of them, picked at random
+// and never the first, so the player always sees where the sequence starts. Every
+// playback draws again, so a replay hides a different few.
+export function lightsOutFlashes(length, rng = Math.random) {
+  const count = Math.floor(length / LIGHTS_OUT_EVERY);
+  const candidates = Array.from({ length: Math.max(0, length - 1) }, (_, index) => index + 1);
+  for (let i = candidates.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rng() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+  return candidates.slice(0, count).sort((a, b) => a - b);
 }
 
 // The flash and gap lengths for a room's playback speed under a speed effect.

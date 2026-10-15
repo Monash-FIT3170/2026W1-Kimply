@@ -5,6 +5,7 @@ import {
   eligibleAbilities,
   isCallerBound,
   isShielded,
+  lightsOutFlashes,
   playableHand,
   playbackFor,
   playbackTiming,
@@ -112,6 +113,31 @@ describe('ability rules', function () {
     it('ignores a Battle Royale effect still waiting for the next level', function () {
       const secret = { playback: { lightsOut: { roundId: null } } };
       assert.deepStrictEqual(playbackFor({ roundId: 'r1', secret }), { speed: null, lightsOut: false });
+    });
+  });
+
+  describe('lightsOutFlashes', function () {
+    it('hides a third of the flashes, rounded down', function () {
+      const counts = [1, 2, 3, 4, 5, 6, 8, 9, 12].map((n) => lightsOutFlashes(n).length);
+      assert.deepStrictEqual(counts, [0, 0, 1, 1, 1, 2, 2, 3, 4]);
+    });
+
+    it('never hides the first flash, and picks distinct flashes in order', function () {
+      for (let run = 0; run < 200; run += 1) {
+        const hidden = lightsOutFlashes(10);
+        assert.ok(!hidden.includes(0), 'first flash hidden');
+        assert.strictEqual(new Set(hidden).size, hidden.length);
+        assert.ok(hidden.every((index) => index >= 1 && index < 10));
+        assert.deepStrictEqual(
+          hidden,
+          [...hidden].sort((a, b) => a - b)
+        );
+      }
+    });
+
+    it('draws a different set each playback', function () {
+      assert.deepStrictEqual(lightsOutFlashes(6, sequenceRng([0.99])), [1, 2]);
+      assert.deepStrictEqual(lightsOutFlashes(6, sequenceRng([0])), [2, 3]);
     });
   });
 

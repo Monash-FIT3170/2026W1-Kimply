@@ -20,6 +20,21 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-15 - Patch 2.0: Lights Out nerf, replay streak, longer round, invite link for everyone
+
+Lights Out kept the board fading on a 2.6 s loop for the whole round, playback and input alike, and playtesters called it broken (#154).
+It now hides `floor(n / 3)` of the target's `n` flashes and nothing else: a 4-colour sequence loses one flash, a 6-colour sequence two.
+`lightsOutFlashes` in `abilityRules.js` picks them, never the first, so the player always sees where the sequence starts.
+`ColourSequence` draws a new pick for every playback, so a replay recovers what the first watch lost, and it reads the effect during playback, so one that reaches the client a beat late still applies.
+The board fades to dark within the gap before a hidden flash and back within the gap after it, over the shorter of that gap and `LIGHTS_OUT_FADE_MS` (150 ms), so a hidden flash is covered from its first frame. The `lightsOut` keyframes and `LIGHTS_OUT_CYCLE_MS` are gone.
+`REPLAY_BONUS_STREAK` is 2, so a replay is earned every second correct round in a row rather than every one.
+`ROUND_TIMER_SECONDS` is 50, up from 45; only the client counts it down, and `players.timeoutRound` still decides elimination.
+Joined players get the host's invite link and Copy button in the lobby.
+Lobby player tiles now start at 15rem instead of 12rem: the READY chip left a 12rem tile about 45px for the name, so even "GuestT" truncated to "Gue...".
+Files: `app/imports/constants.js`, `app/imports/api/abilityRules.js`, `app/imports/ui/ColourSequence.jsx`, `app/imports/ui/styles.css`, `app/imports/ui/pages/PlayerLobby.jsx`, `app/tests/abilityRules.test.js`, `docs/design_system.md`, `AGENTS.md`.
+
+---
+
 ## 2026-10-14 - Bot detection merged with reconnect credentials
 
 Bot detection (#142) and reconnect ownership (#150) were built in parallel, and both changed `players.join` and `players.rebind`.

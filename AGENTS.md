@@ -10,7 +10,7 @@ Shared guidance for any coding agent working in this repository (Cursor, Claude 
 > If you change any of those things, update the matching table before you finish, and add an entry to [docs/decision-log.md](docs/decision-log.md) in the same change.
 > See [Maintaining this file](#maintaining-this-file) at the bottom.
 
-**Last verified against the codebase:** 2026-10-14
+**Last verified against the codebase:** 2026-10-15
 
 ---
 
@@ -430,7 +430,7 @@ Shared helpers live in `gameEngine.js`: `checkWinner`, `advanceRoundIfReady`, `g
 From round 2 of a standard game, each surviving player is dealt 3 of Steal, Strike, Shield, Slo-Mo, 2x Speed, Lights Out, Free Pass, Reroll and Scramble, and picks 1 or skips within `DRAFT_SECONDS`.
 Battle Royale players draft on every level-up instead, Jump is added, and Steal is only dealt when the room starts players on more than 1 life.
 Steal, Strike, Shield and the playback cards resolve when the draft closes (all at once: Steals, then Strikes, then playback cards; Shields block all of them, and Scramble). In Battle Royale they resolve on pick, and a playback card waits for the target's next level.
-Slo-Mo and 2x Speed halve or double the target's playback speed for the round, replays included; Lights Out fades their board to dark and back all round. A target takes at most one speed change and one Lights Out per round: the first to land wins and a second misses.
+Slo-Mo and 2x Speed halve or double the target's playback speed for the round, replays included; Lights Out darkens a third of the target's flashes, rounded down and never the first, with a fresh pick on every replay. A target takes at most one speed change and one Lights Out per round: the first to land wins and a second misses.
 Free Pass and Jump stay in the hand until played; Reroll and Scramble expire with their round.
 The rules and copy live in `abilityRules.js`; the server work in `abilityEngine.js`.
 The lobby's `SEE THE CARDS` guide (`ui/abilities/LobbyAbilities.jsx`, built by `abilityGuide` in `abilityFeed.js`) lists every card the room can deal, from the same `eligibleAbilities` the server deals with, so it cannot drift from the draft.
