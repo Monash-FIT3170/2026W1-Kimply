@@ -28,6 +28,8 @@ export const ColourSequence = ({
   onSequenceComplete,
   playerCanInput,
   onColourClick,
+  soundEnabled = true,
+  reduceMotion = false,
 }) => {
   const [activeColour, setActiveColour] = useState(null);
   const [clickedColour, setClickedColour] = useState(null);
@@ -77,7 +79,13 @@ export const ColourSequence = ({
     };
   }, [roundId, replayKey]);
   const playClickSound = () => {
-    const audioContext = new AudioContext();
+    // Audio is optional so players can use the visual pattern without sound.
+    if (!soundEnabled) return;
+
+    const AudioCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtor) return;
+
+    const audioContext = new AudioCtor();
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
 
@@ -99,13 +107,15 @@ export const ColourSequence = ({
 
     setTimeout(() => {
       setClickedColour(null);
-    }, 200);
+    }, reduceMotion ? 0 : 200);
 
     onColourClick(colourId);
   };
   return (
-    <div>
+    <section aria-label="Sequence controls">
       <p
+        role="status"
+        aria-live="polite"
         style={{
           color: 'white',
           textAlign: 'center',
@@ -121,6 +131,8 @@ export const ColourSequence = ({
       </p>
 
       <div
+        role="group"
+        aria-label={isPlaying ? 'Watch the colour sequence' : 'Choose the colour sequence'}
         style={{
           display: 'grid',
           gridTemplateColumns: '1fr 1fr',
@@ -140,6 +152,7 @@ export const ColourSequence = ({
               data-testid={`colour-tile-${colourId}`}
               disabled={!playerCanInput}
               onClick={() => handleTileClick(colourId)}
+              aria-label={`${colourId} tile${playerCanInput ? '' : ', unavailable while the sequence plays'}`}
               style={{
                 width: 'calc(min(360px, 90vw) / 2 - 3px)',
                 height: 'calc(min(360px, 90vw) / 2 - 3px)',
@@ -148,14 +161,14 @@ export const ColourSequence = ({
                 alignItems: 'center',
                 justifyContent: 'center',
                 borderRadius: '16px',
-                transition: 'all 0.15s ease',
+                transition: reduceMotion ? 'none' : 'all 0.15s ease',
                 boxShadow: isActive
                   ? `0 0 60px ${COLOURS[colourId].active}, 0 0 20px ${COLOURS[colourId].active}`
                   : 'none',
                 border: `3px solid ${isActive ? COLOURS[colourId].active : 'rgba(255,255,255,0.08)'}`,
                 cursor: playerCanInput ? 'pointer' : 'not-allowed',
                 opacity: playerCanInput || isPlaying ? 1 : 0.7,
-                transform: isActive ? 'scale(0.95)' : 'scale(1)',
+                transform: reduceMotion ? 'none' : isActive ? 'scale(0.95)' : 'scale(1)',
               }}
             >
               <svg width="64" height="64" viewBox="0 0 64 64">
@@ -165,6 +178,6 @@ export const ColourSequence = ({
           );
         })}
       </div>
-    </div>
+    </section>
   );
 };

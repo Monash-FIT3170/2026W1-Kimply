@@ -9,6 +9,18 @@ import { Leaderboard } from '../Leaderboard.jsx';
 import { EndLeaderboard } from '../EndLeaderboard.jsx';
 import { useLocation } from 'react-router-dom';
 import { TileLattice, BG } from '../components/design';
+
+const preferenceButtonStyle = {
+  padding: '7px 10px',
+  border: '1px solid rgba(255,255,255,0.35)',
+  borderRadius: '8px',
+  background: 'rgba(0,0,0,0.22)',
+  color: 'white',
+  fontSize: '0.75rem',
+  fontWeight: 700,
+  cursor: 'pointer',
+};
+
 export const GamePage = () => {
   const [playerId, setPlayerId] = useState(null);
   const [playerCanInput, setPlayerCanInput] = useState(false);
@@ -20,12 +32,23 @@ export const GamePage = () => {
   const [correctGlow, setCorrectGlow] = useState(false);
   const [completedRoundId, setCompletedRoundId] = useState(null);
   const [replayKey, setReplayKey] = useState(0);
+  // Keep player preferences between rounds and future visits to the game.
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return window.localStorage.getItem('kimply-sound-enabled') !== 'false';
+  });
+  const [reduceMotion, setReduceMotion] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const savedValue = window.localStorage.getItem('kimply-reduce-motion');
+    return savedValue === null ? window.matchMedia?.('(prefers-reduced-motion: reduce)').matches : savedValue === 'true';
+  });
   const location = useLocation();
   const playerNameFromLobby = location.state?.playerName || 'Demo Player';
   const roomPin = location.state?.pin;
   const gameId = roomPin || 'demo';
   const accountId = location.state?.playerAccount?._id || null;
   const playTurnStartSound = () => {
+    if (!soundEnabled) return;
     const AudioCtor = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtor) return;
 
@@ -47,6 +70,12 @@ export const GamePage = () => {
     oscillator.start();
     oscillator.stop(audioContext.currentTime + 0.24);
   };
+  useEffect(() => {
+    window.localStorage.setItem('kimply-sound-enabled', String(soundEnabled));
+  }, [soundEnabled]);
+  useEffect(() => {
+    window.localStorage.setItem('kimply-reduce-motion', String(reduceMotion));
+  }, [reduceMotion]);
   useEffect(() => {
     const roundsSub = Meteor.subscribe('rounds');
     const playersSub = Meteor.subscribe('players');
@@ -308,13 +337,16 @@ export const GamePage = () => {
         display: 'flex',
         flexDirection: 'column',
         padding: '2vh 2vw',
-        transform: shake ? 'translateX(-6px)' : 'translateX(0)',
-        transition: 'transform 0.1s ease',
-        boxShadow: correctGlow ? 'inset 0 0 80px #00aaff' : 'none',
+        transform: !reduceMotion && shake ? 'translateX(-6px)' : 'translateX(0)',
+        transition: reduceMotion ? 'none' : 'transform 0.1s ease',
+        boxShadow: !reduceMotion && correctGlow ? 'inset 0 0 80px #00aaff' : 'none',
       }}
     >
       <TileLattice opacity={0.06} />
+      {/* Announces level-up notifications without moving keyboard focus. */}
       <div
+        role="status"
+        aria-live="polite"
         style={{
           position: 'fixed',
           top: '18px',
@@ -342,7 +374,7 @@ export const GamePage = () => {
               fontWeight: 700,
               fontSize: '0.9rem',
               lineHeight: 1.25,
-              animation: 'levelUpToastIn 180ms ease-out',
+              animation: reduceMotion ? 'none' : 'levelUpToastIn 180ms ease-out',
             }}
           >
             {notice.text}
@@ -361,6 +393,24 @@ export const GamePage = () => {
         >
           KIMPLY
         </span>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }} aria-label="Game preferences">
+          <button
+            type="button"
+            aria-pressed={soundEnabled}
+            onClick={() => setSoundEnabled((enabled) => !enabled)}
+            style={preferenceButtonStyle}
+          >
+            Sound: {soundEnabled ? 'on' : 'off'}
+          </button>
+          <button
+            type="button"
+            aria-pressed={reduceMotion}
+            onClick={() => setReduceMotion((enabled) => !enabled)}
+            style={preferenceButtonStyle}
+          >
+            Motion: {reduceMotion ? 'reduced' : 'full'}
+          </button>
+        </div>
       </div>
       <div
         style={{
@@ -373,10 +423,14 @@ export const GamePage = () => {
         }}
       >
         {/* Lives display */}
-        <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2vh' }}>
+        <div
+          aria-label={`${player?.lives ?? 3} of 3 lives remaining`}
+          style={{ display: 'flex', justifyContent: 'flex-start', gap: '1vw', marginBottom: '2vh' }}
+        >
           {[1, 2, 3].map((heart) => (
             <div
               key={heart}
+              aria-hidden="true"
               style={{
                 width: '4vw',
                 height: '4vw',
@@ -387,7 +441,7 @@ export const GamePage = () => {
                 justifyContent: 'center',
                 fontSize: '2vw',
                 boxShadow: heart <= (player?.lives ?? 3) ? '0 0 10px #e0303088' : 'none',
-                transition: 'all 0.3s ease',
+                transition: reduceMotion ? 'none' : 'all 0.3s ease',
               }}
             >
               {'\u2764'}
@@ -438,6 +492,8 @@ export const GamePage = () => {
             sequence={round.sequence}
             replayKey={replayKey}
             playerCanInput={playerCanInput}
+            soundEnabled={soundEnabled}
+            reduceMotion={reduceMotion}
             onSequenceComplete={() => {
               playTurnStartSound();
               setPlayerCanInput(true);
@@ -445,7 +501,9 @@ export const GamePage = () => {
             }}
             onColourClick={handleColourClick}
           />
+          {/* These updates make visual selection feedback available to screen readers. */}
           <p
+            aria-live="polite"
             style={{
               color: 'white',
               marginTop: '1.5vh',
@@ -456,6 +514,8 @@ export const GamePage = () => {
             Selected: {attemptedSequence.length}/{round.sequence.length}
           </p>
           <p
+            role="status"
+            aria-live="polite"
             style={{
               color: '#ffd369',
               marginTop: '0.8vh',
@@ -466,7 +526,10 @@ export const GamePage = () => {
             {message}
           </p>
           {playerCanInput && (
+            // Announce only key countdown thresholds, rather than every second.
             <p
+              role="timer"
+              aria-live={secondsLeft === 10 || secondsLeft === 5 || secondsLeft === 1 ? 'assertive' : 'off'}
               style={{
                 color: secondsLeft <= 5 ? '#ff7a7a' : '#9ce8ff',
                 marginTop: '0.8vh',
@@ -488,6 +551,7 @@ export const GamePage = () => {
             }}
           >
             <button
+              type="button"
               onClick={handleClear}
               disabled={!playerCanInput || attemptedSequence.length === 0}
               style={{
@@ -501,11 +565,13 @@ export const GamePage = () => {
                 borderRadius: '8px',
                 cursor: playerCanInput && attemptedSequence.length > 0 ? 'pointer' : 'not-allowed',
                 letterSpacing: '1px',
+                outlineOffset: '3px',
               }}
             >
               CLEAR
             </button>
             <button
+              type="button"
               onClick={handleSubmit}
               disabled={!playerCanInput || attemptedSequence.length !== round.sequence.length}
               style={{
@@ -521,6 +587,7 @@ export const GamePage = () => {
                 cursor:
                   playerCanInput && attemptedSequence.length === round.sequence.length ? 'pointer' : 'not-allowed',
                 letterSpacing: '1px',
+                outlineOffset: '3px',
               }}
             >
               SUBMIT
