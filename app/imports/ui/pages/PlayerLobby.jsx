@@ -287,7 +287,7 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
               Waiting for players
             </div>
           </div>
-          <div className="-mr-1.5 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1.5 lg:grid lg:grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] lg:content-start lg:gap-3">
+          <div className="-mr-1.5 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1.5 lg:grid lg:grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] lg:content-start lg:gap-3">
             {players.map((p, i) => (
               <PlayerRow
                 key={p.id || i}
@@ -321,6 +321,7 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
 
 function JoinedView({ room, playerName, playerId, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
+  const joinLink = `${window.location.origin}/play/join?code=${room.pin}`;
   const selectedGameMode = room.gameMode || gameMode || 'default';
 
   const stillInRoom = !playerName || players.some((p) => p.name === playerName);
@@ -388,6 +389,11 @@ function JoinedView({ room, playerName, playerId, onBack, navigate, gameMode, cu
               <AbilityGuideButton gameMode={selectedGameMode} startingLives={room.customSettings?.startingLives} slim />
             )}
           </div>
+          {/* Anyone already in can bring friends in, not just the host. */}
+          <div className="w-full max-w-md">
+            <p className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-fg3">Invite link</p>
+            <SharePanel link={joinLink} />
+          </div>
           <div className="flex items-center justify-between">
             <p className="font-outfit text-sm font-bold uppercase tracking-widest text-fg2">
               Players <span className="text-fg3">({players.length})</span>
@@ -400,7 +406,7 @@ function JoinedView({ room, playerName, playerId, onBack, navigate, gameMode, cu
           {/* players grid */}
           <div
             className="-mr-1.5 grid min-h-12 shrink content-start gap-3 overflow-y-auto pr-1.5"
-            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 12rem), 1fr))' }}
+            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 15rem), 1fr))' }}
           >
             {players.map((p, i) => (
               <PlayerRow key={p.id || i} player={p} isYou={p.name === playerName} />

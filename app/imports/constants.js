@@ -7,9 +7,9 @@ export const DEFAULT_SEQUENCE_LENGTH = 4;
 export const INITIAL_LEVEL = 4; // starting currentLevel (level 1 == sequence length 4)
 export const BONUS_LIFE_ROUND = 7; // completing this round grants +1 life
 export const STREAK_BONUS_LIFE_THRESHOLD = 3; // a life for every N correct rounds in a row (capped at starting lives outside battle royale)
-export const ROUND_TIMER_SECONDS = 45; // whole-round countdown (not battle royale)
+export const ROUND_TIMER_SECONDS = 50; // whole-round countdown (not battle royale)
 export const STARTING_REPLAYS = 1; // sequence replays each player starts with (not battle royale)
-export const REPLAY_BONUS_STREAK = 1; // +1 replay every time the streak reaches a multiple of this
+export const REPLAY_BONUS_STREAK = 2; // +1 replay every time the streak reaches a multiple of this
 export const SEQUENCE_COLOURS = ['red', 'blue', 'green', 'yellow'];
 
 // --- Abilities ---
@@ -72,9 +72,10 @@ export const FLASH_SPEEDS = {
 export const PLAYBACK_SPEED_FACTORS = { slow: 2, fast: 0.5 };
 export const MIN_FLASH_MS = 160;
 export const MIN_GAP_MS = 70;
-// One fade out and back in under Lights Out. Not a multiple of any flash + gap, so a
-// replay loses different flashes to the dark.
-export const LIGHTS_OUT_CYCLE_MS = 2600;
+// Lights Out darkens one flash in every LIGHTS_OUT_EVERY, rounded down, never the first.
+export const LIGHTS_OUT_EVERY = 3;
+// The longest the board takes to fade to dark before a hidden flash, and back after it.
+export const LIGHTS_OUT_FADE_MS = 150;
 
 // --- Accounts ---
 export const MIN_PASSWORD_LENGTH = 8;
