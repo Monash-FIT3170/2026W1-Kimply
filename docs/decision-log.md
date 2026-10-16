@@ -20,6 +20,17 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-16 - Design guide hex values corrected; presentation guidance added
+
+The Hex column in `docs/design_system.md` never matched the OKLCH tokens the app renders.
+Background was listed as `#1f2030` where the app draws `#060911`, and the tile colours were listed duller than they render, so anything built from the hex (a deck, an image, a `theme-color`) came out lighter and washed out next to the game.
+Every hex value is now the sRGB conversion of its OKLCH token, and the guide says OKLCH is the source of truth.
+The app was unaffected: it uses the OKLCH values through Tailwind and `design.jsx`, and never set the documented `theme-color`.
+A Presentations section adds a projector type scale, chart and lime rules, logo use, and font embedding, since the screen sizes (11px labels, 16px body) do not survive a projector.
+Files: `docs/design_system.md`.
+
+---
+
 ## 2026-10-15 - Patch 2.0: Lights Out nerf, replay streak, longer round, invite link for everyone
 
 Lights Out kept the board fading on a 2.6 s loop for the whole round, playback and input alike, and playtesters called it broken (#154).
