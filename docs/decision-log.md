@@ -20,6 +20,31 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-17 - Docs realigned with the code and with ECS hosting
+
+An audit against `dev` found the README, `AGENTS.md`, the defect register and the deployment docs describing a system that no longer exists (#156).
+The EC2 instances were terminated and their Elastic IPs released on 2026-10-04 (CloudTrail), DNS is in Route 53, and development shares production's load balancer and NAT gateway (D42), yet every top-level doc still said the instances were running and that the two environments shared no AWS resource.
+`AGENTS.md` was missing the global leaderboard (collection, publication, method, `/leaderboard`, its test), the `/play/modes/:pin` and `/play/custom/:pin` routes, and `rooms.setGameMode`, `rooms.updateSettings` and `game.resetSequences`; most of its line references had drifted.
+The documented test command, `docker compose exec backend meteor npm test`, fails with "Can't listen on port 3000" while the app is running, so the README and `AGENTS.md` now give the one-shot test container.
+Defect statuses moved with the code: D7, D11 and D14 are fixed, D5 is partly fixed (the round timer exists but is enforced by the client), and the duplicated sequence generator is gone.
+Two new defects are registered rather than fixed, because this change is documentation only: D46 (`gameEvents` has no TTL or index) and D47 (the `globalLeaderboard` publication sends every `accountId`, which `rooms.join` and `players.join` trust).
+The `deploy` skill was rewritten for ECS.
+The 2026-10-16 design guide entry below was pushed after #155 had already merged, so it reached `dev` only with this change.
+Files: `README.md`, `AGENTS.md`, `docs/defect-register.md`, `docs/ecs-target-architecture.md`, `docs/deployment-manual.md`, `docs/dev-environment.md`, `docs/operations.md`, `docs/google-sign-in.md`, `infra/terraform/README.md`, `infra/docs/architecture.md`, `.agents/skills/deploy/SKILL.md`.
+
+---
+
+## 2026-10-16 - Design guide hex values corrected; presentation guidance added
+
+The Hex column in `docs/design_system.md` never matched the OKLCH tokens the app renders.
+Background was listed as `#1f2030` where the app draws `#060911`, and the tile colours were listed duller than they render, so anything built from the hex (a deck, an image, a `theme-color`) came out lighter and washed out next to the game.
+Every hex value is now the sRGB conversion of its OKLCH token, and the guide says OKLCH is the source of truth.
+The app was unaffected: it uses the OKLCH values through Tailwind and `design.jsx`, and never set the documented `theme-color`.
+A Presentations section adds a projector type scale, chart and lime rules, logo use, and font embedding, since the screen sizes (11px labels, 16px body) do not survive a projector.
+Files: `docs/design_system.md`.
+
+---
+
 ## 2026-10-15 - Patch 2.0: Lights Out nerf, replay streak, longer round, invite link for everyone
 
 Lights Out kept the board fading on a 2.6 s loop for the whole round, playback and input alike, and playtesters called it broken (#154).
