@@ -1,8 +1,10 @@
 # Defect Register
 
-Defects found during the production-readiness inspection that were **deliberately not fixed** in Phase 1.
+Every known defect, open or fixed.
+The register began with the production-readiness inspection, whose findings were **deliberately not fixed** in Phase 1, and has recorded each defect found since.
 
 They are recorded here so no future session has to rediscover them, and so the decision to defer them is explicit rather than accidental.
+Line references were re-checked against the code on 2026-10-17; entries marked fixed keep the line numbers from when they were found.
 Each entry states what is wrong, how it actually fails, and what the fix would be.
 
 The IDs match the summary table in [AGENTS.md](../AGENTS.md#known-defects), which carries one line per defect and points here for the detail.
@@ -10,7 +12,7 @@ Keep the two in step: an ID means the same thing in both files, or neither file 
 
 There is no D13. The register and the summary table had drifted by one on the last three IDs; reconciling them on 2026-08-29 onto the summary table's numbering left the gap. Do not renumber to close it - the IDs are cited from skills and pull requests.
 
-**Last verified:** 2026-10-12
+**Last verified:** 2026-10-17
 
 ---
 
@@ -44,17 +46,20 @@ Still in the same category:
 
 | Method | Location | Problem |
 |---|---|---|
-| `rooms.start` | `rooms.js:58` | No host check. Anyone who knows a PIN can start someone else's game |
-| `rooms.kick` | `rooms.js:69` | Refuses to kick the host, but never verifies the caller. Any member can kick any other member |
-| `rooms.updateGameName` | `rooms.js:126` | No host check. Also the only string field written untrimmed (`:142`) |
-| `rooms.disconnect` | `rooms.js:82` | Passing the host's id **deletes the entire room**. The ids are published by `rooms.lobby` at `rooms.js:24` |
-| `rooms.reconnect` | `rooms.js:149` | Trusts a client-supplied `playerId` and returns that player's name, so anyone can "reconnect as" anyone |
-| `rounds.generate` | `gameMethods.js:88` | Publicly callable with an unvalidated `length`. `Meteor.call('rounds.generate', 100000000)` is a one-line OOM |
-| `rounds.advance` | `gameMethods.js:218` | Publicly callable with any round id, so anyone can force-advance any game |
-| `players.join` | `gameMethods.js:102` | No check that the room exists, that the caller is in it, or that the round belongs to it |
+| `rooms.start` | `rooms.js:165` | No host check. Anyone who knows a PIN can start someone else's game |
+| `rooms.setGameMode`, `rooms.setAbilities`, `rooms.updateSettings` | `rooms.js:98`, `:121`, `:131` | No host check. Any caller who knows a PIN can change the lobby's mode, abilities or custom settings |
+| `rooms.kick` | `rooms.js:188` | Refuses to kick the host, but never verifies the caller. Any member can kick any other member |
+| `rooms.updateGameName` | `rooms.js:260` | No host check. Also the only string field written untrimmed (`:276`) |
+| `rooms.disconnect` | `rooms.js:201` | Passing the host's id **deletes the entire room**. The ids are published by `rooms.lobby` at `rooms.js:23` |
+| `rooms.reconnect` | `rooms.js:282` | Trusts a client-supplied `playerId`. It now refuses a player bound to a different browser session, but a lobby player with no recorded session can still be claimed |
+| `rounds.generate` | `gameMethods.js:222` | Publicly callable for any `gameId`, inserting an extra `isCurrent` round into that game. The length now comes from the room, so the old one-line OOM is gone |
+| `rounds.advance` | `gameMethods.js:496` | Publicly callable with any round id, so anyone can force-advance any game |
+| `game.resetSequences` | `gameMethods.js:564` | Publicly callable. Deletes every round of any game, including one in progress |
+
+`players.join` used to be in this table. It now checks that the room exists, that the round belongs to it, and that the lobby player belongs to the caller's connection (D24).
 
 There is also no `check()` / `Match` / SimpleSchema validation anywhere in the codebase, and no `DDPRateLimiter`.
-`attemptedSequence` is written to Mongo verbatim at `gameMethods.js:139`, so arbitrary JSON can be stored.
+A connected `players.submitSequence` is shape-checked by `assertAttemptShape` (`gameMethods.js:53`) while bot detection is on, which is always outside development. With detection off in development, `attemptedSequence` is still written to Mongo verbatim.
 
 ### Fix
 
@@ -86,9 +91,9 @@ The `advanced` flag is checked in three separate places (`:79`, `:206`, `:227`),
 `rounds.advance` now claims the round with `updateAsync({ _id, advanced: { $ne: true } }, { $set: { advanced: true, isCurrent: false } })` and returns unless that update matched, so only one caller inserts the next round. `roundAdvance.test.js` fires two advances at once.
 
 ### Double winner
-`checkWinner` at `gameMethods.js:14 -> 22` fetches all players, computes `active.length === 1`, then writes `winner: true`.
+`checkWinner` in `gameEngine.js:92` fetches all players, computes the active set, then writes `winner: true`.
 Two concurrent eliminations can each observe a different single remaining player and crown two winners.
-The `active.length === 0` branch at `:39-53` uses a `{ multi: true }` update and will mark **every** tied player as winner.
+Its all-eliminated branch uses a `{ multi: true }` update and will mark **every** tied player as winner.
 
 **Fix:** `findOneAndUpdate` with the expected precondition in the selector.
 
@@ -101,48 +106,57 @@ Two concurrent wrong submissions both read `lives: 3` and both write `lives: 2`,
 **Fixed 2026-10-11:** wrong answers, turn timeouts and Strikes go through `loseLife` in `gameEngine.js`, a guarded `$inc: { lives: -1 }` followed by an elimination check; Steal and the round-7 bonus use `$inc` too.
 
 ### Duplicate player names
-`rooms.js:113 -> 118` checks name uniqueness against a snapshot, then `$push`es.
-This matters more than it looks: host identity is determined by **name comparison** at `rooms.js:76` and `:89`, so winning this race can promote a non-host.
+`rooms.js:231 -> 236` checks name uniqueness against a snapshot, then `$push`es.
+This matters more than it looks: host identity is determined by **name comparison** at `rooms.js:195` and `:208`, so winning this race can promote a non-host.
 
 **Fix:** stop identifying the host by name. Persist `hostId` on the room (see D6) and compare against that.
 
 ### PIN collision - **closed in Phase 1**
-`rooms.js:37-46` was a check-then-insert with no unique index.
+`rooms.js:65-73` was a check-then-insert with no unique index.
 The `pin_unique` index added in `server/indexes.js` now makes a duplicate insert fail at the database layer.
 The method should still be updated to catch the duplicate-key error and retry rather than surfacing it, but the data can no longer become corrupt.
 
-Note that PINs are generated with `Math.random()` (`rooms.js:15`), not a CSPRNG, over a 32^5 keyspace with only 10 retries.
+Note that PINs are generated with `Math.random()` (`rooms.js:16`), not a CSPRNG, over a 32^5 keyspace with only 10 retries.
 
 ---
 
-## D5 - No server-side round deadline
+## D5 - The round deadline is enforced by the client - **partly fixed**
 
-**Severity: high for real users.** The most likely thing to ruin an actual game session.
+**Severity: low for real users, medium against a hostile client.**
 
-A round advances only when **every** active player has submitted (`gameMethods.js:79-81` and `:206-208`).
-There is no timer, no deadline, and no timeout.
+As first recorded, a round advanced only when every active player had submitted, with no timer at all, so one player closing their tab stalled the game permanently.
+Two later changes cover every honest case:
 
-One player closing their tab mid-round stalls that game **permanently** for everyone else. There is no recovery path short of everyone leaving.
+- A player whose connection closes is marked disconnected and removed after `DISCONNECT_GRACE_MS` (15 s) unless they rebind (`gameMethods.js`, the `Meteor.onConnection` handler), and the round is rechecked.
+- Each client runs the `ROUND_TIMER_SECONDS` (50 s) round timer and calls `players.timeoutRound` when it expires (`GamePage.jsx:470`), which eliminates a player who has not cleared the round so `advanceRoundIfReady` can move on.
 
-**Fix:** a server-side per-round deadline that auto-submits an empty attempt for any player who has not responded, or marks them disconnected and excludes them from the `allFinished` calculation.
+What remains: the deadline lives in the client.
+A client that stays connected and never calls `players.timeoutRound`, whether modified or simply stuck, still holds a standard round open for everyone.
+
+**Fix:** a server-side deadline per round (an `endsAt` written by `rounds.generate` / `rounds.advance`, enforced by a server timer that times out every player still playing), with the client timer kept only for display.
 
 ---
 
 ## D6 - `rooms.reconnect` always reports `isHost: false`
 
-`rooms.js:172` returns `isHost: room.hostId === playerId`, but `rooms.create` (`rooms.js:46-53`) **never writes a `hostId` field** to the document.
+`rooms.js:318` returns `isHost: room.hostId === playerId`, but `rooms.create` (`rooms.js:55-95`) **never writes a `hostId` field** to the document.
 `room.hostId` is therefore always `undefined` and the comparison is always false.
 
-`rooms.create` does return `hostId` to the client at `:55`, and `PlayRoute.jsx:151` uses it, so only the reconnect path is broken.
+`rooms.create` does return `hostId` to the client at `:95`, and `PlayRoute.jsx:176` uses it, so only the reconnect path is broken.
 
-Compounding this, the host's reconnect data is never persisted at all: the branch that would store it is commented out at `PlayRoute.jsx:144-150`.
+Compounding this, the host's reconnect data is never persisted at all: the branch that would store it is commented out at `PlayRoute.jsx:169-174`.
 A host who reloads has no reconnect path.
 
 **Fix:** persist `hostId` on the room document in `rooms.create`, and re-enable the host branch in `PlayRoute.jsx`. This also fixes the name-comparison problem in D4.
 
 ---
 
-## D7 - Refreshing the game page grants free lives
+## D7 - Refreshing the game page grants free lives - **fixed**
+
+**Fixed (confirmed against the code 2026-10-17):** `GamePage` saves the player ID in `localStorage['gamePlayerId:<gameId>']` and keeps a per-tab reconnect credential in `sessionStorage` (`gameReconnect.js`).
+After a refresh it either calls `players.join` with the lobby player ID, which finds the existing player and rebinds it, or calls `players.rebind` with the saved ID (`GamePage.jsx:338-371`).
+Either way the same player document, with the same lives, is resumed; no second player is inserted.
+The original analysis follows.
 
 `GamePage.jsx:39-49`
 
@@ -157,19 +171,19 @@ A refresh is therefore a way to reset your lives, and it leaves duplicate rows i
 
 ## D8 - Password hashing is a single unstretched SHA-256
 
-`playerAccounts.js:22-24`
+`playerAccounts.js:24`
 
 ```js
 return createHash('sha256').update(`${salt}:${password}`).digest('hex');
 ```
 
-Per-user 16-byte salts are present (`:53`), so rainbow tables do not apply.
+Per-user 16-byte salts are present (`:151`), so rainbow tables do not apply.
 But this is one round of SHA-256 with no work factor, and a commodity GPU computes billions per second. An offline crack of a leaked `playerAccounts` dump is effectively instant for anything short of a passphrase.
 
 Also in this file:
 
-- **Non-constant-time comparison** at `:87` (`attemptedHash !== account.passwordHash`).
-- **Account enumeration oracle**: `:83` throws `not-found` for an unknown email but `:88` throws `wrong-password` for a known one, so the method confirms whether an address is registered.
+- **Non-constant-time comparison** at `:191` (`attemptedHash !== account.passwordHash`).
+- **Account enumeration oracle**: `:183` throws `not-found` for an unknown email but `:192` throws `wrong-password` for a known one, so the method confirms whether an address is registered.
 - **No rate limiting**, so credential stuffing and enumeration are both unbounded.
 - **No maximum password length**, so a client can post a very large string and force unbounded hashing work.
 - `signIn` now issues a session token (#108), but **no method checks it**: `rooms.create`, `rooms.join`, and `players.join` still accept a client-supplied `accountId`, so authentication still has no effect on any authorization decision.
@@ -211,7 +225,10 @@ It only appears to work because the parent effect at `:369-374` races it and nav
 
 ---
 
-## D11 - Root `package-lock.json` is desynced
+## D11 - Root `package-lock.json` is desynced - **fixed**
+
+**Fixed (confirmed 2026-10-17):** the root `package.json` now declares `ws` and the `format`, `format:check`, `test` and `test-app` scripts, the root lockfile is named `kimply-workspace` and matches it, and `npm ci` at the repository root succeeds.
+The original analysis follows.
 
 Root `package-lock.json` declares a dependency on `@meteorjs/rspack@^2.0.1`, while root `package.json` has no `dependencies` block at all and `app/package.json` pins `^1.0.0` (a different major).
 It also carries a stale `"name": "2026W1-Kimply"` against the actual `"kimply-workspace"`.
@@ -226,14 +243,18 @@ This is currently harmless because everything runs with `working-directory: app`
 
 ## D12 - A new `AudioContext` per tile click
 
-`ColourSequence.jsx:80-92` constructs a new `AudioContext` on every tile click and never closes it.
+`ColourSequence.jsx:130-143` constructs a new `AudioContext` on every tile click and never closes it.
 Browsers cap the number of live contexts per document, so a long game eventually throws and click feedback silently stops.
 
 **Fix:** create one context lazily, reuse it, and resume it on first user gesture.
 
 ---
 
-## D14 - `npm run format:check` fails on `main`
+## D14 - `npm run format:check` fails on `main` - **fixed**
+
+**Fixed (confirmed 2026-10-17):** `prettier . --check` in `app/` reports "All matched files use Prettier code style!" on `dev`.
+It is still not a CI gate; adding it to `.github/workflows/test.yml` is now possible.
+The original analysis follows.
 
 Twelve files are Prettier-dirty on `main`, predating any deployment work.
 Prettier is the only style gate in this repository (there is no ESLint), and it cannot become a CI gate while the default branch fails it.
@@ -407,15 +428,34 @@ The deployed image has not been checked, so the confirmed scope is the local pro
 **Fix:** correct the emitted CSS asset path and its server registration, then verify a clean production build and the removed-player screen.
 See [the executed test report](bot-detection-test-results.md) for browser evidence.
 
+## D46 - `gameEvents` grows without bound
+
+**Found 2026-10-17 by reading the code; confirmed locally** (the local `gameEvents` collection has only the `_id` index).
+
+Every ability outcome inserts a `gameEvents` document (`abilityEngine.js:81`), and nothing deletes them.
+`server/indexes.js` gives `rooms`, `rounds` and `leaderboard` TTL indexes precisely so the Atlas M0 free tier stays inside 512 MB, but `gameEvents` has none.
+The `gameFeed` publication also selects by `{ gameId, type }` with no index, so each subscription scans the collection.
+
+**Fix:** add `{ createdAt: 1 }` with a TTL (24 hours matches `rooms` and `rounds`) and `{ gameId: 1, type: 1, createdAt: -1 }` to `server/indexes.js`.
+
+## D47 - The global leaderboard publishes account ids that the game trusts
+
+**Reproduced 2026-10-17:** an anonymous raw DDP client that subscribes to `globalLeaderboard` receives every row with its `accountId`.
+
+`server/publications.js:60` publishes `globalLeaderboard` with no field projection, so `accountId` reaches every visitor.
+`rooms.join`, `rooms.create` and `players.join` accept a client-supplied `accountId`, and `recordGlobalResult` credits the game to whatever id the player document carries.
+Anyone can therefore copy a top-50 player's id and play games that change that account's `gamesPlayed`, `wins` and `bestRound`.
+`globalLeaderboard.myStanding` also returns any account's stats for a supplied id.
+This is the concrete consequence of the last bullet of D8: the account session token is never checked.
+
+**Fix:** resolve the account on the server from the session token (`playerAccounts.resume`) inside `rooms.join` / `rooms.create` / `players.join` instead of accepting an id, and publish the leaderboard without `accountId` (mark the caller's own row with a server-computed flag or a method instead).
+
 ## Structural issues that are not bugs but shape future work
 
-**Duplicated sequence generator.** `generateSequence` exists identically in `imports/api/sequence.js:9` and `imports/api/gameMethods.js:9`.
-The live game uses the `gameMethods.js` copy; `tests/sequence.test.js` covers the `sequence.js` copy.
-The tested function is therefore not the one the game runs.
-
-**The current-round sequence is necessarily on the client.** Phase 1 removed other rooms' sequences, past rounds' sequences, and other players' `attemptedSequence` from what is published.
-A player's own current-round sequence still reaches their browser, because the client must have it to animate the playback (`GamePage.jsx:287` into `ColourSequence.jsx:72`).
+**The current-round sequence is necessarily on the client.** Phase 1 removed other rooms' sequences, past rounds' sequences, and other players' `attemptedSequence` from what is published, and D20 moved each player's sequence into their own `players.secret`.
+A player's own current-round sequence still reaches their browser, because the client must have it to animate the playback.
 Genuinely preventing same-round cheating needs a server-timed reveal plus server-side enforcement of the submission window, which is a redesign rather than a fix.
 
-**Sequences use `Math.random()`.** `sequence.js:10` and `gameMethods.js:10` are not cryptographically random, so future sequences are in principle predictable from observed ones.
+**Sequences use `Math.random()`.** `sequence.js:10` is not cryptographically random, so future sequences are in principle predictable from observed ones.
+`generateSequence` now exists only there; `gameEngine.js` re-exports it, so the tested function is the one the game runs.
 This only matters once the reveal timing above is addressed.

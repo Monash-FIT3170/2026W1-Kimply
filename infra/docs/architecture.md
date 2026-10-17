@@ -8,8 +8,9 @@ In VS Code, a Mermaid preview extension does the same.
 
 ## 1. Runtime: how a request and a database call travel
 
-`ecs.kimply.online` also resolves to the same load balancer, as a second name that bypasses the apex redirect.
-Development has the identical shape on `dev.kimply.online` (and `ecs-dev.kimply.online`), with no apex step.
+The apex `kimply.online` is a Route 53 ALIAS straight to the load balancer, so it serves the app without a redirect step.
+The build-time names `ecs.kimply.online` and `ecs-dev.kimply.online` are retired and no longer resolve.
+Development has the identical shape on `dev.kimply.online`, served by the same load balancer through a host-header rule (D42).
 
 Solid arrows are traffic players cause.
 Dotted arrows are traffic the tasks start themselves.
