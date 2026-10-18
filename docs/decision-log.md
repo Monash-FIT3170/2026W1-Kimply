@@ -20,6 +20,17 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-18 - Room code letters no longer duplicate on Android keyboards with predictive text
+
+The join page captured the code in a hidden `<input>` that it emptied after every keystroke, adding each input event's text to the code. A keyboard with predictive text keeps the word it is composing in its own buffer and re-sends it as the user types, so after the field was emptied behind its back the next event carried letters already typed, and they were added twice. It affected only players whose keyboard composes (Gboard with suggestions on); a keyboard that commits one character at a time never showed it. Suggestions off made it stop, which is how it was narrowed down.
+
+The hidden input now holds the whole code and is never cleared; the code is `normalizeRoomCode(input.value)` on every input event, so nothing is ever added up. While the keyboard is composing (`compositionstart` to `compositionend`) the field is not written to, since that also makes it resend, and it is tidied (case, stray spaces, extra characters) when composing ends (`roomCodeInputWriteBack`). Backspace is now the input's own; the old handler waited for `event.key === 'Backspace'`, which Android keyboards report as `Unidentified`, so deleting a letter probably did not work there either.
+
+- **Not tested on a device:** there is no Android device or browser here. `uiHelpers.test.js` covers the helpers and the shape of what a composing keyboard sends, not the page.
+- **Removed:** `appendRoomCodeInput` and `clearCapturedInput`, the approach that caused it, and their tests. `removeOnBackspace` and `combineKeyHandlers` in `keyboard.js` are no longer used by the app; they were left in place.
+
+Files: `ui/pages/JoinRoom.jsx`, `ui/roomCode.js`, `tests/uiHelpers.test.js`.
+
 ## 2026-10-18 - The sequence no longer replays after a refresh
 
 A player who refreshed after the sequence had finished saw it play again. The tab remembers watched sequences in `sessionStorage`, but `ColourSequence` honoured that only on its first effect run, while `GamePage` bumped `replayKey` afterwards. When the board mounted with the sequence already present, which depends on whether `rounds` or `players.secret` arrives first, the first run was spent on the skip and the bump then played the whole pattern. A reconnect re-publishing `players.secret` did the same without a refresh.
