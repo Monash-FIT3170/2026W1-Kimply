@@ -3,10 +3,11 @@ import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { Meteor } from 'meteor/meteor';
 import { PRIMARY, TILE, HAIRLINE, TileLattice, Wordmark, ArrowIcon, BackChevron, FG2 } from '../components/design';
 import { combineKeyHandlers, removeOnBackspace, submitOnEnter } from '../keyboard';
-import { appendRoomCodeInput, clearCapturedInput, roomCodeFromSearchParams } from '../roomCode';
+import { appendRoomCodeInput, clearCapturedInput, joinRoomPath, roomCodeFromSearchParams } from '../roomCode';
 import { useSignedInAccount } from '../accountSession';
 import { loadUsername, saveUsername, USERNAME_MAX_LENGTH } from '../savedUsername';
 import { banMessage } from '../browserSession';
+import { AccountStatus } from '../components/AccountStatus';
 
 const SLOTS = 5;
 
@@ -168,23 +169,27 @@ export function JoinRoom() {
           5-character code · Ask the host to share theirs
         </p>
 
-        {!state?.playerName && (
-          <div className="w-full max-w-sm">
-            <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg3">Username</p>
-            <input
-              value={playerName}
-              onChange={(e) => {
-                nameChosen.current = true;
-                setPlayerName(e.target.value);
-              }}
-              onKeyDown={submitOnEnter(handleJoin)}
-              placeholder="Enter your username"
-              maxLength={USERNAME_MAX_LENGTH}
-              className="w-full rounded-[14px] border border-hairline bg-surface px-4 py-3 font-outfit text-base font-semibold text-fg outline-none placeholder:text-fg3"
-              style={{ caretColor: PRIMARY }}
-            />
-          </div>
-        )}
+        <div className="w-full max-w-sm">
+          {!state?.playerName && (
+            <>
+              <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg3">Username</p>
+              <input
+                value={playerName}
+                onChange={(e) => {
+                  nameChosen.current = true;
+                  setPlayerName(e.target.value);
+                }}
+                onKeyDown={submitOnEnter(handleJoin)}
+                placeholder="Enter your username"
+                maxLength={USERNAME_MAX_LENGTH}
+                className="w-full rounded-[14px] border border-hairline bg-surface px-4 py-3 font-outfit text-base font-semibold text-fg outline-none placeholder:text-fg3"
+                style={{ caretColor: PRIMARY }}
+              />
+            </>
+          )}
+          {/* An invite link lands here without passing /play, so this is where they sign up. */}
+          <AccountStatus returnTo={joinRoomPath(code)} />
+        </div>
 
         {error && <p className="m-0 text-center font-manrope text-[13px] text-red-400">{error}</p>}
 

@@ -20,6 +20,18 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-18 - Sign up from an invite link
+
+A player who opened an invite link (`/play/join?code=…`) skipped `/play`, which was the only page linking to `/account`, so they could not create an account before joining (#159).
+The join page now shows the same "Signed in as … · Sign out" or "Want to save your stats? Sign up" line as `/play`, from the new shared `components/AccountStatus.jsx`.
+`/account` used to send everyone to `/play` afterwards, which would have dropped the room code; it now returns to the `returnTo` path in router state, so the invite-link player lands back on the same code with their display name filled in and joins with their `accountId`.
+`accountReturn.js` honours only in-app paths, so router state can never redirect off-site.
+Leaving `/account` replaces it in history, so Back from the room does not reopen a form the player has already finished.
+`joinRoomPath` in `roomCode.js` now builds the invite link in `PlayerLobby.jsx` too, so the link and the return path cannot drift.
+An account still only counts if the player signs in **before** joining: `rooms.join` records the `accountId` at that moment, and signing in from the lobby afterwards would not link it.
+
+---
+
 ## 2026-10-17 - Docs realigned with the code and with ECS hosting
 
 An audit against `dev` found the README, `AGENTS.md`, the defect register and the deployment docs describing a system that no longer exists (#156).
