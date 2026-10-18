@@ -16,7 +16,8 @@ import {
 } from '../components/design';
 import { ReconnectPopup } from '../components/ReconnectPopup';
 import { submitOnEnter } from '../keyboard';
-import { signOut, useSessionResuming, useSignedInAccount } from '../accountSession';
+import { useSignedInAccount } from '../accountSession';
+import { AccountStatus } from '../components/AccountStatus';
 import { loadUsername, saveUsername, USERNAME_MAX_LENGTH } from '../savedUsername';
 import { banMessage } from '../browserSession';
 
@@ -82,7 +83,6 @@ function RouteCard({ kind, title, blurb, color, primary, onClick, disabled }) {
 export function PlayRoute() {
   const { state } = useLocation();
   const signedInAccount = useSignedInAccount();
-  const sessionResuming = useSessionResuming();
 
   const [name, setName] = useState(() => signedInAccount?.displayName || loadUsername());
   const [editing, setEditing] = useState(() => !name.trim());
@@ -238,28 +238,7 @@ export function PlayRoute() {
             </div>
           )}
 
-          {sessionResuming ? (
-            <p className="mt-3 text-center font-manrope text-[13px] text-fg3" aria-hidden="true">
-              &nbsp;
-            </p>
-          ) : signedInAccount ? (
-            <p className="mt-3 text-center font-manrope text-[13px] text-fg3">
-              Signed in as {signedInAccount.email} ·{' '}
-              <button
-                onClick={signOut}
-                className="cursor-pointer border-none bg-transparent p-0 font-outfit font-bold text-fg"
-              >
-                Sign out
-              </button>
-            </p>
-          ) : (
-            <p className="mt-3 text-center font-manrope text-[13px] text-fg3">
-              Want to save your stats?{' '}
-              <Link to="/account" className="font-outfit font-bold text-fg">
-                Sign up
-              </Link>
-            </p>
-          )}
+          <AccountStatus returnTo="/play" />
         </div>
 
         {wasKicked && (

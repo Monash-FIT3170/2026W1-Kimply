@@ -10,7 +10,7 @@ Shared guidance for any coding agent working in this repository (Cursor, Claude 
 > If you change any of those things, update the matching table before you finish, and add an entry to [docs/decision-log.md](docs/decision-log.md) in the same change.
 > See [Maintaining this file](#maintaining-this-file) at the bottom.
 
-**Last verified against the codebase:** 2026-10-17
+**Last verified against the codebase:** 2026-10-18
 
 ---
 
@@ -201,7 +201,7 @@ app/
 │       ├── pages/            # Splash, PlayRoute, JoinRoom, GameModeSelector, CustomGameSettings,
 │       │                     # PlayerLobby, GamePage, Account, GlobalLeaderboard
 │       ├── abilities/        # Draft overlay, hand dialog, target picker, live feed, lobby switch and card guide
-│       ├── components/       # design.jsx, ConfirmationPopup.jsx, ReconnectPopup.jsx, RemovedScreen.jsx
+│       ├── components/       # design.jsx, AccountStatus.jsx, ConfirmationPopup.jsx, ReconnectPopup.jsx, RemovedScreen.jsx
 │       ├── Header.jsx
 │       ├── Leaderboard.jsx        # per-round live leaderboard (players + rounds)
 │       ├── leaderboardModels.js   # live leaderboard row helpers
@@ -211,6 +211,7 @@ app/
 │       ├── roomCode.js            # pure helpers for the 5-slot code entry
 │       ├── keyboard.js            # pure key handlers
 │       ├── accountSession.js      # signed-in account: session token, resume, useSignedInAccount
+│       ├── accountReturn.js       # where /account sends the player afterwards (in-app paths only)
 │       ├── browserSession.js      # anonymous browser session token, resumed on startup and reconnect
 │       ├── gameReconnect.js       # per-tab game reconnect credential (sessionStorage)
 │       ├── savedUsername.js       # remembers the last username in localStorage
@@ -239,7 +240,7 @@ Meteor's connect handler does this by default when the whole app is proxied.
 | `/play/modes/:pin` | `GameModeSelector` | host picks the game mode (`rooms.setGameMode`) |
 | `/play/custom/:pin` | `CustomGameSettings` | host sets speed, lives, starting length and growth (`rooms.updateSettings`) |
 | `/play/:pin` | `PlayerLobby` | host view or joined view based on `location.state.isHost` |
-| `/account` | `Account` | register / sign in, with a Google button when `GOOGLE_CLIENT_ID` is set |
+| `/account` | `Account` | register / sign in, with a Google button when `GOOGLE_CLIENT_ID` is set. Returns to `location.state.returnTo`, else `/play` |
 | `/leaderboard` | `GlobalLeaderboard` | top 50 signed-in players by best round, then wins |
 | `*` | `Navigate to="/"` | catch-all |
 
@@ -579,7 +580,7 @@ How to write and run them is the `test` skill. What exists today:
 | `streak.test.js` | current vs longest streak |
 | `accuracy.test.js` | `totalGuesses` / `correctGuesses` |
 | `updateWinner.test.js` | last-one-standing winner selection |
-| `uiHelpers.test.js` | `roomCode.js`, `keyboard.js`, and `savedUsername.js` pure helpers |
+| `uiHelpers.test.js` | `roomCode.js`, `keyboard.js`, `savedUsername.js` and `accountReturn.js` pure helpers |
 | `sequence.test.js` | `imports/api/sequence.js` |
 | `publications.test.js` | scoped pubs; no `sequence` on `rounds`; no `attemptedSequence` or `secret` on `players` / `eliminations`; `players.secret` is connection-bound; `gameFeed` |
 | `playerReconnect.test.js` | Rebind and join ownership, valid reconnects, legacy enrollment, lobby and round checks, credential publication exclusion |
