@@ -4,6 +4,7 @@ import '../imports/api/gameMethods.js';
 import { RoundsCollection } from '../imports/api/rounds.js';
 import { PlayersCollection } from '../imports/api/players.js';
 import { RoomsCollection } from '../imports/api/rooms.js';
+import { LeaderboardCollection } from '../imports/api/leaderboard.js';
 import { expireRound, startRoundClock, sweepRoundDeadlines } from '../imports/api/gameEngine.js';
 import { resolveRoundDraft } from '../imports/api/abilityEngine.js';
 import { ROUND_EXPIRE_GRACE_MS, ROUND_START_FALLBACK_MS, ROUND_TIMER_SECONDS } from '../imports/constants.js';
@@ -181,6 +182,37 @@ if (Meteor.isServer) {
         assert.strictEqual(round.advanced, true);
         assert.ok(round.expiredAt);
         assert.strictEqual(round.expiringUntil, undefined);
+      });
+
+      it('removes a player whose connection closed, as the disconnect cleanup would, rather than eliminating them', async function () {
+        await insertRoom(['a', 'b', 'c']);
+        const roundId = await insertRound({ deadlineAt: overdue() });
+        await insertPlayer(roundId, 'a', { completeRound: true });
+        await insertPlayer(roundId, 'b', { completeRound: true });
+        const gone = await insertPlayer(roundId, 'c', { connected: false });
+        await LeaderboardCollection.insertAsync({ gameId, playerId: gone, name: 'c', roundId });
+
+        await expireRound(roundId);
+
+        assert.strictEqual(await PlayersCollection.findOneAsync(gone), undefined);
+        assert.strictEqual(await LeaderboardCollection.find({ playerId: gone }).countAsync(), 0);
+        const room = await RoomsCollection.findOneAsync({ pin: gameId });
+        assert.deepStrictEqual(room.players.map((p) => p.id).sort(), ['a', 'b']);
+        assert.strictEqual((await RoundsCollection.findOneAsync(roundId)).advanced, true);
+      });
+
+      it('still eliminates, and keeps on the board, a slow player who is connected', async function () {
+        await insertRoom(['a', 'b', 'c']);
+        const roundId = await insertRound({ deadlineAt: overdue() });
+        await insertPlayer(roundId, 'a', { completeRound: true });
+        await insertPlayer(roundId, 'b', { completeRound: true });
+        const slow = await insertPlayer(roundId, 'c', { connected: true });
+
+        await expireRound(roundId);
+
+        assert.strictEqual((await PlayersCollection.findOneAsync(slow)).eliminated, true);
+        const room = await RoomsCollection.findOneAsync({ pin: gameId });
+        assert.strictEqual(room.players.length, 3);
       });
 
       it('is idempotent', async function () {

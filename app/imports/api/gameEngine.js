@@ -231,6 +231,17 @@ export async function advanceRoundIfReady(round) {
   return false;
 }
 
+// Take a player out of the game as though they had never joined: their player, their
+// leaderboard rows and their seat in the lobby. For someone who has gone, as opposed to
+// eliminated, who stays on the board. The caller rechecks the winner and the round.
+export async function removePlayerFromGame(player) {
+  await PlayersCollection.removeAsync(player._id);
+  await LeaderboardCollection.removeAsync({ gameId: player.gameId, playerId: player._id });
+  if (player.lobbyPlayerId) {
+    await RoomsCollection.updateAsync({ pin: player.gameId }, { $pull: { players: { id: player.lobbyPlayerId } } });
+  }
+}
+
 // --- The round clock ---
 // A standard round carries deadlineAt, the server's own deadline, so one player who stops
 // responding (a phone that left the browser) cannot hold everyone else on a round. It is
@@ -294,7 +305,8 @@ export async function startClockIfEveryoneJoined(gameId, roundId) {
   return startRoundClock(roundId);
 }
 
-// The deadline passed: eliminate every player who has not cleared the round, drop lobby
+// The deadline passed: eliminate every player who has not cleared the round (and remove the
+// ones who have disconnected), drop lobby
 // members who never joined (they would hold the round forever), then declare a winner or
 // advance as any other elimination does. Returns whether this call did the work.
 //
@@ -325,6 +337,13 @@ export async function expireRound(roundId, now = Date.now()) {
       winner: { $ne: true },
     }).fetchAsync();
     for (const player of stragglers) {
+      // Someone whose connection has closed has gone, not run out of time. Remove them, as the
+      // disconnect cleanup does after its grace period. That cleanup skips eliminated players,
+      // so eliminating them here would leave them in the game for good.
+      if (player.connected === false) {
+        await removePlayerFromGame(player);
+        continue;
+      }
       await PlayersCollection.updateAsync(
         { _id: player._id, roundId, eliminated: false, completeRound: false },
         {

@@ -425,10 +425,10 @@ PIN alphabet is `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (`rooms.js:12`), generated wi
 | `players.timeoutRound` | 454 | `playerId, timeoutRoundId` | Eliminates the caller's own player at once. The client no longer calls it: the server's round deadline (`rounds.expire`) does this for everyone |
 | `players.leaveGame` | 490 | `playerId` | Marks a spectator eliminated while retaining their result, then rechecks the winner and round progress |
 | `rounds.advance` | 515 | `currentRoundId` | Marks the round advanced, inserts the next one (with a draft when abilities are on, and its `deadlineAt` unless a draft is holding the clock), moves active players onto it with their new `secret.sequence` |
-| `rounds.expire` | 591 | `roundId` | Enforces a round's deadline: past `deadlineAt` + `ROUND_EXPIRE_GRACE_MS` it eliminates every player who has not cleared the round, drops lobby members who never joined, then declares a winner or advances. Any client may call it; the server checks the deadline. Returns whether it ran |
+| `rounds.expire` | 591 | `roundId` | Enforces a round's deadline: past `deadlineAt` + `ROUND_EXPIRE_GRACE_MS` it eliminates every player who has not cleared the round (and removes any whose connection has closed, as the disconnect cleanup does), drops lobby members who never joined, then declares a winner or advances. Any client may call it; the server checks the deadline. Returns whether it ran |
 | `time.now` | 597 | none | The server's clock in ms, so the client counts down to `deadlineAt` on the server's time |
 
-Shared helpers live in `gameEngine.js`: `checkWinner`, `advanceRoundIfReady`, `getOrCreateRound`, `loseLife`, `clearRound`, `moveToLevel`, `recordGlobalResult`, and the round clock: `startRoundClock`, `startClockIfEveryoneJoined`, `armRoundTimer`, `armRoundStartFallback`, `expireRound`, `assertRoundOpen`, `sweepRoundDeadlines`.
+Shared helpers live in `gameEngine.js`: `checkWinner`, `advanceRoundIfReady`, `getOrCreateRound`, `loseLife`, `clearRound`, `moveToLevel`, `recordGlobalResult`, `removePlayerFromGame` (player, leaderboard rows and lobby seat; used by the disconnect cleanup and `expireRound`), and the round clock: `startRoundClock`, `startClockIfEveryoneJoined`, `armRoundTimer`, `armRoundStartFallback`, `expireRound`, `assertRoundOpen`, `sweepRoundDeadlines`.
 
 ### Abilities (`imports/api/abilities.js`)
 

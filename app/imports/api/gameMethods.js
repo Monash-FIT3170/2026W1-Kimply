@@ -3,7 +3,6 @@ import { Random } from 'meteor/random';
 import { createHash } from 'crypto';
 import { RoundsCollection } from './rounds';
 import { PlayersCollection } from './players';
-import { LeaderboardCollection } from './leaderboard';
 import { RoomsCollection } from './rooms';
 import { boundPlayer, requireBrowserSession } from './playerAccess';
 import { assertEntryAllowed, assertPlayAllowed, removeDetectedPlayer } from './roomBans';
@@ -20,6 +19,7 @@ import {
   expireRound,
   generateSequence,
   loseLife,
+  removePlayerFromGame,
   roundDeadline,
   roundLevel,
   sequenceFor,
@@ -629,11 +629,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
           gameFinished: false,
         }).fetchAsync();
         for (const p of gone) {
-          await PlayersCollection.removeAsync(p._id);
-          await LeaderboardCollection.removeAsync({ gameId: p.gameId, playerId: p._id });
-          if (p.lobbyPlayerId) {
-            await RoomsCollection.updateAsync({ pin: p.gameId }, { $pull: { players: { id: p.lobbyPlayerId } } });
-          }
+          await removePlayerFromGame(p);
           await checkWinner(p.gameId, p.isBattleRoyale ?? false);
           const round = await RoundsCollection.findOneAsync(p.roundId);
           if (round) await advanceRoundIfReady(round);

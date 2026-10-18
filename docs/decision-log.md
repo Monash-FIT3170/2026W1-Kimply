@@ -20,6 +20,17 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-18 - A player who disconnects before the deadline is removed again, not eliminated
+
+After the round deadline moved to the server, a phone that locked shortly before the deadline stopped being kicked out. `expireRound` eliminated it first, and the disconnect cleanup in `gameMethods.js` only removes players with `eliminated: false`, so the player stayed in the game as a spectator for good. Before the deadline existed, the same player waited out the 15 s grace and was removed. Reproduced live: socket closed at 45 s into a round, player still present with `eliminated: true, connected: false` at 85 s.
+
+`expireRound` now removes a straggler whose `connected` is `false` instead of eliminating it, through the new `removePlayerFromGame` in `gameEngine.js`, which the disconnect cleanup also uses so the two cannot drift apart. A straggler who is still connected is eliminated as before and stays on the leaderboard.
+
+- **Frozen but still connected:** a phone that freezes without closing its socket still looks connected to the server at the deadline, so it is eliminated, not removed. Removing every eliminated player who later disconnects would erase ordinary spectators from the end leaderboard and the global results, so the cleanup still skips them.
+- **Bot removal is unchanged:** three machine-speed attempts still end in `removed-automation` and a deleted player, checked against the dev server after the deadline work.
+
+Files: `api/gameEngine.js`, `api/gameMethods.js`, `tests/roundDeadline.test.js`.
+
 ## 2026-10-18 - Server-owned round deadline (D5, #107)
 
 A player stuck on the loading screen after round 1, or everyone else stuck on "Time left: 0s", came from the round timer living only in each browser. A phone that left the browser before 0 and returned after it was never eliminated, and the server accepted its late correct answer. The likely cause of the missed elimination is the timeout call racing `players.rebind` and being refused with `not-yours`; that is read from the code, not reproduced on a phone.
