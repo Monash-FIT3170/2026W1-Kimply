@@ -14,6 +14,10 @@ import {
   BONUS_LIFE_ROUND,
   DEFAULT_STARTING_LIVES,
   INITIAL_LEVEL,
+  ROUND_EXPIRE_GRACE_MS,
+  ROUND_EXPIRE_LEASE_MS,
+  ROUND_START_FALLBACK_MS,
+  ROUND_TIMER_SECONDS,
   STREAK_BONUS_LIFE_THRESHOLD,
 } from '../constants';
 
@@ -225,6 +229,172 @@ export async function advanceRoundIfReady(round) {
     return true;
   }
   return false;
+}
+
+// --- The round clock ---
+// A standard round carries deadlineAt, the server's own deadline, so one player who stops
+// responding (a phone that left the browser) cannot hold everyone else on a round. It is
+// null while the clock has not started (round 1 waiting for the lobby, or a round whose
+// draft is still open) and absent on Battle Royale rounds, which have no timer.
+
+export function roundDeadline(now = Date.now()) {
+  return new Date(now + ROUND_TIMER_SECONDS * 1000);
+}
+
+// An answer is accepted until ROUND_EXPIRE_GRACE_MS after deadlineAt. Only after that does
+// the server eliminate whoever has not cleared the round, so the two never disagree.
+export function roundIsPastCutoff(round, now = Date.now()) {
+  return round?.deadlineAt instanceof Date && now > round.deadlineAt.getTime() + ROUND_EXPIRE_GRACE_MS;
+}
+
+// Runs expireRound when the cutoff passes. Idempotent, so a duplicate (the sweep, a client)
+// is harmless. A server restart loses this timer, which is why the sweep exists.
+export function armRoundTimer(roundId, deadlineAt) {
+  const delay = Math.max(0, deadlineAt.getTime() + ROUND_EXPIRE_GRACE_MS - Date.now()) + 100;
+  Meteor.setTimeout(async () => {
+    try {
+      if (await expireRound(roundId)) return;
+      // Node counts a timer from the start of the event-loop turn it was set in, so on a busy
+      // server it can fire a few ms before the wall clock reaches the cutoff. Wait out the
+      // difference rather than leaving the round to the sweep, which runs every few seconds.
+      if (!roundIsPastCutoff({ deadlineAt })) armRoundTimer(roundId, deadlineAt);
+    } catch (error) {
+      console.error('Could not expire the round', error);
+    }
+  }, delay);
+}
+
+// Start a round's clock. Only a round created with deadlineAt: null can start, and only once.
+export async function startRoundClock(roundId, now = Date.now()) {
+  const deadlineAt = roundDeadline(now);
+  const started = await RoundsCollection.updateAsync(
+    { _id: roundId, advanced: { $ne: true }, deadlineAt: { $type: 'null' } },
+    { $set: { deadlineAt } }
+  );
+  if (!started) return null;
+  armRoundTimer(roundId, deadlineAt);
+  return deadlineAt;
+}
+
+// Round 1: start the clock at ROUND_START_FALLBACK_MS if the lobby has not all joined by then.
+export function armRoundStartFallback(roundId) {
+  Meteor.setTimeout(() => {
+    startRoundClock(roundId).catch((error) => console.error('Could not start the round clock', error));
+  }, ROUND_START_FALLBACK_MS);
+}
+
+// Round 1: start the clock as soon as every lobby member has a player in the game.
+export async function startClockIfEveryoneJoined(gameId, roundId) {
+  const round = await RoundsCollection.findOneAsync(roundId);
+  if (!round || round.roundNumber !== 1 || round.deadlineAt !== null) return null;
+  const room = await RoomsCollection.findOneAsync({ pin: gameId });
+  const expected = room?.players?.length ?? 0;
+  const joined = await PlayersCollection.find({ gameId }).countAsync();
+  if (joined < expected) return null;
+  return startRoundClock(roundId);
+}
+
+// The deadline passed: eliminate every player who has not cleared the round, drop lobby
+// members who never joined (they would hold the round forever), then declare a winner or
+// advance as any other elimination does. Returns whether this call did the work.
+//
+// Safe to call from anywhere, any number of times. It does nothing before the cutoff, the
+// eliminations are conditional, and the lease keeps two callers from both finishing the
+// round. The lease also expires, so a call that dies half way is retried by the sweep.
+export async function expireRound(roundId, now = Date.now()) {
+  const round = await RoundsCollection.findOneAsync(roundId);
+  if (!round || round.advanced || round.expiredAt || !roundIsPastCutoff(round, now)) return false;
+
+  const claimed = await RoundsCollection.updateAsync(
+    {
+      _id: roundId,
+      expiredAt: { $exists: false },
+      $or: [{ expiringUntil: { $exists: false } }, { expiringUntil: { $lt: new Date(now) } }],
+    },
+    { $set: { expiringUntil: new Date(now + ROUND_EXPIRE_LEASE_MS) } }
+  );
+  if (!claimed) return false;
+
+  const gameId = round.gameId;
+  const finished = await PlayersCollection.findOneAsync({ gameId, gameFinished: true });
+  if (!finished) {
+    const stragglers = await PlayersCollection.find({
+      roundId,
+      eliminated: false,
+      completeRound: false,
+      winner: { $ne: true },
+    }).fetchAsync();
+    for (const player of stragglers) {
+      await PlayersCollection.updateAsync(
+        { _id: player._id, roundId, eliminated: false, completeRound: false },
+        {
+          $set: {
+            lives: 0,
+            currentStreak: 0,
+            longestStreak: Math.max(player.longestStreak ?? 0, player.currentStreak ?? 0),
+            eliminated: true,
+            roundStatus: 'Eliminated',
+            eliminatedRound: roundLevel(round),
+            eliminatedAt: new Date(),
+          },
+        }
+      );
+    }
+
+    const room = await RoomsCollection.findOneAsync({ pin: gameId });
+    const joined = new Set(
+      (await PlayersCollection.find({ gameId }, { fields: { lobbyPlayerId: 1 } }).fetchAsync())
+        .map((p) => p.lobbyPlayerId)
+        .filter(Boolean)
+    );
+    const missing = (room?.players ?? []).map((p) => p.id).filter((id) => id && !joined.has(id));
+    if (missing.length) {
+      await RoomsCollection.updateAsync({ pin: gameId }, { $pull: { players: { id: { $in: missing } } } });
+    }
+
+    await checkWinner(gameId, false);
+    await advanceRoundIfReady(await RoundsCollection.findOneAsync(roundId));
+  }
+
+  await RoundsCollection.updateAsync(
+    { _id: roundId },
+    { $set: { expiredAt: new Date() }, $unset: { expiringUntil: '' } }
+  );
+  return true;
+}
+
+// Refuse an action on a round whose cutoff has passed, eliminating whoever is late first.
+export async function assertRoundOpen(round, now = Date.now()) {
+  if (!roundIsPastCutoff(round, now)) return;
+  await expireRound(round._id, now);
+  throw new Meteor.Error('round-expired', 'Time is up for this round');
+}
+
+// Catch up on what a lost timer or a restart missed: rounds past their cutoff that were
+// never expired, and round-1 clocks whose fallback timer never fired.
+export async function sweepRoundDeadlines(now = Date.now()) {
+  const overdue = await RoundsCollection.find(
+    {
+      isCurrent: true,
+      advanced: false,
+      expiredAt: { $exists: false },
+      deadlineAt: { $lt: new Date(now - ROUND_EXPIRE_GRACE_MS) },
+    },
+    { fields: { _id: 1 } }
+  ).fetchAsync();
+  for (const { _id } of overdue) await expireRound(_id, now);
+
+  const waiting = await RoundsCollection.find(
+    {
+      isCurrent: true,
+      advanced: false,
+      roundNumber: 1,
+      deadlineAt: { $type: 'null' },
+      createdAt: { $lt: new Date(now - ROUND_START_FALLBACK_MS) },
+    },
+    { fields: { _id: 1 } }
+  ).fetchAsync();
+  for (const { _id } of waiting) await startRoundClock(_id, now);
 }
 
 // Gets an existing round for a level or creates a new one (Battle Royale runs a

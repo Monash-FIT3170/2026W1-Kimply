@@ -115,16 +115,19 @@ Note that PINs are generated with `Math.random()` (`rooms.js:15`), not a CSPRNG,
 
 ---
 
-## D5 - No server-side round deadline
+## D5 - No server-side round deadline - **fixed 2026-10-18**
 
 **Severity: high for real users.** The most likely thing to ruin an actual game session.
 
-A round advances only when **every** active player has submitted (`gameMethods.js:79-81` and `:206-208`).
-There is no timer, no deadline, and no timeout.
+A round advances only when **every** active player has submitted or been eliminated. The only thing that eliminated a slow player was a `setTimeout` in that player's own browser (`players.timeoutRound`).
+One player closing their tab mid-round stalled that game for everyone else.
 
-One player closing their tab mid-round stalls that game **permanently** for everyone else. There is no recovery path short of everyone leaving.
+**How it failed in testing (issue #107).** A phone that was one of the unfinished players left the browser a few seconds before 0 and came back after the countdown would have ended. It was not eliminated, every other screen sat on "Time left: 0s", the tiles worked again, and a correct answer put the player back in.
+The likely mechanism, read from the code and not reproduced on a phone: the frozen timer fires on resume while the socket is still down, so `players.timeoutRound` is queued and runs on the new connection before `players.rebind` has bound it, and `ownsGameplay` refuses it with `not-yours`; the client only logged the error. The reconnect also re-publishes `players.secret`, which re-runs the effect that re-enables the tiles. The server had no deadline, so a late correct answer was accepted.
 
-**Fix:** a server-side per-round deadline that auto-submits an empty attempt for any player who has not responded, or marks them disconnected and excludes them from the `allFinished` calculation.
+**Fix:** the deadline belongs to the server. `rounds.deadlineAt` is set when the clock starts, and `expireRound` eliminates whoever has not cleared the round once the deadline and `ROUND_EXPIRE_GRACE_MS` have passed. It is triggered by a timer, by a sweep that survives restarts, and by any client's countdown reaching zero. Late answers are refused with `round-expired`. Clients count down to `deadlineAt` on the server's clock. Round 1 starts its clock once the last lobby member has joined, or after `ROUND_START_FALLBACK_MS` if someone has not. `roundDeadline.test.js` covers it.
+
+**Still open:** a Battle Royale game has no timer by design, so a player who leaves there is only removed by the disconnect grace.
 
 ---
 

@@ -12,13 +12,19 @@ import { isCallerBound } from './abilityRules';
 import './browserSessions';
 import {
   advanceRoundIfReady,
+  armRoundStartFallback,
+  armRoundTimer,
+  assertRoundOpen,
   checkWinner,
   clearRound,
+  expireRound,
   generateSequence,
   loseLife,
+  roundDeadline,
   roundLevel,
   sequenceFor,
   sequenceState,
+  startClockIfEveryoneJoined,
   ROUND_ONLY_CARDS,
 } from './gameEngine';
 import { dealLevelUpDraft, dealRoundDrafts, gameContext, newRoundDraft } from './abilityEngine';
@@ -82,7 +88,10 @@ async function ownsGameplay(player, connection) {
 // A removed player never reaches this, so the triggering submission awards nothing.
 async function applySubmission(playerId, attemptedSequence) {
   const player = await PlayersCollection.findOneAsync(playerId);
+  // Out of the game (the round clock ran out): an answer already in flight must not bring them back.
+  if (player.eliminated) throw new Meteor.Error('not-playing', 'You are not playing this round');
   const round = await RoundsCollection.findOneAsync(player.roundId);
+  await assertRoundOpen(round);
   const isBattleRoyale = player.isBattleRoyale ?? false;
 
   const correct = JSON.stringify(attemptedSequence) === JSON.stringify(sequenceFor(player, round));
@@ -124,6 +133,7 @@ async function acceptGuardedAttempt(connection, playerId, attemptedSequence, att
   await assertPlayAllowed(player, connection);
   const round = await RoundsCollection.findOneAsync(player.roundId);
   if (!round) throw new Meteor.Error('round-not-found', 'Current round does not exist');
+  await assertRoundOpen(round);
   const expected = sequenceFor(player, round);
   assertAttemptShape(attemptedSequence, attempt, expected.length);
 
@@ -228,8 +238,11 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       const startingLives = room?.customSettings?.startingLives ?? DEFAULT_STARTING_LIVES;
 
       const sequence = generateSequence(length);
+      // Battle Royale has no timer. Every other round 1 waits, with deadlineAt null, for the
+      // lobby to join (players.join) or for the fallback timer, and the clock starts then.
+      const hasClock = room?.gameMode !== 'battle_royale';
 
-      return RoundsCollection.insertAsync({
+      const roundId = await RoundsCollection.insertAsync({
         gameId,
         gameMode: room?.gameMode ?? 'default',
         level: length, // level matches sequence length
@@ -241,7 +254,10 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         advanced: false,
         isCurrent: true,
         roundNumber: 1,
+        ...(hasClock ? { deadlineAt: null } : {}),
       });
+      if (hasClock) armRoundStartFallback(roundId);
+      return roundId;
     },
 
     // Add a player to a round
@@ -293,7 +309,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         ? room.customSettings.startingLives
         : DEFAULT_STARTING_LIVES;
 
-      return PlayersCollection.insertAsync({
+      const playerId = await PlayersCollection.insertAsync({
         gameId,
         roundId,
         lobbyPlayerId,
@@ -322,6 +338,8 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         // Strikes, the open attempt, and which browser owns this player. Not published.
         guard: { browserSessionId: sessionId, boundAt, botStrikes: 0, attempt: null },
       });
+      await startClockIfEveryoneJoined(gameId, roundId);
+      return playerId;
     },
 
     // Point a player at the caller's connection again. A DDP reconnect opens a new
@@ -354,6 +372,7 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       }
       const round = await RoundsCollection.findOneAsync(roundId);
       if (!round) throw new Meteor.Error('round-not-found', 'Current round does not exist');
+      await assertRoundOpen(round);
       if (round.draft && !round.draft.resolved) throw new Meteor.Error('draft-open', 'The draft is still open');
       const levelDraft = player.secret?.draft;
       if (levelDraft && levelDraft.roundId === roundId && levelDraft.status === 'open') {
@@ -517,7 +536,11 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       const nextSequence = generateSequence(nextLength);
       const nextRoundNumber = (currentRound.roundNumber ?? 1) + 1;
       // Set on insert, so no client starts the sequence before it sees the draft.
-      const draft = newRoundDraft(await gameContext(currentRound.gameId), nextRoundNumber);
+      const context = await gameContext(currentRound.gameId);
+      const draft = newRoundDraft(context, nextRoundNumber);
+      // The clock starts now, or when the draft closes (resolveRoundDraft) if there is one.
+      const hasClock = !context.isBattleRoyale;
+      const deadlineAt = hasClock && !draft ? roundDeadline() : null;
 
       // create next round
       const nextRoundId = await RoundsCollection.insertAsync({
@@ -533,7 +556,9 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         isCurrent: true,
         roundNumber: nextRoundNumber,
         ...(draft ? { draft } : {}),
+        ...(hasClock ? { deadlineAt } : {}),
       });
+      if (deadlineAt) armRoundTimer(nextRoundId, deadlineAt);
 
       // move active players into next round
       await PlayersCollection.updateAsync(
@@ -558,6 +583,19 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
       if (draft) await dealRoundDrafts(nextRoundId);
 
       return nextRoundId;
+    },
+
+    // The round's deadline passed: eliminate whoever has not cleared it and move the game on.
+    // Any client may ask (the server checks the deadline itself), so a finished player's screen
+    // can unstick a round held by a phone that stopped responding. Returns whether it ran.
+    async 'rounds.expire'(roundId) {
+      if (typeof roundId !== 'string' || !roundId) throw new Meteor.Error('invalid', 'Invalid round');
+      return expireRound(roundId);
+    },
+
+    // The server's clock, so a client can count down to a deadline set on the server.
+    'time.now'() {
+      return Date.now();
     },
 
     // Reset sequence after game ends

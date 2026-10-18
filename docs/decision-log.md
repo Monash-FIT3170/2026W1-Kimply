@@ -20,6 +20,21 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-18 - Server-owned round deadline (D5, #107)
+
+A player stuck on the loading screen after round 1, or everyone else stuck on "Time left: 0s", came from the round timer living only in each browser. A phone that left the browser before 0 and returned after it was never eliminated, and the server accepted its late correct answer. The likely cause of the missed elimination is the timeout call racing `players.rebind` and being refused with `not-yours`; that is read from the code, not reproduced on a phone.
+
+Rounds now carry `deadlineAt`, and the server enforces it: `expireRound` (`gameEngine.js`) eliminates every player who has not cleared the round, drops lobby members who never joined, then declares a winner or advances. It runs from a timer, from `sweepRoundDeadlines` every 5 s (started in `server/main.js`; a restart loses the timers), and from the new `rounds.expire`, which any client calls when its countdown hits 0. The check lives in the server, so a client can only ask, never decide.
+
+- **Round 1 clock:** starts when the last lobby member's `players.join` lands, or 5 s after `rounds.generate`, whichever is first. Both go through one conditional update on `deadlineAt: null`, so it starts once.
+- **Draft rounds:** the clock starts in the same write that sets `draft.resolved`, so a client never sees the round open without a deadline.
+- **Grace:** answers are accepted `ROUND_EXPIRE_GRACE_MS` (2 s) after `deadlineAt`, and `expireRound` waits the same time, so the two cannot disagree. Past it, `startAttempt`, `submitSequence` and `playCard` throw `round-expired`. `applySubmission` also refuses an already-eliminated player.
+- **Lease, not a flag:** `expireRound` holds `expiringUntil` for 10 s while it works and writes `expiredAt` last. `resolveRoundDraft` claims with a permanent `resolving` flag, so one error leaves a draft unresolvable forever; this does not copy that.
+- **Client:** `GamePage.jsx` counts down to `round.deadlineAt` on the server's clock (`ui/serverClock.js`, `time.now`) instead of starting its own 50 s timer, and no tile is live once it reaches zero, however input was re-enabled. `players.timeoutRound` still exists but the client no longer calls it.
+- **Not covered:** Battle Royale has no timer. A round created before this deploy has no `deadlineAt` and keeps no clock; rounds expire after 24 h, so only a game in flight during the deploy is affected.
+
+Files: `constants.js`, `api/gameEngine.js`, `api/gameMethods.js`, `api/abilityEngine.js`, `server/main.js`, `server/indexes.js`, `ui/pages/GamePage.jsx`, `ui/serverClock.js`, `tests/roundDeadline.test.js`.
+
 ## 2026-10-15 - Patch 2.0: Lights Out nerf, replay streak, longer round, invite link for everyone
 
 Lights Out kept the board fading on a 2.6 s loop for the whole round, playback and input alike, and playtesters called it broken (#154).

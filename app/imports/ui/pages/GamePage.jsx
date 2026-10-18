@@ -21,6 +21,7 @@ import { HandDialog } from '../abilities/HandDialog.jsx';
 import { KeyHint } from '../abilities/AbilityDialog.jsx';
 import { useAbilityNotices } from '../abilities/useAbilityNotices';
 import { gameReconnectToken, forgetGameReconnectToken } from '../gameReconnect';
+import { secondsUntil, syncServerClock } from '../serverClock';
 import {
   ROUND_TIMER_SECONDS as ROUND_SECONDS,
   LEVEL_UP_TOAST_MS,
@@ -119,6 +120,8 @@ export const GamePage = () => {
   const [notices, setNotices] = useState([]);
   const [lifeFlash, setLifeFlash] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(ROUND_SECONDS);
+  const [timeUp, setTimeUp] = useState(false);
+  const [clockSyncedAt, setClockSyncedAt] = useState(0);
   const [shake, setShake] = useState(false);
   const [correctGlow, setCorrectGlow] = useState(false);
   const [replayKey, setReplayKey] = useState(0);
@@ -278,7 +281,9 @@ export const GamePage = () => {
   const hand = playing ? playableHand(player) : [];
   const canOpenHand = hand.length > 0 && !draftOpen;
   const dialogOpen = draftOpen || handOpen;
-  const tilesLive = playerCanInput && !dialogOpen;
+  // Once the round's deadline has passed no tile is live, however the input got re-enabled
+  // (a replay finishing, a re-subscribe after a reconnect).
+  const tilesLive = playerCanInput && !dialogOpen && !timeUp;
   const canReplay = !isBattleRoyale && replaysRemaining > 0 && tilesLive;
 
   useEffect(() => {
@@ -379,7 +384,6 @@ export const GamePage = () => {
     resetAttempt();
     setMessage('');
     setCompletedRoundId(null);
-    submittedRoundRef.current = false;
     setPlayerCanInput(false);
     if (draftOpen || sequenceVersion == null) return;
     if (hasSeenSequence(gameId, player.roundId, sequenceVersion)) {
@@ -424,7 +428,6 @@ export const GamePage = () => {
     setReplayKey((prev) => prev + 1);
   };
 
-  const submittedRoundRef = useRef(false);
   // The round the player is on now. A submit's result can arrive after the round it was
   // for has already advanced (the last answer is what advances it).
   const currentRoundIdRef = useRef(null);
@@ -450,37 +453,73 @@ export const GamePage = () => {
     setAttemptedSequence((prev) => [...prev, colour]);
   };
 
+  // The round's deadline belongs to the server (round.deadlineAt) and is counted on the
+  // server's clock. Every screen then agrees, and a phone that left the browser is on the
+  // right time the moment it comes back, instead of restarting a timer of its own.
+  // null means the clock has not started (round 1 waiting for the lobby, or the draft is
+  // open), so the readout stays full. Battle Royale has no timer.
+  const deadlineMs = !isBattleRoyale && round?.deadlineAt ? new Date(round.deadlineAt).getTime() : null;
+
+  // Measure the offset to the server's clock, and again whenever the phone wakes or reconnects.
   useEffect(() => {
-    if (isBattleRoyale) return undefined; // battle royale is a free-for-all: no timer
-    if (!round?._id || !playerId) return undefined;
-    if (player?.eliminated || player?.gameFinished) return undefined;
-    // One timer for the whole round; wrong guesses and lost lives do not reset it. It reads
-    // full while the draft is open, and starts counting once the draft closes.
-    setSecondsLeft(ROUND_SECONDS);
-    if (roundDraftOpen) return undefined;
-
-    const timeoutId = window.setTimeout(() => {
-      if (player?.roundId !== round?._id || submittedRoundRef.current) {
-        return;
-      }
-
-      setMessage('Time is up! You have been eliminated.');
-      setPlayerCanInput(false);
-
-      Meteor.call('players.timeoutRound', playerId, round._id, (error) => {
-        if (error) console.error(error);
-      });
-    }, ROUND_SECONDS * 1000);
-
-    const intervalId = window.setInterval(() => {
-      setSecondsLeft((prev) => (prev <= 1 ? 0 : prev - 1));
-    }, 1000);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-      window.clearInterval(intervalId);
+    const sync = () => syncServerClock(() => setClockSyncedAt(Date.now()));
+    sync();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') sync();
     };
-  }, [round?._id, playerId, isBattleRoyale, player?.eliminated, player?.gameFinished, roundDraftOpen]);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [connected]);
+
+  useEffect(() => {
+    if (!deadlineMs) {
+      setSecondsLeft(ROUND_SECONDS);
+      setTimeUp(false);
+      return undefined;
+    }
+    const tick = () => {
+      const left = secondsUntil(deadlineMs);
+      setSecondsLeft(left);
+      setTimeUp(left === 0);
+    };
+    tick();
+    const intervalId = window.setInterval(tick, 250);
+    // Timers freeze while a phone is backgrounded; do not wait for the next one.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') tick();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [deadlineMs, clockSyncedAt]);
+
+  // At zero, ask the server to enforce the deadline. Any screen may ask, a finished player's
+  // included, so a phone that stopped responding cannot hold the round. The server decides
+  // (it allows a short grace for answers in flight), so keep asking until it has.
+  const clockRoundId = round?._id;
+  useEffect(() => {
+    if (!timeUp || !clockRoundId) return undefined;
+    let cancelled = false;
+    let retryId;
+    const attempt = () => {
+      Meteor.call('rounds.expire', clockRoundId, () => {
+        if (cancelled) return;
+        const current = RoundsCollection.findOne(clockRoundId);
+        if (current && !current.expiredAt) retryId = window.setTimeout(attempt, 1000);
+      });
+    };
+    attempt();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(retryId);
+    };
+  }, [timeUp, clockRoundId]);
+
+  useEffect(() => {
+    if (timeUp && playing) setMessage('Time is up!');
+  }, [timeUp, playing]);
 
   // The server closes a draft on its own timer. If that was lost (a restart), ask it
   // to close once this device's clock runs out, and keep asking until it does.
@@ -560,6 +599,11 @@ export const GamePage = () => {
                 noteRemoval(error);
                 return;
               }
+              if (error.error === 'round-expired' || error.error === 'not-playing') {
+                setPlayerCanInput(false);
+                setMessage('Time is up!');
+                return;
+              }
               if (error.error === 'stale-attempt' || error.error === 'duplicate-attempt') {
                 resetAttempt();
                 setAttemptedSequence([]);
@@ -577,7 +621,6 @@ export const GamePage = () => {
               // Already on the next round (Battle Royale, or the answer that advanced the round):
               // its state is fresh, so leave it alone.
               if (currentRoundIdRef.current !== submittedRoundId) return;
-              submittedRoundRef.current = true;
               if (isBattleRoyale) {
                 setMessage('Correct! Moving to next round...');
               } else {
@@ -615,6 +658,11 @@ export const GamePage = () => {
             return;
           }
           noteRemoval(error);
+          return;
+        }
+        if (error?.error === 'round-expired' || error?.error === 'not-playing') {
+          setPlayerCanInput(false);
+          setMessage('Time is up!');
           return;
         }
         resetAttempt();
