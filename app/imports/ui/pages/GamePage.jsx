@@ -22,6 +22,7 @@ import { KeyHint } from '../abilities/AbilityDialog.jsx';
 import { useAbilityNotices } from '../abilities/useAbilityNotices';
 import { gameReconnectToken, forgetGameReconnectToken } from '../gameReconnect';
 import { secondsUntil, syncServerClock } from '../serverClock';
+import { hasSeenSequence, markSequenceSeen } from '../sequencePlayback';
 import {
   ROUND_TIMER_SECONDS as ROUND_SECONDS,
   LEVEL_UP_TOAST_MS,
@@ -32,24 +33,6 @@ import {
   STREAK_BONUS_LIFE_THRESHOLD,
 } from '../../constants';
 
-// Whether this tab has already watched a sequence, so a refresh skips straight to input.
-// Per tab (sessionStorage), not per browser: two players in one browser must each watch
-// their own. Keyed on the version too, so a Reroll or Scramble plays the new sequence.
-const seqSeenKey = (gameId, roundId, version) => `seqSeen:${gameId}:${roundId}:${version}`;
-const hasSeenSequence = (gameId, roundId, version) => {
-  try {
-    return Boolean(gameId && roundId && sessionStorage.getItem(seqSeenKey(gameId, roundId, version)));
-  } catch {
-    return false;
-  }
-};
-const markSequenceSeen = (gameId, roundId, version) => {
-  try {
-    if (gameId && roundId) sessionStorage.setItem(seqSeenKey(gameId, roundId, version), '1');
-  } catch {
-    // Storage blocked: a refresh replays the sequence, which is harmless.
-  }
-};
 // How long to wait before asking the server again to close a draft whose clock ran out.
 const CLOSE_DRAFT_RETRY_MS = 2000;
 
@@ -387,8 +370,10 @@ export const GamePage = () => {
     setPlayerCanInput(false);
     if (draftOpen || sequenceVersion == null) return;
     if (hasSeenSequence(gameId, player.roundId, sequenceVersion)) {
-      // already watched this sequence (e.g. refresh): skip the replay
+      // Already watched this sequence (a refresh, or a reconnect re-publishing it): go
+      // straight to input. No replayKey bump, because that is a request to play it again.
       setPlayerCanInput(true);
+      return;
     }
     setReplayKey((prev) => prev + 1);
   }, [player?.roundId, gameId, sequenceVersion, draftOpen]);

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { BG, TILE } from './components/design';
 import { lightsOutFlashes, playbackTiming } from '../api/abilityRules';
 import { LIGHTS_OUT_FADE_MS } from '../constants';
+import { playbackDecision } from './sequencePlayback';
 
 // What Slo-Mo, 2x Speed and Lights Out show the player they have been hit with.
 const EFFECT_LABELS = { slow: 'Slo-mo', fast: '2x speed', lightsOut: 'Lights out' };
@@ -52,7 +53,9 @@ export const ColourSequence = ({
   const [isDone, setIsDone] = useState(false);
   // Lights Out: whether the board is dark for the flash being shown (or about to be).
   const [dark, setDark] = useState(false);
-  const hasRunRef = useRef(false);
+  // The replayKey this board last acted on, to tell a request to play from the sequence
+  // merely turning up (see playbackDecision).
+  const lastReplayKeyRef = useRef(replayKey);
   const effects = [speed, lightsOut && 'lightsOut'].filter(Boolean);
   // Read on every flash rather than once per playback: a Slo-Mo or 2x Speed reaches the
   // client over DDP and can land a beat after the round opens.
@@ -62,13 +65,15 @@ export const ColourSequence = ({
   const lightsOutRef = useRef(lightsOut);
   lightsOutRef.current = lightsOut;
 
-  useEffect(() => {
-    if (!sequence || sequence.length === 0) return;
+  const hasSequence = Boolean(sequence && sequence.length > 0);
 
-    const initialRun = !hasRunRef.current;
-    hasRunRef.current = true;
-    if (initialRun && !autoPlay) {
-      // already watched (refresh): skip replay, go straight to input
+  useEffect(() => {
+    const requested = replayKey !== lastReplayKeyRef.current;
+    const action = playbackDecision({ hasSequence, requested, autoPlay });
+    if (action === 'wait') return;
+    lastReplayKeyRef.current = replayKey;
+    if (action === 'skip') {
+      // already watched (refresh, reconnect): go straight to input
       setIsPlaying(false);
       setIsDone(true);
       return;
@@ -126,7 +131,7 @@ export const ColourSequence = ({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [roundId, replayKey]);
+  }, [roundId, replayKey, hasSequence]);
   const playClickSound = () => {
     const audioContext = new AudioContext();
     const oscillator = audioContext.createOscillator();

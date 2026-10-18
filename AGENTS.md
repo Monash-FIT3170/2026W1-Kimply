@@ -193,6 +193,7 @@ app/
 │       ├── leaderboardModels.js   # live leaderboard row helpers
 │       ├── EndLeaderboard.jsx     # end-of-game ranking
 │       ├── ColourSequence.jsx     # sequence playback + tile input
+│       ├── sequencePlayback.js    # watched-sequence memory (sessionStorage) and the play/skip/wait decision
 │       ├── roomCode.js            # pure helpers for the 5-slot code entry
 │       ├── keyboard.js            # pure key handlers
 │       ├── accountSession.js      # signed-in account: session token, resume, useSignedInAccount
@@ -527,6 +528,7 @@ How to write and run them is the `test` skill. What exists today:
 | `accuracy.test.js` | `totalGuesses` / `correctGuesses` |
 | `updateWinner.test.js` | last-one-standing winner selection |
 | `uiHelpers.test.js` | `roomCode.js`, `keyboard.js`, and `savedUsername.js` pure helpers |
+| `sequencePlayback.test.js` | `sequencePlayback.js`: which sequences a tab has watched, and whether the board plays, skips or waits |
 | `sequence.test.js` | `imports/api/sequence.js` |
 | `publications.test.js` | scoped pubs; no `sequence` on `rounds`; no `attemptedSequence` or `secret` on `players` / `eliminations`; `players.secret` is connection-bound; `gameFeed` |
 | `playerReconnect.test.js` | Rebind and join ownership, valid reconnects, legacy enrollment, lobby and round checks, credential publication exclusion |

@@ -20,6 +20,17 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-18 - The sequence no longer replays after a refresh
+
+A player who refreshed after the sequence had finished saw it play again. The tab remembers watched sequences in `sessionStorage`, but `ColourSequence` honoured that only on its first effect run, while `GamePage` bumped `replayKey` afterwards. When the board mounted with the sequence already present, which depends on whether `rounds` or `players.secret` arrives first, the first run was spent on the skip and the bump then played the whole pattern. A reconnect re-publishing `players.secret` did the same without a refresh.
+
+The decision is now made on every run, in `playbackDecision` (`ui/sequencePlayback.js`): a changed `replayKey` is a request to play (Replay, a wrong answer, a new round or version) and always plays; any other run, such as the sequence turning up or being re-published, skips if the sequence was already watched. `GamePage` no longer bumps `replayKey` for a watched sequence. The watched-sequence helpers moved out of `GamePage.jsx` into the same file so they can be tested.
+
+- **Not browser-tested:** the repo has no DOM test tooling, so `sequencePlayback.test.js` covers the decision and the storage helpers, not the component. The ordering race itself was found by reading the code.
+- **Unchanged:** a refresh *during* the pattern still replays it, since a sequence is marked watched only once playback completes.
+
+Files: `ui/ColourSequence.jsx`, `ui/pages/GamePage.jsx`, `ui/sequencePlayback.js`, `tests/sequencePlayback.test.js`.
+
 ## 2026-10-18 - A player who disconnects before the deadline is removed again, not eliminated
 
 After the round deadline moved to the server, a phone that locked shortly before the deadline stopped being kicked out. `expireRound` eliminated it first, and the disconnect cleanup in `gameMethods.js` only removes players with `eliminated: false`, so the player stayed in the game as a spectator for good. Before the deadline existed, the same player waited out the 15 s grace and was removed. Reproduced live: socket closed at 45 s into a round, player still present with `eliminated: true, connected: false` at 85 s.
