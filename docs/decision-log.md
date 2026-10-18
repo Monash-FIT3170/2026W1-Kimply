@@ -20,6 +20,17 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-18 - A game cannot be started with only the host
+
+The lobby's Start button was enabled for a lobby of one, and `rooms.start` did not check, so the host could start a game alone.
+
+`rooms.start` now throws `not-enough-players` unless at least `MIN_PLAYERS_TO_START` (2, in `constants.js`) lobby members are connected. It counts connected members, not `room.players.length`, because the pruning that follows drops anyone who disconnected in the lobby, so a host and one dropped player is a lobby of one. The check runs before any write, so a refused start leaves the lobby, players and rounds exactly as they were. The Start button in `PlayerLobby.jsx` uses the same count, is disabled below the minimum, and says `Need 2 players to start`; the server check is what enforces it, since the client is only a courtesy.
+
+- **Solo testing is gone:** a developer can no longer start a one-person game to try a screen. Use a second browser profile or the bot in `tests/manual/ddpBot.mjs`. This applies to every game mode, Battle Royale included.
+- **Not covered:** a player leaving after the start still ends in the existing flow, where the last player standing wins.
+
+Files: `api/rooms.js`, `constants.js`, `ui/pages/PlayerLobby.jsx`, `tests/rooms.test.js`.
+
 ## 2026-10-18 - Room code letters no longer duplicate on Android keyboards with predictive text
 
 The join page captured the code in a hidden `<input>` that it emptied after every keystroke, adding each input event's text to the code. A keyboard with predictive text keeps the word it is composing in its own buffer and re-sends it as the user types, so after the field was emptied behind its back the next event carried letters already typed, and they were added twice. It affected only players whose keyboard composes (Gboard with suggestions on); a keyboard that commits one character at a time never showed it. Suggestions off made it stop, which is how it was narrowed down.

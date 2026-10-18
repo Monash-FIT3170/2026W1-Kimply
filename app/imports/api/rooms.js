@@ -3,7 +3,7 @@ import { Meteor } from 'meteor/meteor';
 import { Random } from 'meteor/random';
 import { PlayersCollection } from './players.js';
 import { RoundsCollection } from './rounds.js';
-import { PIN_ALPHABET, PIN_LENGTH, GAME_MODE_PRESETS } from '../constants';
+import { PIN_ALPHABET, PIN_LENGTH, GAME_MODE_PRESETS, MIN_PLAYERS_TO_START } from '../constants';
 
 // Guard against --full-app test mode evaluating this module twice
 // (app bundle + test bundle both load it; global is shared across both).
@@ -170,6 +170,14 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       if (!room) throw new Meteor.Error('not-found', 'Room not found');
       if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
       const selectedGameMode = gameMode || room.gameMode || 'default';
+
+      // Count who will actually play: the pruning below drops disconnected lobby members, so a
+      // lobby of the host and one dropped player is a lobby of one. Checked before anything is
+      // changed, so a refused start leaves the lobby as it was.
+      const connectedPlayers = (room.players || []).filter((p) => p.connected !== false);
+      if (connectedPlayers.length < MIN_PLAYERS_TO_START) {
+        throw new Meteor.Error('not-enough-players', `At least ${MIN_PLAYERS_TO_START} players are needed to start`);
+      }
 
       // Drop anyone who disconnected in the lobby and did not reconnect.
       await RoomsCollection.updateAsync({ _id: room._id }, { $pull: { players: { connected: false } } });

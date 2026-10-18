@@ -44,6 +44,7 @@ export const ABILITY_WEIGHTS = {
 export const PIN_LENGTH = 5;
 export const PIN_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export const DISCONNECT_GRACE_MS = 15000; // remove a disconnected player after this
+export const MIN_PLAYERS_TO_START = 2; // the host alone cannot start a game
 
 // --- Bot detection ---
 // A flagged attempt has at least this many colours, every gap under BOT_MAX_INTERVAL_MS,

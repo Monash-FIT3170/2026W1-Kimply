@@ -3,6 +3,7 @@ import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { Meteor } from 'meteor/meteor';
 import { useSubscribe, useTracker } from 'meteor/react-meteor-data';
 import { RoomsCollection } from '/imports/api/rooms';
+import { MIN_PLAYERS_TO_START } from '/imports/constants';
 import { AbilitiesChip, AbilitiesSwitch, AbilityGuideButton } from '../abilities/LobbyAbilities.jsx';
 import { ConfirmationPopup } from '../components/ConfirmationPopup';
 import {
@@ -144,6 +145,8 @@ function SharePanel({ link }) {
 
 function HostView({ room, playerName, playerId, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
+  // The server counts the same players, and refuses to start with fewer than the minimum.
+  const canStart = players.filter((p) => p.connected !== false).length >= MIN_PLAYERS_TO_START;
   const joinLink = `${window.location.origin}/play/join?code=${room.pin}`;
   const [editing, setEditing] = useState(true);
   const [gameName, setGameName] = useState('');
@@ -301,18 +304,17 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
 
         <button
           onClick={handleStart}
-          disabled={players.length < 1}
+          disabled={!canStart}
           className="mb-auto w-full max-w-lg shrink-0 rounded-xl px-7 py-4 font-outfit text-sm font-extrabold uppercase tracking-[0.14em] transition-all lg:col-start-1 lg:row-start-2 lg:mb-0"
           style={{
-            background: players.length >= 1 ? PRIMARY : `color-mix(in oklab, ${PRIMARY} 30%, oklch(0.14 0.02 270))`,
+            background: canStart ? PRIMARY : `color-mix(in oklab, ${PRIMARY} 30%, oklch(0.14 0.02 270))`,
             color: 'oklch(0.14 0.02 270)',
-            cursor: players.length >= 1 ? 'pointer' : 'not-allowed',
+            cursor: canStart ? 'pointer' : 'not-allowed',
             border: 'none',
-            boxShadow:
-              players.length >= 1 ? `0 12px 40px -10px color-mix(in oklab, ${PRIMARY} 70%, transparent)` : 'none',
+            boxShadow: canStart ? `0 12px 40px -10px color-mix(in oklab, ${PRIMARY} 70%, transparent)` : 'none',
           }}
         >
-          Start Game
+          {canStart ? 'Start Game' : `Need at least ${MIN_PLAYERS_TO_START} players to start`}
         </button>
       </div>
     </div>

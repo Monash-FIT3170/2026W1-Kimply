@@ -402,7 +402,7 @@ D3 remains open for the other game and room mutations.
 | Method | Line | Args | Description |
 |---|---|---|---|
 | `rooms.create` | 29 | `hostName` | Generates a unique 5-char PIN, inserts the room, returns `{ pin, hostId }` |
-| `rooms.start` | 58 | `pin` | Sets `status: 'in_progress'`, then calls `rounds.generate` |
+| `rooms.start` | 58 | `pin, gameMode?` | Refuses with `not-enough-players` unless at least `MIN_PLAYERS_TO_START` (2) lobby members are connected, before changing anything. Then sets `status: 'in_progress'` and calls `rounds.generate` |
 | `rooms.kick` | 69 | `pin, playerId` | `$pull`s a non-host player. Refuses to kick the host |
 | `rooms.disconnect` | 82 | `pin, playerId` | If the id is the host's, **deletes the whole room**; otherwise `$pull`s the player |
 | `rooms.join` | 102 | `pin, playerName` | Validates and `$push`es `{ id, name }`. Rejects duplicate names case-insensitively |
@@ -519,7 +519,7 @@ How to write and run them is the `test` skill. What exists today:
 
 | File | Covers |
 |---|---|
-| `rooms.test.js` | `rooms.create`, `rooms.join`, `rooms.kick` |
+| `rooms.test.js` | `rooms.create`, `rooms.join`, `rooms.kick`, `rooms.start` (needs two connected players) |
 | `playerAccounts.test.js` | register and signIn validation, hashing, normalisation; session issue, resume, expiry, sign-out; Google sign-in create, link, reject (verifier stubbed) |
 | `roundAdvance.test.js` | `rounds.advance` increments, player migration, idempotency, concurrent advances create one round |
 | `roundDeadline.test.js` | The round clock: when it starts (round 1 on the last join or the fallback, draft rounds on resolve), `expireRound` eliminations, idempotency and lease, late answers rejected, the sweep |

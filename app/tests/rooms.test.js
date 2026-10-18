@@ -1,6 +1,7 @@
 import { Meteor } from 'meteor/meteor';
 import assert from 'assert';
 import { RoomsCollection } from '/imports/api/rooms';
+import { RoundsCollection } from '/imports/api/rounds';
 
 if (Meteor.isServer) {
   describe('rooms API', function () {
@@ -169,6 +170,53 @@ if (Meteor.isServer) {
         await Meteor.callAsync('rooms.kick', testPin, nonHostPlayerId);
         const room = await RoomsCollection.findOneAsync({ pin: testPin });
         assert.ok(room.players.find((p) => p.name === 'Host'));
+      });
+    });
+
+    // ─── rooms.start ─────────────────────────────────────────────────────────
+
+    describe('rooms.start', function () {
+      let testPin;
+
+      beforeEach(async function () {
+        await RoundsCollection.removeAsync({});
+        ({ pin: testPin } = await Meteor.callAsync('rooms.create', 'Host'));
+      });
+
+      it('refuses to start with only the host, and leaves the lobby as it was', async function () {
+        await assert.rejects(Meteor.callAsync('rooms.start', testPin), (err) => err.error === 'not-enough-players');
+
+        const room = await RoomsCollection.findOneAsync({ pin: testPin });
+        assert.strictEqual(room.status, 'lobby');
+        assert.strictEqual(await RoundsCollection.find({ gameId: testPin }).countAsync(), 0);
+      });
+
+      it('does not count a lobby member who has disconnected', async function () {
+        await Meteor.callAsync('rooms.join', testPin, 'Player2');
+        await RoomsCollection.updateAsync(
+          { pin: testPin, 'players.name': 'Player2' },
+          { $set: { 'players.$.connected': false } }
+        );
+
+        await assert.rejects(Meteor.callAsync('rooms.start', testPin), (err) => err.error === 'not-enough-players');
+
+        const room = await RoomsCollection.findOneAsync({ pin: testPin });
+        assert.strictEqual(room.status, 'lobby');
+        assert.strictEqual(room.players.length, 2, 'a refused start does not prune the lobby');
+      });
+
+      it('starts with the host and one other player, and creates the first round', async function () {
+        await Meteor.callAsync('rooms.join', testPin, 'Player2');
+
+        await Meteor.callAsync('rooms.start', testPin);
+
+        const room = await RoomsCollection.findOneAsync({ pin: testPin });
+        assert.strictEqual(room.status, 'in_progress');
+        assert.strictEqual(await RoundsCollection.find({ gameId: testPin }).countAsync(), 1);
+      });
+
+      it('still reports an unknown room as not found', async function () {
+        await assert.rejects(Meteor.callAsync('rooms.start', 'ZZZZZ'), (err) => err.error === 'not-found');
       });
     });
   });
