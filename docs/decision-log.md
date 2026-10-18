@@ -20,6 +20,20 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-18 - The host can show a QR code for the invite link
+
+A `QR CODE` button beside Copy on the host's invite-link panel opens a modal showing the room code above a QR code of the invite link, so players can join by scanning a screen instead of typing the code. Scanning opens `/play/join?code=<PIN>`, which `JoinRoom` already prefills from the query string; the player still enters a name.
+
+The QR code is drawn locally as SVG by `qrcode.react` 4.2.0 (new dependency, pure JavaScript, React 18). An online QR-image service was ruled out: it would send the room code to a third party and need internet at the demo. The link is now built by `inviteLink` in `roomCode.js`, used by the copy button, both lobby views and the QR code, so a scan lands where a pasted link does. The modal reuses `AbilityDialog`, which gained an optional `widthClass` (default unchanged).
+
+- **Scannability:** the code is dark on white with a 4-module quiet margin inside the SVG, level M error correction, whatever the theme. The rendered SVG for three sample links was rasterised and decoded with an independent decoder (jsQR), and each decoded to exactly its link. That was a one-off check, not a test in the repo.
+- **Lockfile:** `package.json` and `package-lock.json` both changed. Production builds with `npm ci`, so the lockfile must stay committed with it.
+- **Localhost:** a code scanned from `http://localhost:3000` encodes `localhost`, which a phone cannot reach. It is meant for the deployed site; locally it needs the machine's LAN address.
+- **Host only:** joined players do not get the button. Passing `pin` to their `SharePanel` would add it.
+- **Not browser-tested:** there is no DOM test tooling, and the modal's layout and the phone scan have not been checked on a device. `uiHelpers.test.js` covers `inviteLink` and that its link prefills the join page.
+
+Files: `ui/components/QrCodeDialog.jsx`, `ui/pages/PlayerLobby.jsx`, `ui/roomCode.js`, `ui/abilities/AbilityDialog.jsx`, `tests/uiHelpers.test.js`, `package.json`, `package-lock.json`.
+
 ## 2026-10-18 - Room code letters no longer duplicate on Android keyboards with predictive text
 
 The join page captured the code in a hidden `<input>` that it emptied after every keystroke, adding each input event's text to the code. A keyboard with predictive text keeps the word it is composing in its own buffer and re-sends it as the user types, so after the field was emptied behind its back the next event carried letters already typed, and they were added twice. It affected only players whose keyboard composes (Gboard with suggestions on); a keyboard that commits one character at a time never showed it. Suggestions off made it stop, which is how it was narrowed down.

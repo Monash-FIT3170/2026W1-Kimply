@@ -325,6 +325,12 @@ Title row (mono eyebrow + H1, room chip right) → gradient progress bar → pla
 Player count always renders as `n/cap`, e.g. `PLAYERS (5/8)`. Unfilled seats use the dashed Empty slot row.
 Joined players get the same mono `INVITE LINK` label and copy panel as the host, under the mode chips, so anyone in the room can share it.
 
+### QR code
+The host's invite-link panel carries a `QR CODE` button beside Copy: a hairline 8px-radius button, mono-weight Outfit 11px uppercase, 44px tall on phones. It opens a modal in the Ability guide's shell, narrowed to `max-w-md`.
+Mono eyebrow `JOIN THIS GAME`, the H2 `Scan to join` at 32px (36px from `xs`), larger than the 22px of the other modals because it is read from across a table, a close icon button (44px, as on the Live feed) and a Close ghost button with `Esc`.
+In the body, a mono `ROOM CODE` label over the code in 40px mono bold with wide tracking, then the QR code, then the invite link in mono 11px, selectable.
+The QR code is the one place the page is not themed: dark modules on a white 16px-radius tile, never inverted, with the 4-module quiet margin drawn inside the code. The tile is `min(72vw, 17rem)` wide so it stays scannable on a phone. It encodes the same link as the copy button.
+
 ### Room code display
 Panel with a 4px tile-gradient band across the top edge, mono uppercase label, 5 code tiles each with a tile-colored underline, then Copy / Share ghost buttons.
 

@@ -5,6 +5,8 @@ import { useSubscribe, useTracker } from 'meteor/react-meteor-data';
 import { RoomsCollection } from '/imports/api/rooms';
 import { AbilitiesChip, AbilitiesSwitch, AbilityGuideButton } from '../abilities/LobbyAbilities.jsx';
 import { ConfirmationPopup } from '../components/ConfirmationPopup';
+import { QrCodeButton } from '../components/QrCodeDialog';
+import { inviteLink } from '../roomCode';
 import {
   PRIMARY,
   TILE,
@@ -99,7 +101,8 @@ function PlayerRow({ player, isYou, onKick }) {
   );
 }
 
-function SharePanel({ link }) {
+// `pin`, when given, adds the host's "QR code" button beside Copy.
+function SharePanel({ link, pin = null }) {
   const [copied, setCopied] = useState(false);
   const copy = () => {
     navigator.clipboard?.writeText(link);
@@ -138,13 +141,14 @@ function SharePanel({ link }) {
           </>
         )}
       </button>
+      {pin && <QrCodeButton pin={pin} link={link} />}
     </div>
   );
 }
 
 function HostView({ room, playerName, playerId, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
-  const joinLink = `${window.location.origin}/play/join?code=${room.pin}`;
+  const joinLink = inviteLink(window.location.origin, room.pin);
   const [editing, setEditing] = useState(true);
   const [gameName, setGameName] = useState('');
   const trimmedGameName = gameName.trim();
@@ -270,7 +274,7 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
 
           <div className="w-full">
             <p className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-fg3">Invite link</p>
-            <SharePanel link={joinLink} />
+            <SharePanel link={joinLink} pin={room.pin} />
           </div>
         </div>
 
@@ -321,7 +325,7 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
 
 function JoinedView({ room, playerName, playerId, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
-  const joinLink = `${window.location.origin}/play/join?code=${room.pin}`;
+  const joinLink = inviteLink(window.location.origin, room.pin);
   const selectedGameMode = room.gameMode || gameMode || 'default';
 
   const stillInRoom = !playerName || players.some((p) => p.name === playerName);

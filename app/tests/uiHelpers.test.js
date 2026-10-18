@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { normalizeRoomCode, roomCodeFromSearchParams, roomCodeInputWriteBack } from '/imports/ui/roomCode';
+import { inviteLink, normalizeRoomCode, roomCodeFromSearchParams, roomCodeInputWriteBack } from '/imports/ui/roomCode';
 import { combineKeyHandlers, removeOnBackspace, submitOnEnter } from '/imports/ui/keyboard';
 import { loadUsername, saveUsername, USERNAME_STORAGE_KEY } from '/imports/ui/savedUsername';
 
@@ -63,6 +63,16 @@ describe('UI helpers', function () {
         composing.map((value) => normalizeRoomCode(value, 5)),
         ['A', 'AB', 'AB', 'ABC', 'ABCD', 'ABCDE', 'ABCDE']
       );
+    });
+
+    it('builds the invite link a QR code and the copy button share', function () {
+      assert.strictEqual(inviteLink('https://kimply.online', 'AB3CD'), 'https://kimply.online/play/join?code=AB3CD');
+    });
+
+    it('opens, through the invite link, the join page with the code filled in', function () {
+      const url = new URL(inviteLink('http://localhost:3000', 'ab-3cd'));
+      assert.strictEqual(url.pathname, '/play/join');
+      assert.strictEqual(roomCodeFromSearchParams(url.searchParams, 'code', 5), 'AB3CD');
     });
 
     it('leaves the input alone while the keyboard is composing', function () {

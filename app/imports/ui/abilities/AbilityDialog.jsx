@@ -5,7 +5,16 @@ import { ABILITY_ACCENTS, abilityTags } from './abilityFeed';
 
 // Modal shell shared by the draft and by playing a held card. The game behind it keeps
 // running (its timer included), it just stops taking input while this is open.
-export function AbilityDialog({ labelledBy, eyebrow, title, aside, children, footer }) {
+export function AbilityDialog({
+  labelledBy,
+  eyebrow,
+  title,
+  aside,
+  children,
+  footer,
+  widthClass = 'max-w-2xl',
+  titleClass = 'text-[22px]',
+}) {
   const panelRef = useRef(null);
   const dialogRef = useRef(null);
   useEffect(() => {
@@ -34,13 +43,13 @@ export function AbilityDialog({ labelledBy, eyebrow, title, aside, children, foo
         <div
           ref={panelRef}
           tabIndex={-1}
-          className="flex max-h-full w-full max-w-2xl flex-col gap-5 overflow-y-auto rounded-xl3 border border-hairline bg-surface p-5 text-fg outline-none xs:p-6"
+          className={`flex max-h-full w-full ${widthClass} flex-col gap-5 overflow-y-auto rounded-xl3 border border-hairline bg-surface p-5 text-fg outline-none xs:p-6`}
           style={{ boxShadow: '0 6px 18px -10px rgba(0,0,0,0.5)' }}
         >
           <div className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 flex-col gap-1">
               <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-fg3">{eyebrow}</p>
-              <h2 id={labelledBy} className="font-outfit text-[22px] font-bold tracking-[-0.01em]">
+              <h2 id={labelledBy} className={`font-outfit ${titleClass} font-bold tracking-[-0.01em]`}>
                 {title}
               </h2>
             </div>

@@ -17,3 +17,9 @@ export function roomCodeInputWriteBack(rawValue, normalized, composing) {
   if (composing || rawValue === normalized) return null;
   return normalized;
 }
+
+// The link that takes a player to the join page with the room code filled in. The copy
+// button and the QR code both carry it, so a scan lands where a pasted link does.
+export function inviteLink(origin, pin) {
+  return `${origin}/play/join?code=${encodeURIComponent(pin)}`;
+}
