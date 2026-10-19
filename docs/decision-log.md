@@ -20,6 +20,114 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-19 - A host can rejoin their lobby (D6); clearer copy after Clear and in Battle Royale
+
+A host who lost the lobby page could not get back: `rooms.create` never recorded `hostId`, so `rooms.reconnect` always answered `isHost: false`, and the host's reconnect data was never stored.
+`rooms.create` now records `hostId` (not published by `rooms.lobby`), the host and lobby checks use it through `isRoomHost`, and `PlayRoute.jsx` stores the host's reconnect data, so `/play` offers the host the same rejoin prompt as a joiner.
+Rooms created before this keep working: `isRoomHost` falls back to comparing `hostName`, as the old checks did.
+
+- **Back on the mode picker closes the room.** It is only reached by creating a room, and with the host's data stored, going back would otherwise open `/play` on a prompt to rejoin the room just abandoned.
+- **Same limits as joiners:** the prompt covers the lobby. Once the game starts, `rooms.reconnect` refuses with `not-lobby` and getting back into a running game is still `GamePage`'s per-tab credential.
+- **A plain reload never needed this:** router state survives F5 on the same history entry. The gap was a new tab or a closed browser.
+
+Copy:
+
+- **Clear** now says "Cleared. Enter the sequence from the start." instead of "Try again. Repeat the flashed sequence.", which read as if the answer had been wrong.
+- **The hand** drops "The clock keeps running" in Battle Royale, which has no clock, and **Scramble** says the target has to learn the new sequence from scratch instead of "Their clock keeps running".
+
+Files: `api/rooms.js`, `api/abilityRules.js`, `ui/pages/PlayRoute.jsx`, `ui/pages/GameModeSelector.jsx`, `ui/pages/GamePage.jsx`, `ui/abilities/HandDialog.jsx`, `tests/rooms.test.js`, `AGENTS.md`, `docs/defect-register.md`.
+
+---
+
+## 2026-10-19 - The draft countdown follows the server; the tile background no longer widens pages
+
+The draft readout counted 20 seconds from when the screen first showed the draft, while the server closes it at `endsAt`.
+A reload or a remount mid-draft restarted the readout at 20 (measured: 15 s shown against 9 s left after one reload), so a player could be refused a pick with time still on the screen.
+`DraftOverlay.jsx` now counts down to `secret.draft.endsAt` on the server's clock (`serverClock.js`, already synced by `GamePage` for the round deadline), falling back to a local 20 s only before the dealt draft arrives.
+The original reason for a local count, that a device with a wrong clock could see its draft cut short, is covered by the server-clock offset.
+
+`TileLattice` drew its rotated grid at `inset: -10%` straight into each page, so every page using it was about 15 % wider than the window.
+The pages hide that with `overflow-hidden`, but such a box still scrolls when something takes focus or is scrolled into view: in the lobby the whole screen slid about 200 px left, cutting off the room panel.
+The grid now sits in its own clipping box the size of its parent, which looks identical and never widens the page.
+
+Files: `ui/abilities/DraftOverlay.jsx`, `ui/components/design.jsx`.
+
+---
+
+## 2026-10-19 - The round clock no longer deletes a player who is reconnecting; end-of-game ranks fixed
+
+Testing the server-owned deadline end to end found that `expireRound` deleted every unfinished player whose connection was closed at that moment, with no grace.
+A server restart or a deploy (every connection closes), or a network blip at the deadline, therefore erased players who were only reconnecting: the browser came back to "Could not join the game." instead of its result, and the player vanished from the leaderboard and their global result.
+On `dev`, the same player simply rebound.
+
+`expireRound` now eliminates a disconnected straggler like anyone else and flags them `timedOutWhileAway`.
+The disconnect cleanup, moved into `removeIfStillGone` in `gameEngine.js`, removes a flagged player if they are still away when their grace runs out, so a phone that has really gone is removed as the 2026-10-18 entry intended; a rebind clears the flag.
+
+- **Restart:** the cleanup's timers do not survive a restart, so a flagged player who never returns stays on the board as eliminated rather than being removed. That is the safer failure.
+- **One-player games:** `checkWinner` ended a standard game only when more than one player was left, so a game reduced to one player (the rest never joined, or left) by the time the clock put that player out never finished, and the player sat on "You are spectating" with nobody else in the game. A game everyone has been put out of now ends, whatever its size.
+- **End-of-game ranks:** `EndLeaderboard.jsx` ranked standard players by `currentLevel`, which only moves on a wrong answer, so players knocked out in different rounds showed as tied (a round-2 and a round-1 elimination were both "=2"). Standard games now rank by `eliminatedRound`; Battle Royale still ranks by `currentLevel`. `expireRound` now also sets `currentLevel`, as `loseLife` does.
+- **`tests/manual/ddpBot.mjs`** sends the 43-character reconnect credential `players.join` has required since the credential was added; without it every run stopped at `not-yours`.
+
+Files: `api/gameEngine.js`, `api/gameMethods.js`, `ui/EndLeaderboard.jsx`, `tests/roundDeadline.test.js`, `tests/playerReconnect.test.js`, `tests/manual/ddpBot.mjs`, `AGENTS.md`.
+
+---
+
+## 2026-10-18 - Room code letters no longer duplicate on Android keyboards with predictive text
+
+The join page captured the code in a hidden `<input>` that it emptied after every keystroke, adding each input event's text to the code. A keyboard with predictive text keeps the word it is composing in its own buffer and re-sends it as the user types, so after the field was emptied behind its back the next event carried letters already typed, and they were added twice. It affected only players whose keyboard composes (Gboard with suggestions on); a keyboard that commits one character at a time never showed it. Suggestions off made it stop, which is how it was narrowed down.
+
+The hidden input now holds the whole code and is never cleared; the code is `normalizeRoomCode(input.value)` on every input event, so nothing is ever added up. While the keyboard is composing (`compositionstart` to `compositionend`) the field is not written to, since that also makes it resend, and it is tidied (case, stray spaces, extra characters) when composing ends (`roomCodeInputWriteBack`). Backspace is now the input's own; the old handler waited for `event.key === 'Backspace'`, which Android keyboards report as `Unidentified`, so deleting a letter probably did not work there either.
+
+- **Not tested on a device:** there is no Android device or browser here. `uiHelpers.test.js` covers the helpers and the shape of what a composing keyboard sends, not the page.
+- **Removed:** `appendRoomCodeInput` and `clearCapturedInput`, the approach that caused it, and their tests. `removeOnBackspace` and `combineKeyHandlers` in `keyboard.js` are no longer used by the app; they were left in place.
+
+Files: `ui/pages/JoinRoom.jsx`, `ui/roomCode.js`, `tests/uiHelpers.test.js`.
+
+---
+
+## 2026-10-18 - The sequence no longer replays after a refresh
+
+A player who refreshed after the sequence had finished saw it play again. The tab remembers watched sequences in `sessionStorage`, but `ColourSequence` honoured that only on its first effect run, while `GamePage` bumped `replayKey` afterwards. When the board mounted with the sequence already present, which depends on whether `rounds` or `players.secret` arrives first, the first run was spent on the skip and the bump then played the whole pattern. A reconnect re-publishing `players.secret` did the same without a refresh.
+
+The decision is now made on every run, in `playbackDecision` (`ui/sequencePlayback.js`): a changed `replayKey` is a request to play (Replay, a wrong answer, a new round or version) and always plays; any other run, such as the sequence turning up or being re-published, skips if the sequence was already watched. `GamePage` no longer bumps `replayKey` for a watched sequence. The watched-sequence helpers moved out of `GamePage.jsx` into the same file so they can be tested.
+
+- **Not browser-tested:** the repo has no DOM test tooling, so `sequencePlayback.test.js` covers the decision and the storage helpers, not the component. The ordering race itself was found by reading the code.
+- **Unchanged:** a refresh *during* the pattern still replays it, since a sequence is marked watched only once playback completes.
+
+Files: `ui/ColourSequence.jsx`, `ui/pages/GamePage.jsx`, `ui/sequencePlayback.js`, `tests/sequencePlayback.test.js`.
+
+---
+
+## 2026-10-18 - A player who disconnects before the deadline is removed again, not eliminated
+
+After the round deadline moved to the server, a phone that locked shortly before the deadline stopped being kicked out. `expireRound` eliminated it first, and the disconnect cleanup in `gameMethods.js` only removes players with `eliminated: false`, so the player stayed in the game as a spectator for good. Before the deadline existed, the same player waited out the 15 s grace and was removed. Reproduced live: socket closed at 45 s into a round, player still present with `eliminated: true, connected: false` at 85 s.
+
+`expireRound` now removes a straggler whose `connected` is `false` instead of eliminating it, through the new `removePlayerFromGame` in `gameEngine.js`, which the disconnect cleanup also uses so the two cannot drift apart. A straggler who is still connected is eliminated as before and stays on the leaderboard.
+
+- **Frozen but still connected:** a phone that freezes without closing its socket still looks connected to the server at the deadline, so it is eliminated, not removed. Removing every eliminated player who later disconnects would erase ordinary spectators from the end leaderboard and the global results, so the cleanup still skips them.
+- **Bot removal is unchanged:** three machine-speed attempts still end in `removed-automation` and a deleted player, checked against the dev server after the deadline work.
+
+Files: `api/gameEngine.js`, `api/gameMethods.js`, `tests/roundDeadline.test.js`.
+
+---
+
+## 2026-10-18 - Server-owned round deadline (D5, #107)
+
+A player stuck on the loading screen after round 1, or everyone else stuck on "Time left: 0s", came from the round timer living only in each browser. A phone that left the browser before 0 and returned after it was never eliminated, and the server accepted its late correct answer. The likely cause of the missed elimination is the timeout call racing `players.rebind` and being refused with `not-yours`; that is read from the code, not reproduced on a phone.
+
+Rounds now carry `deadlineAt`, and the server enforces it: `expireRound` (`gameEngine.js`) eliminates every player who has not cleared the round, drops lobby members who never joined, then declares a winner or advances. It runs from a timer, from `sweepRoundDeadlines` every 5 s (started in `server/main.js`; a restart loses the timers), and from the new `rounds.expire`, which any client calls when its countdown hits 0. The check lives in the server, so a client can only ask, never decide.
+
+- **Round 1 clock:** starts when the last lobby member's `players.join` lands, or 5 s after `rounds.generate`, whichever is first. Both go through one conditional update on `deadlineAt: null`, so it starts once.
+- **Draft rounds:** the clock starts in the same write that sets `draft.resolved`, so a client never sees the round open without a deadline.
+- **Grace:** answers are accepted `ROUND_EXPIRE_GRACE_MS` (2 s) after `deadlineAt`, and `expireRound` waits the same time, so the two cannot disagree. Past it, `startAttempt`, `submitSequence` and `playCard` throw `round-expired`. `applySubmission` also refuses an already-eliminated player.
+- **Lease, not a flag:** `expireRound` holds `expiringUntil` for 10 s while it works and writes `expiredAt` last. `resolveRoundDraft` claims with a permanent `resolving` flag, so one error leaves a draft unresolvable forever; this does not copy that.
+- **Client:** `GamePage.jsx` counts down to `round.deadlineAt` on the server's clock (`ui/serverClock.js`, `time.now`) instead of starting its own 50 s timer, and no tile is live once it reaches zero, however input was re-enabled. `players.timeoutRound` still exists but the client no longer calls it.
+- **Not covered:** Battle Royale has no timer. A round created before this deploy has no `deadlineAt` and keeps no clock; rounds expire after 24 h, so only a game in flight during the deploy is affected.
+
+Files: `constants.js`, `api/gameEngine.js`, `api/gameMethods.js`, `api/abilityEngine.js`, `server/main.js`, `server/indexes.js`, `ui/pages/GamePage.jsx`, `ui/serverClock.js`, `tests/roundDeadline.test.js`.
+
+---
+
 ## 2026-10-18 - Sign up from an invite link
 
 A player who opened an invite link (`/play/join?code=…`) skipped `/play`, which was the only page linking to `/account`, so they could not create an account before joining (#159).

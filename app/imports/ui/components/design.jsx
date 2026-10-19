@@ -45,26 +45,30 @@ export function TileLattice({ opacity = 0.07 }) {
     [3, 0, 1, 2, 3, 0, 1],
     [2, 3, 0, 1, 2, 3, 0],
   ];
+  // The rotated grid overhangs its parent by design. The outer box clips it to the parent, so
+  // it never widens the page: a parent's overflow-hidden still scrolls when something takes
+  // focus or is scrolled into view, and the overhang then slid the whole screen sideways.
   return (
-    <div
-      aria-hidden
-      className="pointer-events-none absolute"
-      style={{
-        inset: '-10%',
-        opacity,
-        display: 'grid',
-        gridTemplateColumns: `repeat(${cells}, 1fr)`,
-        gridTemplateRows: `repeat(${cells}, 1fr)`,
-        gap: '2.5%',
-        transform: 'rotate(-8deg) scale(1)',
-        filter: 'blur(0.3px)',
-      }}
-    >
-      {Array.from({ length: cells * cells }).map((_, i) => {
-        const r = Math.floor(i / cells),
-          c = i % cells;
-        return <div key={i} style={{ background: colors[pattern[r % 7][c % 7]], borderRadius: '14%' }} />;
-      })}
+    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+      <div
+        className="absolute"
+        style={{
+          inset: '-10%',
+          opacity,
+          display: 'grid',
+          gridTemplateColumns: `repeat(${cells}, 1fr)`,
+          gridTemplateRows: `repeat(${cells}, 1fr)`,
+          gap: '2.5%',
+          transform: 'rotate(-8deg) scale(1)',
+          filter: 'blur(0.3px)',
+        }}
+      >
+        {Array.from({ length: cells * cells }).map((_, i) => {
+          const r = Math.floor(i / cells),
+            c = i % cells;
+          return <div key={i} style={{ background: colors[pattern[r % 7][c % 7]], borderRadius: '14%' }} />;
+        })}
+      </div>
     </div>
   );
 }

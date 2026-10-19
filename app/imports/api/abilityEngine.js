@@ -9,11 +9,14 @@ import { RoomsCollection } from './rooms';
 import { ABILITIES, dealCards, isShielded, playableHand } from './abilityRules';
 import {
   advanceRoundIfReady,
+  armRoundTimer,
+  assertRoundOpen,
   checkWinner,
   clearRound,
   generateSequence,
   loseLife,
   moveToLevel,
+  roundDeadline,
   sequenceFor,
   sequenceState,
 } from './gameEngine';
@@ -186,10 +189,14 @@ export async function resolveRoundDraft(roundId) {
     await applyHostile(pick.actor, pick.type, pick.targetId);
   }
 
+  // The round's clock starts with the draft closing, in the same write that clients start
+  // the round on, so nobody sees the round open without its deadline.
+  const deadlineAt = round.deadlineAt === null ? roundDeadline() : null;
   await RoundsCollection.updateAsync(roundId, {
-    $set: { 'draft.resolved': true, 'draft.resolvedAt': new Date() },
+    $set: { 'draft.resolved': true, 'draft.resolvedAt': new Date(), ...(deadlineAt ? { deadlineAt } : {}) },
     $unset: { 'draft.resolving': '' },
   });
+  if (deadlineAt) armRoundTimer(roundId, deadlineAt);
 
   if (hostile.length) {
     await checkWinner(round.gameId, false);
@@ -292,6 +299,7 @@ export async function playCard(player, cardId, targetId) {
   const round = await RoundsCollection.findOneAsync(player.roundId);
   if (!round) throw new Meteor.Error('round-not-found', 'Current round does not exist');
   if (round.draft && !round.draft.resolved) throw new Meteor.Error('draft-open', 'Wait for the draft to close');
+  await assertRoundOpen(round);
 
   // Check everything that could refuse the card before spending it.
   let target = null;

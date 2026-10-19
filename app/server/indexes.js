@@ -20,6 +20,11 @@ const INDEXES = [
   { collection: RoundsCollection, keys: { gameId: 1, advanced: 1 }, options: { name: 'gameId_advanced' } },
   {
     collection: RoundsCollection,
+    keys: { isCurrent: 1, advanced: 1, deadlineAt: 1 },
+    options: { name: 'sweep_deadline' },
+  },
+  {
+    collection: RoundsCollection,
     keys: { createdAt: 1 },
     options: { expireAfterSeconds: DAY_SECONDS, name: 'rounds_ttl' },
   },

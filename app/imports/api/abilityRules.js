@@ -87,7 +87,7 @@ export const ABILITIES = {
     targeted: true,
     hostile: true,
     kept: false,
-    description: 'Give another player a fresh sequence this round. Their clock keeps running.',
+    description: 'Give another player a fresh sequence this round. They have to learn it from scratch.',
   },
   jump: {
     label: 'Jump',

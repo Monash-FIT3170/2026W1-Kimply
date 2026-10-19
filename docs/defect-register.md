@@ -120,34 +120,31 @@ Note that PINs are generated with `Math.random()` (`rooms.js:16`), not a CSPRNG,
 
 ---
 
-## D5 - The round deadline is enforced by the client - **partly fixed**
+## D5 - No server-side round deadline - **fixed 2026-10-18**
 
 **Severity: low for real users, medium against a hostile client.**
 
-As first recorded, a round advanced only when every active player had submitted, with no timer at all, so one player closing their tab stalled the game permanently.
-Two later changes cover every honest case:
+A round advances only when **every** active player has submitted or been eliminated. The only thing that eliminated a slow player was a `setTimeout` in that player's own browser (`players.timeoutRound`).
+One player closing their tab mid-round stalled that game for everyone else.
 
-- A player whose connection closes is marked disconnected and removed after `DISCONNECT_GRACE_MS` (15 s) unless they rebind (`gameMethods.js`, the `Meteor.onConnection` handler), and the round is rechecked.
-- Each client runs the `ROUND_TIMER_SECONDS` (50 s) round timer and calls `players.timeoutRound` when it expires (`GamePage.jsx:470`), which eliminates a player who has not cleared the round so `advanceRoundIfReady` can move on.
+**How it failed in testing (issue #107).** A phone that was one of the unfinished players left the browser a few seconds before 0 and came back after the countdown would have ended. It was not eliminated, every other screen sat on "Time left: 0s", the tiles worked again, and a correct answer put the player back in.
+The likely mechanism, read from the code and not reproduced on a phone: the frozen timer fires on resume while the socket is still down, so `players.timeoutRound` is queued and runs on the new connection before `players.rebind` has bound it, and `ownsGameplay` refuses it with `not-yours`; the client only logged the error. The reconnect also re-publishes `players.secret`, which re-runs the effect that re-enables the tiles. The server had no deadline, so a late correct answer was accepted.
 
-What remains: the deadline lives in the client.
-A client that stays connected and never calls `players.timeoutRound`, whether modified or simply stuck, still holds a standard round open for everyone.
+**Fix:** the deadline belongs to the server. `rounds.deadlineAt` is set when the clock starts, and `expireRound` eliminates whoever has not cleared the round once the deadline and `ROUND_EXPIRE_GRACE_MS` have passed. It is triggered by a timer, by a sweep that survives restarts, and by any client's countdown reaching zero. Late answers are refused with `round-expired`. Clients count down to `deadlineAt` on the server's clock. Round 1 starts its clock once the last lobby member has joined, or after `ROUND_START_FALLBACK_MS` if someone has not. `roundDeadline.test.js` covers it.
 
-**Fix:** a server-side deadline per round (an `endsAt` written by `rounds.generate` / `rounds.advance`, enforced by a server timer that times out every player still playing), with the client timer kept only for display.
+**Still open:** a Battle Royale game has no timer by design, so a player who leaves there is only removed by the disconnect grace.
 
 ---
 
-## D6 - `rooms.reconnect` always reports `isHost: false`
+## D6 - `rooms.reconnect` always reports `isHost: false` - **fixed 2026-10-19**
 
-`rooms.js:318` returns `isHost: room.hostId === playerId`, but `rooms.create` (`rooms.js:55-95`) **never writes a `hostId` field** to the document.
-`room.hostId` is therefore always `undefined` and the comparison is always false.
+`rooms.reconnect` returned `isHost: room.hostId === playerId`, but `rooms.create` **never wrote a `hostId` field** to the document, so the comparison was always false.
+Compounding this, the host's reconnect data was never persisted: the branch that would store it in `PlayRoute.jsx` was commented out (and read `result.gameId`, which `rooms.create` does not return).
+A host who lost the lobby page (a new tab, a closed browser) had no way back, and the room sat orphaned until its TTL.
 
-`rooms.create` does return `hostId` to the client at `:95`, and `PlayRoute.jsx:176` uses it, so only the reconnect path is broken.
-
-Compounding this, the host's reconnect data is never persisted at all: the branch that would store it is commented out at `PlayRoute.jsx:169-174`.
-A host who reloads has no reconnect path.
-
-**Fix:** persist `hostId` on the room document in `rooms.create`, and re-enable the host branch in `PlayRoute.jsx`. This also fixes the name-comparison problem in D4.
+**Fix:** `rooms.create` records `hostId`, and `isRoomHost` in `rooms.js` recognises the host by it in `rooms.reconnect`, `rooms.kick` and `rooms.disconnect` (a room created before the fix falls back to `hostName`).
+`PlayRoute.jsx` stores the host's `reconnectData`, so the host gets the same rejoin prompt on `/play` as a joiner and lands back in the host's lobby.
+Backing out of the mode picker now closes the room, so the prompt never offers a room the host just abandoned.
 
 ---
 
