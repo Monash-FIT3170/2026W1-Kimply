@@ -31,6 +31,8 @@ The hidden input now holds the whole code and is never cleared; the code is `nor
 
 Files: `ui/pages/JoinRoom.jsx`, `ui/roomCode.js`, `tests/uiHelpers.test.js`.
 
+---
+
 ## 2026-10-18 - The sequence no longer replays after a refresh
 
 A player who refreshed after the sequence had finished saw it play again. The tab remembers watched sequences in `sessionStorage`, but `ColourSequence` honoured that only on its first effect run, while `GamePage` bumped `replayKey` afterwards. When the board mounted with the sequence already present, which depends on whether `rounds` or `players.secret` arrives first, the first run was spent on the skip and the bump then played the whole pattern. A reconnect re-publishing `players.secret` did the same without a refresh.
@@ -42,6 +44,8 @@ The decision is now made on every run, in `playbackDecision` (`ui/sequencePlayba
 
 Files: `ui/ColourSequence.jsx`, `ui/pages/GamePage.jsx`, `ui/sequencePlayback.js`, `tests/sequencePlayback.test.js`.
 
+---
+
 ## 2026-10-18 - A player who disconnects before the deadline is removed again, not eliminated
 
 After the round deadline moved to the server, a phone that locked shortly before the deadline stopped being kicked out. `expireRound` eliminated it first, and the disconnect cleanup in `gameMethods.js` only removes players with `eliminated: false`, so the player stayed in the game as a spectator for good. Before the deadline existed, the same player waited out the 15 s grace and was removed. Reproduced live: socket closed at 45 s into a round, player still present with `eliminated: true, connected: false` at 85 s.
@@ -52,6 +56,8 @@ After the round deadline moved to the server, a phone that locked shortly before
 - **Bot removal is unchanged:** three machine-speed attempts still end in `removed-automation` and a deleted player, checked against the dev server after the deadline work.
 
 Files: `api/gameEngine.js`, `api/gameMethods.js`, `tests/roundDeadline.test.js`.
+
+---
 
 ## 2026-10-18 - Server-owned round deadline (D5, #107)
 
@@ -67,6 +73,45 @@ Rounds now carry `deadlineAt`, and the server enforces it: `expireRound` (`gameE
 - **Not covered:** Battle Royale has no timer. A round created before this deploy has no `deadlineAt` and keeps no clock; rounds expire after 24 h, so only a game in flight during the deploy is affected.
 
 Files: `constants.js`, `api/gameEngine.js`, `api/gameMethods.js`, `api/abilityEngine.js`, `server/main.js`, `server/indexes.js`, `ui/pages/GamePage.jsx`, `ui/serverClock.js`, `tests/roundDeadline.test.js`.
+
+---
+
+## 2026-10-18 - Sign up from an invite link
+
+A player who opened an invite link (`/play/join?code=…`) skipped `/play`, which was the only page linking to `/account`, so they could not create an account before joining (#159).
+The join page now shows the same "Signed in as … · Sign out" or "Want to save your stats? Sign up" line as `/play`, from the new shared `components/AccountStatus.jsx`.
+`/account` used to send everyone to `/play` afterwards, which would have dropped the room code; it now returns to the `returnTo` path in router state, so the invite-link player lands back on the same code with their display name filled in and joins with their `accountId`.
+`accountReturn.js` honours only in-app paths, so router state can never redirect off-site.
+Leaving `/account` replaces it in history, so Back from the room does not reopen a form the player has already finished.
+`joinRoomPath` in `roomCode.js` now builds the invite link in `PlayerLobby.jsx` too, so the link and the return path cannot drift.
+An account still only counts if the player signs in **before** joining: `rooms.join` records the `accountId` at that moment, and signing in from the lobby afterwards would not link it.
+
+---
+
+## 2026-10-17 - Docs realigned with the code and with ECS hosting
+
+An audit against `dev` found the README, `AGENTS.md`, the defect register and the deployment docs describing a system that no longer exists (#156).
+The EC2 instances were terminated and their Elastic IPs released on 2026-10-04 (CloudTrail), DNS is in Route 53, and development shares production's load balancer and NAT gateway (D42), yet every top-level doc still said the instances were running and that the two environments shared no AWS resource.
+`AGENTS.md` was missing the global leaderboard (collection, publication, method, `/leaderboard`, its test), the `/play/modes/:pin` and `/play/custom/:pin` routes, and `rooms.setGameMode`, `rooms.updateSettings` and `game.resetSequences`; most of its line references had drifted.
+The documented test command, `docker compose exec backend meteor npm test`, fails with "Can't listen on port 3000" while the app is running, so the README and `AGENTS.md` now give the one-shot test container.
+Defect statuses moved with the code: D7, D11 and D14 are fixed, D5 is partly fixed (the round timer exists but is enforced by the client), and the duplicated sequence generator is gone.
+Two new defects are registered rather than fixed, because this change is documentation only: D46 (`gameEvents` has no TTL or index) and D47 (the `globalLeaderboard` publication sends every `accountId`, which `rooms.join` and `players.join` trust).
+The `deploy` skill was rewritten for ECS.
+The 2026-10-16 design guide entry below was pushed after #155 had already merged, so it reached `dev` only with this change.
+Files: `README.md`, `AGENTS.md`, `docs/defect-register.md`, `docs/ecs-target-architecture.md`, `docs/deployment-manual.md`, `docs/dev-environment.md`, `docs/operations.md`, `docs/google-sign-in.md`, `infra/terraform/README.md`, `infra/docs/architecture.md`, `.agents/skills/deploy/SKILL.md`.
+
+---
+
+## 2026-10-16 - Design guide hex values corrected; presentation guidance added
+
+The Hex column in `docs/design_system.md` never matched the OKLCH tokens the app renders.
+Background was listed as `#1f2030` where the app draws `#060911`, and the tile colours were listed duller than they render, so anything built from the hex (a deck, an image, a `theme-color`) came out lighter and washed out next to the game.
+Every hex value is now the sRGB conversion of its OKLCH token, and the guide says OKLCH is the source of truth.
+The app was unaffected: it uses the OKLCH values through Tailwind and `design.jsx`, and never set the documented `theme-color`.
+A Presentations section adds a projector type scale, chart and lime rules, logo use, and font embedding, since the screen sizes (11px labels, 16px body) do not survive a projector.
+Files: `docs/design_system.md`.
+
+---
 
 ## 2026-10-15 - Patch 2.0: Lights Out nerf, replay streak, longer round, invite link for everyone
 

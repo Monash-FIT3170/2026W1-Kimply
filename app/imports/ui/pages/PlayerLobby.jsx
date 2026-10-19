@@ -20,6 +20,7 @@ import {
   PencilIcon,
   RainbowBar,
 } from '../components/design';
+import { joinRoomPath } from '../roomCode';
 
 function getGameModeColor(mode) {
   const colors = {
@@ -144,7 +145,7 @@ function SharePanel({ link }) {
 
 function HostView({ room, playerName, playerId, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
-  const joinLink = `${window.location.origin}/play/join?code=${room.pin}`;
+  const joinLink = `${window.location.origin}${joinRoomPath(room.pin)}`;
   const [editing, setEditing] = useState(true);
   const [gameName, setGameName] = useState('');
   const trimmedGameName = gameName.trim();
@@ -321,7 +322,7 @@ function HostView({ room, playerName, playerId, onBack, navigate, gameMode, cust
 
 function JoinedView({ room, playerName, playerId, onBack, navigate, gameMode, customSettings }) {
   const players = room.players || [];
-  const joinLink = `${window.location.origin}/play/join?code=${room.pin}`;
+  const joinLink = `${window.location.origin}${joinRoomPath(room.pin)}`;
   const selectedGameMode = room.gameMode || gameMode || 'default';
 
   const stillInRoom = !playerName || players.some((p) => p.name === playerName);

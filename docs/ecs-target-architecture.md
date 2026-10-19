@@ -1,24 +1,26 @@
 # ECS target architecture (production)
 
-This is the target design for moving Kimply production off a single EC2 instance running Docker Compose and Nginx, and onto ECS on Fargate behind an Application Load Balancer.
-It was worked out one decision at a time on 2026-09-22 (Phase 2 of the migration), and is being built in Phase 3 under issue #1.
+This is the design that moved Kimply production off a single EC2 instance running Docker Compose and Nginx, and onto ECS on Fargate behind an Application Load Balancer.
+It was worked out one decision at a time on 2026-09-22 (Phase 2 of the migration) and built in Phase 3 under issue #1.
 
-[deployment-manual.md](deployment-manual.md) describes the EC2 stack this replaces. It stays accurate only until those instances are retired, which is the last step of [Migration](#migration).
-The development environment (`dev.kimply.online`) is out of scope and stays on EC2 + Compose until it gets its own cluster.
+**Status (2026-10-17): live.** Both `www.kimply.online` (with the apex) and `dev.kimply.online` are served from ECS, and the EC2 instances were terminated on 2026-10-04.
+Development got its own cluster, `kimply-dev`, from the same module, and since D42 it shares production's load balancer and NAT gateway.
+DNS moved to Route 53 (D41), so the GoDaddy forwarding in the original design (D17) is superseded; the diagrams below show what runs now.
+[deployment-manual.md](deployment-manual.md) is kept as the historical runbook for the EC2 stack this replaced.
 
 ## At a glance
 
 ```
 Player
-  │  kimply.online ──(GoDaddy forwarding)──► www.kimply.online (GoDaddy CNAME)
+  │  kimply.online, www.kimply.online, dev.kimply.online  (Route 53 ALIAS records)
   ▼
-ALB  (HTTPS :443, ACM cert, :80 → redirect)
+ALB, shared  (HTTPS :443, ACM cert, :80 → redirect, host-header rules)
   ▼
-Target group  (ip, :3000, /health/live, sticky)
+Target group per environment  (ip, :3000, /health/live, sticky)
   ▼
-ECS service kimply-prod  (Fargate, arm64, 2-4 tasks across 2 AZs)
-  ▼  outbound only, via NAT gateway (Elastic IP)
-MongoDB Atlas M0  (allowlist = NAT EIP)
+ECS service kimply-prod  (Fargate, arm64, 1-4 tasks across 2 AZs)   ECS service kimply-dev  (1-2 tasks)
+  ▼  outbound only, via production's NAT gateway (Elastic IP)
+MongoDB Atlas M0, one cluster per environment  (allowlist = NAT EIP)
 
 GitHub Actions → ECR kimply:<sha> → task def revision → ECS rolling deploy
 CloudWatch: task logs · canary on /health/ready → alarm → ECS rollback + SNS email
@@ -27,10 +29,10 @@ CloudWatch: task logs · canary on /health/ready → alarm → ECS rollback + SN
 ## Detailed
 
 ```
-                     GoDaddy (registrar + DNS)
-                     kimply.online  → forwarding → https://www.kimply.online (drops paths)
-                     www            → CNAME → ALB DNS name
-                     ACM validation → CNAME
+                     GoDaddy (registrar only)  →  Route 53 hosted zone (D41)
+                     kimply.online  → ALIAS → ALB
+                     www, dev       → ALIAS → ALB
+                     ACM validation → CNAME, written by Terraform
                                   │
 ┌──────────────── Default VPC 172.31.0.0/16 (ap-southeast-2) ─────────────────┐
 │                          Internet gateway                                   │
@@ -56,7 +58,7 @@ CloudWatch: task logs · canary on /health/ready → alarm → ECS rollback + SN
 
 | Component | Responsible for | Replaces |
 |---|---|---|
-| GoDaddy DNS and forwarding | Apex → `www` redirect, `www` CNAME to the ALB, ACM validation record | Apex A record → Elastic IP |
+| Route 53 hosted zone (GoDaddy stays registrar) | ALIAS records for the apex, `www` and `dev` to the ALB, ACM validation records (D41) | Apex A record → Elastic IP |
 | ACM | TLS certificate for `www`, renewed automatically | Let's Encrypt and the certbot cron |
 | ALB | TLS termination, HTTP redirect, WebSocket/DDP, idle timeout, stickiness | Nginx |
 | Target group | The current list of healthy task IPs, health checks on `/health/live` | `upstream app:3000` |
@@ -189,3 +191,5 @@ The step-by-step commands are in [infra/terraform/README.md](../infra/terraform/
 5. Switch the `main` deploy workflow to ECS.
 6. Cutover: change `ROOT_URL` and `domain_name` to `www`, point `www` at the ALB and set the apex forwarding at GoDaddy (A2 and A3 were tested on 2026-09-22; see Assumptions).
 7. Retire the old instance, release its Elastic IP, and remove it from the Atlas allowlist.
+
+All seven steps are done: the instances and their Elastic IPs were removed on 2026-10-04 (CloudTrail `TerminateInstances` and `ReleaseAddress`). Step 6's GoDaddy forwarding was replaced by Route 53 (D41) before it shipped, and the `ecs` / `ecs-dev` names from step 4 were retired with the move.

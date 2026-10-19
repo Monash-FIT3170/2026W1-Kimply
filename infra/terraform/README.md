@@ -40,9 +40,9 @@ Preconditions on the task definition fail the plan if the template and the infra
 ## First-time build (production)
 
 Work from `infra/terraform`.
-The stack serves `www.kimply.online`, and `ecs.kimply.online` remains as a second name that bypasses the apex redirect.
-During the build it served `ecs.kimply.online` alone, beside the EC2 stack (D39).
-Both stacks use the same Atlas database.
+The stack serves `www.kimply.online` and the apex.
+During the build it served `ecs.kimply.online` alone, beside the EC2 stack, against the same Atlas database (D39); that name was retired with the move to Route 53.
+The EC2 stack is gone, so a rebuild today only needs the production database's `MONGO_URL`.
 
 1. **State bucket**
 
@@ -103,12 +103,13 @@ Both stacks use the same Atlas database.
      --service kimply-prod --task-definition kimply-prod --force-new-deployment
    ```
 
-8. **Publish the subdomain.**
-   At GoDaddy, add a CNAME `ecs` pointing at `terraform output -raw alb_dns_name`.
+8. **Publish the hostname.**
+   During the original build this was a GoDaddy CNAME for `ecs`, beside the EC2 stack.
+   Route 53 now owns the zone and Terraform writes the ALIAS records, so a rebuild only needs the apply above.
    Then check it end to end and play a game on it:
 
    ```bash
-   curl -s https://ecs.kimply.online/health/ready    # {"status":"ready"}, before any apex change
+   curl -s https://www.kimply.online/health/ready    # {"status":"ready"}
    ```
 
 9. **Turn on the canary**, which also turns on alarm-based rollback: set `canary_enabled = true` in `terraform.tfvars` and apply.
@@ -116,7 +117,7 @@ Both stacks use the same Atlas database.
 
 ## First-time build (development)
 
-Development is the same module with different values, serving `dev.kimply.online` (and `ecs-dev.kimply.online` as a second name).
+Development is the same module with different values, serving `dev.kimply.online` from production's load balancer (D42). It was built on `ecs-dev.kimply.online`, which is retired.
 It has one extra step, because its template needs the secret's ARN and the ARN's suffix is random.
 
 Work from `infra/terraform/envs/dev`.
@@ -238,6 +239,9 @@ aws ec2 describe-security-group-rules --region ap-southeast-2 \
 A stale `dev.kimply.online` lookup afterwards is usually negative caching from while the record was broken, not a real failure. Check against the zone's own nameservers before chasing it.
 
 ## Cutover
+
+**Done.** Both environments cut over, DNS then moved to Route 53 (above), and the EC2 instances were terminated on 2026-10-04.
+The steps are kept as the record of how it was done; the GoDaddy record and forwarding steps no longer apply because Route 53 owns the zone.
 
 The app's `ROOT_URL` is what the browser opens its DDP socket against, so **DNS moves first**.
 Deploying a `ROOT_URL` the DNS does not yet serve gives a page that loads and a game that cannot connect, and it fails the canary.

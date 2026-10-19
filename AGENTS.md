@@ -10,7 +10,7 @@ Shared guidance for any coding agent working in this repository (Cursor, Claude 
 > If you change any of those things, update the matching table before you finish, and add an entry to [docs/decision-log.md](docs/decision-log.md) in the same change.
 > See [Maintaining this file](#maintaining-this-file) at the bottom.
 
-**Last verified against the codebase:** 2026-10-15
+**Last verified against the codebase:** 2026-10-18
 
 ---
 
@@ -59,7 +59,7 @@ Everything below has a home of its own. Read the home file rather than expecting
 - All writes go through Meteor methods. Do not add `.allow()` / `.deny()`, `autopublish`, or `insecure`.
 - Do not undo the publication properties: `rounds` never carries `sequence`, `players` and `eliminations` exclude `attemptedSequence`, `secret`, and `reconnectTokenHash`, `players.secret` is keyed on the caller's connection, and every publication is scoped by `gameId`.
 - Do not invent npm scripts. There is no `lint`, `build`, `dev`, `typecheck`, or `e2e`. Format with Prettier. There is no ESLint.
-- Docker commands run from WSL2 on Windows, not PowerShell. Local compose is `docker-compose.yml`; production-shaped changes belong in `docker-compose.prod.yml`. Do not fork `deploy/`, `nginx/`, or compose files per environment.
+- Docker commands run from WSL2 on Windows, not PowerShell. Local compose is `docker-compose.yml`. Production runs on ECS, so production-shaped changes belong in `app/Dockerfile`, `infra/ecs/task-definition.{dev,prod}.json` and `infra/terraform/`. Keep dev and prod as the same module with different inputs; do not fork `deploy/build-push.sh` or `deploy/ecs-deploy.sh` per environment. `nginx/`, `docker-compose.prod.yml` and the other `deploy/` scripts belong to the retired EC2 stack.
 - After changing collections, publications, methods, routes, tests, or defects, update the matching table in this file and add an entry to `docs/decision-log.md` in the same change.
 
 ## Skills
@@ -116,12 +116,15 @@ The implementation has since moved past it, so treat the tables in this file as 
 The full loop is built end to end:
 
 - Splash, username entry, room creation and joining by PIN or invite link
-- Host and player lobbies, with kick, rename, and start
-- The game itself: sequence playback, tile input, life deduction, streaks, accuracy tracking
+- Host and player lobbies, with kick, rename, start, and an invite link for everyone
+- Game modes: Default, Easy, Medium, Hard, Custom (speed, lives, starting length, growth) and Battle Royale, chosen on `/play/modes/:pin`
+- The game itself: sequence playback, tile input, life deduction, streaks, accuracy tracking, replays, and a 50-second round timer
+- Ability cards: a pick-1-of-3 draft before each round from round 2 (on every level-up in Battle Royale), a hand of held cards, and a live feed
 - Round advancement, elimination, and winner detection
-- A live per-round leaderboard and an end-of-game ranking screen
+- A live per-round leaderboard, an end-of-game ranking screen, and a global leaderboard of signed-in players on `/leaderboard`
 - Optional player accounts (register, sign in with a password or Google, sign out), with a session that survives reloads, new tabs, and the end of a game
-- A lobby-only reconnect prompt backed by `localStorage`
+- Reconnect: a lobby prompt backed by `localStorage`, and in game a per-tab credential that resumes the same player after a refresh or a dropped connection
+- Bot detection: timing checks on each attempt, with removal, a browser-session block and a 15-minute room IP ban on the third strike
 - The last username used is remembered in `localStorage` and prefilled on `/play` and `/play/join`
 
 ---
@@ -132,10 +135,12 @@ The full loop is built end to end:
 Setup, the full command list, and troubleshooting are in [README.md](README.md). The `docker` and `test` skills cover the rest.
 
 ```bash
-docker compose up                                  # MongoDB + Meteor on :3000
-docker compose exec backend meteor npm test        # tests, once
-docker compose exec backend meteor npm run format  # Prettier, the only style gate
+docker compose up                                    # MongoDB + Meteor on :3000
+docker compose --profile test run --build --rm test  # tests, once, in their own container
+docker compose exec backend meteor npm run format    # Prettier, the only style gate
 ```
+
+`docker compose exec backend meteor npm test` fails with "Can't listen on port 3000" while the app is running. The test container bakes in a copy of `app/`, so `--build` is what picks up your changes.
 
 **Scripts that do NOT exist** (do not invent them in CI or docs): `npm run lint`, `npm run build`, `npm run dev`, `npm run typecheck`, `npm run e2e`.
 The only production build path is the `meteor build` invoked inside `app/Dockerfile`.
@@ -163,43 +168,59 @@ All writes go through Meteor methods.
 ```
 app/
 ├── client/
-│   ├── main.jsx              # React Router setup - all client routes
+│   ├── main.jsx              # React Router setup - all client routes; resumes the browser and account sessions
 │   └── main.html             # HTML entry (#react-target, Google Fonts preconnect)
 ├── server/
 │   ├── main.js               # Meteor startup, health, indexes
-│   ├── publications.js       # scoped rounds / players / leaderboard pubs
+│   ├── publications.js       # scoped game publications + globalLeaderboard
 │   ├── health.js
 │   └── indexes.js
 ├── imports/
+│   ├── constants.js          # every gameplay, ability, bot-detection and mode tunable
 │   ├── api/
 │   │   ├── rooms.js          # RoomsCollection + rooms.* methods + rooms.lobby publication
 │   │   ├── rounds.js         # RoundsCollection (definition only)
 │   │   ├── players.js        # PlayersCollection (definition only)
 │   │   ├── leaderboard.js    # LeaderboardCollection (definition only)
-│   │   ├── gameMethods.js    # The game loop: rounds.*, players.* methods
-│   │   ├── gameEngine.js     # Server helpers shared by the game and ability methods (winner, advance, lives)
+│   │   ├── globalLeaderboard.js # GlobalLeaderboardCollection, its indexes, globalLeaderboard.myStanding
+│   │   ├── gameEvents.js     # GameEventsCollection (definition only)
+│   │   ├── gameMethods.js    # The game loop: rounds.*, players.* methods, disconnect grace removal
+│   │   ├── gameEngine.js     # Server helpers shared by the game and ability methods (winner, advance, lives, global results)
 │   │   ├── abilities.js      # abilities.* methods (connection-bound)
 │   │   ├── abilityEngine.js  # Dealing, resolving and playing ability cards (server)
 │   │   ├── abilityRules.js   # Pure card catalogue and rules (incl. playback effects), shared with the client
+│   │   ├── playerAccess.js   # boundPlayer / requireBrowserSession: caller ownership checks
+│   │   ├── browserSessions.js # BrowserSessionsCollection + browserSessions.resume
+│   │   ├── botDetection.js   # Pure timing assessment and the development-only kill switch
+│   │   ├── roomBans.js       # Room session blocks and IP bans, removal of a detected player
+│   │   ├── clientAddress.js  # Normalises connection.clientAddress
 │   │   ├── playerAccounts.js # PlayerAccountsCollection + register/signIn/googleSignIn/resume/signOut
 │   │   ├── googleAuth.js     # GOOGLE_CLIENT_ID + Google ID-token verification (server use only)
-│   │   └── sequence.js       # COLOURS + generateSequence
+│   │   └── sequence.js       # COLOURS + generateSequence (the only copy)
 │   └── ui/
-│       ├── pages/            # Splash, PlayRoute, JoinRoom, PlayerLobby, GamePage, Account
-│       ├── abilities/        # Draft overlay, hand dialog, target picker, feed toggle, lobby switch
-│       ├── components/       # design.jsx, ConfirmationPopup.jsx, ReconnectPopup.jsx
+│       ├── pages/            # Splash, PlayRoute, JoinRoom, GameModeSelector, CustomGameSettings,
+│       │                     # PlayerLobby, GamePage, Account, GlobalLeaderboard
+│       ├── abilities/        # Draft overlay, hand dialog, target picker, live feed, lobby switch and card guide
+│       ├── components/       # design.jsx, AccountStatus.jsx, ConfirmationPopup.jsx, ReconnectPopup.jsx, RemovedScreen.jsx
 │       ├── Header.jsx
 │       ├── Leaderboard.jsx        # per-round live leaderboard (players + rounds)
 │       ├── leaderboardModels.js   # live leaderboard row helpers
 │       ├── EndLeaderboard.jsx     # end-of-game ranking
-│       ├── ColourSequence.jsx     # sequence playback + tile input
+│       ├── EliminationFeed.jsx    # eliminations subscription
+│       ├── ColourSequence.jsx     # sequence playback + tile input, Slo-Mo / 2x Speed / Lights Out
 │       ├── sequencePlayback.js    # watched-sequence memory (sessionStorage) and the play/skip/wait decision
 │       ├── roomCode.js            # pure helpers for the 5-slot code entry
 │       ├── keyboard.js            # pure key handlers
 │       ├── accountSession.js      # signed-in account: session token, resume, useSignedInAccount
+│       ├── accountReturn.js       # where /account sends the player afterwards (in-app paths only)
+│       ├── browserSession.js      # anonymous browser session token, resumed on startup and reconnect
+│       ├── gameReconnect.js       # per-tab game reconnect credential (sessionStorage)
 │       ├── savedUsername.js       # remembers the last username in localStorage
 │       └── styles.css             # Tailwind directives + keyframes
-└── tests/                    # meteortesting:mocha specs, see Testing below
+└── tests/                    # meteortesting:mocha specs, see Testing below; tests/manual/ddpBot.mjs is a raw DDP bot
+infra/                        # Terraform (envs/dev, envs/prod, modules/kimply-ecs) and ECS task definitions
+deploy/                      # build-push.sh and ecs-deploy.sh run in CI; deploy.sh, sync-config.sh, bootstrap-ec2.sh, init-letsencrypt.sh are for the retired EC2 stack
+loadtest/                     # DDP load and smoke tests, run by hand
 ```
 
 Note the design system lives at `imports/ui/components/design.jsx`, **not** `imports/ui/design.jsx`.
@@ -217,12 +238,14 @@ Meteor's connect handler does this by default when the whole app is proxied.
 | `/game` | `GamePage` | the game loop |
 | `/play` | `PlayRoute` | username entry, then Create Room or Join Room |
 | `/play/join` | `JoinRoom` | 5-slot code entry; reads `?code=` from invite links |
+| `/play/modes/:pin` | `GameModeSelector` | host picks the game mode (`rooms.setGameMode`) |
+| `/play/custom/:pin` | `CustomGameSettings` | host sets speed, lives, starting length and growth (`rooms.updateSettings`) |
 | `/play/:pin` | `PlayerLobby` | host view or joined view based on `location.state.isHost` |
-| `/account` | `Account` | register / sign in, with a Google button when `GOOGLE_CLIENT_ID` is set |
+| `/account` | `Account` | register / sign in, with a Google button when `GOOGLE_CLIENT_ID` is set. Returns to `location.state.returnTo`, else `/play` |
+| `/leaderboard` | `GlobalLeaderboard` | top 50 signed-in players by best round, then wins |
 | `*` | `Navigate to="/"` | catch-all |
 
-`main.jsx:24` and `:26` declare **two identical `path="*"` routes**.
-React Router v7 ranks by specificity rather than declaration order, so `/account` still matches, but the duplication is dead code.
+React Router v7 ranks routes by specificity, so `/play/join` and `/play/modes/:pin` win over `/play/:pin` regardless of order.
 
 ---
 
@@ -232,35 +255,43 @@ React Router v7 ranks by specificity rather than declaration order, so `/account
 
 | Variable | Mongo collection | Defined at |
 |---|---|---|
-| `RoomsCollection` | `rooms` | `imports/api/rooms.js:8` |
+| `RoomsCollection` | `rooms` | `imports/api/rooms.js:11` |
 | `RoundsCollection` | `rounds` | `imports/api/rounds.js:6` |
 | `PlayersCollection` | `players` | `imports/api/players.js:6` |
 | `LeaderboardCollection` | `leaderboard` | `imports/api/leaderboard.js:6` |
-| `PlayerAccountsCollection` | `playerAccounts` | `imports/api/playerAccounts.js:8` |
-| `BrowserSessionsCollection` | `browserSessions` | `imports/api/browserSessions.js` |
-| `GameEventsCollection` | `gameEvents` | `imports/api/gameEvents.js:6` |
+| `PlayerAccountsCollection` | `playerAccounts` | `imports/api/playerAccounts.js:11` |
+| `BrowserSessionsCollection` | `browserSessions` | `imports/api/browserSessions.js:10` |
+| `GameEventsCollection` | `gameEvents` | `imports/api/gameEvents.js:4` |
+| `GlobalLeaderboardCollection` | `globalLeaderboard` | `imports/api/globalLeaderboard.js:6` |
 
 Each definition is wrapped in a `global._<Name>Collection` guard so it survives double evaluation under `meteor test --full-app`.
 
 ### Document shapes
 
-**`rooms`** (written by `rooms.create`, `rooms.js:46-53`)
+**`rooms`** (written by `rooms.create`, `rooms.js:55-95`)
 ```js
 { pin, hostName, gameName: `Game${pin}`, status: 'lobby' | 'in_progress',
-  players: [{ id, name, browserSessionId }], createdAt, abilitiesEnabled: true,
+  players: [{ id, name, accountId, connected, connectionId, browserSessionId }], createdAt,
+  gameMode: 'default' | 'easy' | 'medium' | 'hard' | 'custom' | 'battle_royale',
+  customSettings: { flashingSpeed: 'slow'|'medium'|'fast', startingLives, startingSequenceLength, sequenceGrowth },
+  abilitiesEnabled: true,
   security?: { blockedSessionIds: [], ipBans: [{ address, expiresAt, createdAt }] } }
 ```
+`customSettings` is copied from `GAME_MODE_PRESETS` in `constants.js` whenever the mode changes, and only `custom` accepts edits through `rooms.updateSettings`.
+`rooms.start` prunes players with `connected: false` and deletes the game's old `players` and `rounds` before generating round 1.
 `abilitiesEnabled` is set by `rooms.create` and `rooms.setAbilities`. The server treats a missing value as off, so rooms from before abilities existed play without them.
 `hostId` is returned to the client by `rooms.create` but is **never persisted on the document**.
 `security` is private. Session blocks last until the room's TTL. Each IP ban stops applying at `expiresAt` without waiting for a cleanup. `rooms.lobby` is a field whitelist, so neither `security` nor `players.browserSessionId` is published.
 
 **`rounds`** (written by `rounds.generate` and `rounds.advance`)
 ```js
-{ gameId, lengthOfSequence, sequence: ['red'|'blue'|'green'|'yellow', ...],
+{ gameId, gameMode, level, lengthOfSequence, lives, sequenceGrowth, roundNumber,
+  sequence: ['red'|'blue'|'green'|'yellow', ...],
   createdAt, advanced: bool, isCurrent: bool,
   draft?: { endsAt, resolved, resolvedAt? },
   deadlineAt?: Date | null, expiredAt?: Date, expiringUntil?: Date }
 ```
+`roundNumber` exists on standard rounds only. Battle Royale level rounds (`getOrCreateRound`) carry their `level` and are never advanced.
 `draft` exists on standard rounds from round 2 when abilities are on. Playback and the round timer wait for `resolved`.
 `deadlineAt` is the server's round deadline (`ROUND_TIMER_SECONDS` after the clock starts) and exists on every standard round, never on Battle Royale. It is `null` until the clock starts: round 1 starts it when the last lobby member has joined (`players.join`) or `ROUND_START_FALLBACK_MS` after the round is created, whichever is first; a round with a draft starts it in the write that sets `draft.resolved`; any other round has it from `rounds.advance`. Clients count down to it on the server's clock (`time.now`).
 `expiredAt` marks a round whose deadline has been enforced. `expiringUntil` is the lease one `expireRound` call holds while it works, so a call that dies is retried.
@@ -268,9 +299,9 @@ Each definition is wrapped in a `global._<Name>Collection` guard so it survives 
 
 **`players`** (written by `players.join` in `gameMethods.js`)
 ```js
-{ gameId, roundId, name, lives: 3, attemptedSequence: [], currentStreak: 0,
-  longestStreak: 0, totalGuesses: 0, correctGuesses: 0, eliminatedRound: null,
-  eliminated: false, winner: false, completeRound: false,
+{ gameId, roundId, lobbyPlayerId, name, accountId, lives, attemptedSequence: [], currentStreak: 0,
+  longestStreak: 0, totalGuesses: 0, correctGuesses: 0, currentLevel: 4, eliminatedRound: null,
+  eliminated: false, eliminatedAt: null, isBattleRoyale, winner: false, completeRound: false,
   roundStatus: 'Playing' | 'Correct' | 'Passed' | 'Eliminated', gameFinished: false,
   connectionId, connected, reconnectTokenHash?,
   guard: { browserSessionId, boundAt, botStrikes, attempt },
@@ -305,19 +336,32 @@ The token itself stays in `localStorage['kimply.browser']`. The collection is ne
 { gameId, playerId, name, lives, roundId, completedAt }
 ```
 
-**`playerAccounts`** (written by `playerAccounts.register`, `:144-155`, and by `playerAccounts.googleSignIn` through `findOrCreateGoogleAccount`)
+**`globalLeaderboard`** (written by `recordGlobalResult` in `gameEngine.js` when a game with a linked account ends)
+```js
+{ accountId, displayName, bestRound, achievedAt, gamesPlayed, wins, updatedAt }
+```
+One row per account, trimmed to the best `GLOBAL_LEADERBOARD_SIZE` (50) after every write.
+
+**`gameEvents`** (written by `abilityEngine.js`)
+```js
+{ gameId, type: 'ability', ability, outcome, playerId, playerName, targetId, targetName, round, createdAt }
+```
+There is no TTL index on `gameEvents`, so it grows without bound (D46).
+
+**`playerAccounts`** (written by `playerAccounts.register`, `:153`, and by `playerAccounts.googleSignIn` through `findOrCreateGoogleAccount`)
 ```js
 { displayName, email, passwordSalt?, passwordHash?, googleSub?,
   gamesPlayed: 0, wins: 0, bestRound: 0,
   sessions: [{ hash, createdAt, expiresAt }], createdAt, updatedAt }
 ```
 An account has either a password or a `googleSub`, never both. One created by Google sign-in has no password fields. A password account that its owner signs in to with Google, using the same verified email, gains `googleSub` and **loses its password and sessions**, because registration never proved who owned that email.
-`gamesPlayed` and `wins` are incremented by `recordGlobalResult` in `gameMethods.js` when a game with a linked account ends.
+`gamesPlayed` and `wins` are incremented, and `bestRound` raised, by `recordGlobalResult` in `gameEngine.js` when a game with a linked account ends. The same call upserts the account's `globalLeaderboard` row.
 `sessions` holds the SHA-256 of each live session token, never the token itself. Sessions last 30 days, and expired ones are pruned whenever a new one is issued.
 
 ### Indexes
 
-Created idempotently on startup by `server/indexes.js`, called from `Meteor.startup`.
+Created idempotently on startup by `server/indexes.js`, called from `Meteor.startup`, except the two `globalLeaderboard` indexes, which `imports/api/globalLeaderboard.js` creates in its own `Meteor.startup`.
+`gameEvents` has no index at all (D46).
 A failure is logged and does not take the server down, because a unique index cannot build against a local database that already holds duplicates.
 
 | Collection | Index | Options |
@@ -337,6 +381,8 @@ A failure is logged and does not take the server down, because a unique index ca
 | `playerAccounts` | `{ googleSub: 1 }` | unique, sparse |
 | `browserSessions` | `{ tokenHash: 1 }` | unique |
 | `browserSessions` | `{ lastSeenAt: 1 }` | TTL 30 days |
+| `globalLeaderboard` | `{ accountId: 1 }` | unique |
+| `globalLeaderboard` | `{ bestRound: -1, wins: -1, achievedAt: 1 }` | |
 
 The TTL indexes on `rooms` and `rounds` are what replaced the old destructive startup wipe: data expires on a timer instead of being deleted out from under live games on every restart.
 `leaderboard` is append-only and nothing deletes from it, so its TTL is what keeps it inside the 512 MB Atlas free-tier allowance.
@@ -345,16 +391,18 @@ The TTL indexes on `rooms` and `rounds` are what replaced the old destructive st
 
 ## Publications
 
-All publications are **scoped to a single game**. `gameId` is the 5-character room PIN.
+Every game publication is **scoped to a single game**. `gameId` is the 5-character room PIN.
+`globalLeaderboard` is the one deliberate exception: it is site-wide and capped at 50 rows.
 
 | Name | Defined at | Args | Selector | Projection |
 |---|---|---|---|---|
-| `rounds` | `server/publications.js:16` | `gameId` | `{ gameId, advanced: false }` | excludes `sequence` |
-| `players` | `server/publications.js:23` | `gameId` | `{ gameId }` | excludes `attemptedSequence`, `secret`, `guard`, `reconnectTokenHash` |
-| `players.secret` | `server/publications.js:31` | `gameId` | `{ gameId, connectionId: this.connection.id }` | `secret` only |
-| `leaderboard` | `server/publications.js:36` | `gameId` | `{ gameId }` | none |
-| `eliminations` | `server/publications.js:41` | `gameId` | eliminated players in game | excludes `attemptedSequence`, `secret`, `guard`, `reconnectTokenHash`, newest 20 |
+| `rounds` | `server/publications.js:17` | `gameId` | `{ gameId, advanced: false }` | excludes `sequence` |
+| `players` | `server/publications.js:24` | `gameId` | `{ gameId }` | excludes `attemptedSequence`, `secret`, `guard`, `reconnectTokenHash` |
+| `players.secret` | `server/publications.js:32` | `gameId` | `{ gameId, connectionId: this.connection.id }` | `secret` only |
+| `leaderboard` | `server/publications.js:37` | `gameId` | `{ gameId }` | none |
+| `eliminations` | `server/publications.js:42` | `gameId` | eliminated players in game | excludes `attemptedSequence`, `secret`, `guard`, `reconnectTokenHash`, newest 20 |
 | `gameFeed` | `server/publications.js:52` | `gameId` | `{ gameId, type: 'ability' }` | newest `FEED_EVENT_LIMIT` (500) |
+| `globalLeaderboard` | `server/publications.js:60` | none | `{}` | top 50 by `bestRound`, `wins`, then earliest `achievedAt`; no field projection, so `accountId` is published (D47) |
 | `rooms.lobby` | `imports/api/rooms.js:23` | `pin` | `{ pin }` | `_id, pin, status, gameName, hostName, customSettings, gameMode, abilitiesEnabled, players.name, players.id, players.connected` |
 
 These properties are load-bearing and must not be undone:
@@ -374,12 +422,13 @@ The module carries a `global._publicationsInitialized` guard because under `--fu
 
 | File:line | Publication | Args |
 |---|---|---|
-| `ui/pages/GamePage.jsx` | `rounds`, `players`, `players.secret`, `rooms.lobby` | `gameId` |
-| `ui/abilities/LiveFeed.jsx` | `gameFeed` | `gameId` |
-| `ui/Leaderboard.jsx:12-13` | `players`, `rounds` | `gameId` |
-| `ui/EndLeaderboard.jsx:30` | `players` | `gameId` |
-| `ui/EliminationFeed.jsx` | `eliminations` | `gameId` |
-| `ui/pages/PlayerLobby.jsx:366` | `rooms.lobby` | `pin` |
+| `ui/pages/GamePage.jsx:205-209` | `rounds`, `players`, `players.secret`, `rooms.lobby` | `gameId` |
+| `ui/abilities/LiveFeed.jsx:17` | `gameFeed` | `gameId` |
+| `ui/Leaderboard.jsx:10-11` | `players`, `rounds` | `gameId` |
+| `ui/EndLeaderboard.jsx:37` | `players` | `gameId` |
+| `ui/EliminationFeed.jsx:12` | `eliminations` | `gameId` |
+| `ui/pages/PlayerLobby.jsx:439` | `rooms.lobby` | `pin` |
+| `ui/pages/GlobalLeaderboard.jsx:122` | `globalLeaderboard` | none |
 
 The `leaderboard` publication still exists and is tested, but the live UI no longer subscribes to it. `Leaderboard.jsx` builds rows from `players` + the current round via `leaderboardModels.js`. The `leaderboard` collection is still written by `players.submitSequence`.
 
@@ -391,7 +440,7 @@ There is deliberately no `'demo'` placeholder: with scoped publications it would
 ## Methods
 
 All methods are registered inside `if (Meteor.isServer && !global._<x>Initialized)` guards.
-**None of them validate arguments with `check()` or `Match`.**
+**None of them validate arguments with `check()` or `Match`**; the ones that validate do it by hand (`typeof` checks, `assertAttemptShape`).
 `abilities.*` methods require the owning connection.
 `players.rebind` and the existing-player branch of `players.join` require a private reconnect credential; a first client join checks lobby connection ownership and that the round belongs to the game.
 D3 remains open for the other game and room mutations.
@@ -401,14 +450,16 @@ D3 remains open for the other game and room mutations.
 
 | Method | Line | Args | Description |
 |---|---|---|---|
-| `rooms.create` | 29 | `hostName` | Generates a unique 5-char PIN, inserts the room, returns `{ pin, hostId }` |
-| `rooms.start` | 58 | `pin` | Sets `status: 'in_progress'`, then calls `rounds.generate` |
-| `rooms.kick` | 69 | `pin, playerId` | `$pull`s a non-host player. Refuses to kick the host |
-| `rooms.disconnect` | 82 | `pin, playerId` | If the id is the host's, **deletes the whole room**; otherwise `$pull`s the player |
-| `rooms.join` | 102 | `pin, playerName` | Validates and `$push`es `{ id, name }`. Rejects duplicate names case-insensitively |
-| `rooms.updateGameName` | 126 | `pin, gameName` | Renames the lobby |
-| `rooms.reconnect` | 149 | `pin, playerId` | Lobby only. Returns the player's name. `isHost` is always `false` (see D6) |
-| `rooms.setAbilities` | 104 | `pin, enabled` | Lobby only. Turns the ability draft on or off |
+| `rooms.create` | 55 | `hostName, accountId?` | Generates a unique 5-char PIN, inserts the room in `default` mode with abilities on, returns `{ pin, hostId }` |
+| `rooms.setGameMode` | 98 | `pin, gameMode` | Lobby only. Sets the mode and copies its preset into `customSettings` |
+| `rooms.setAbilities` | 121 | `pin, enabled` | Lobby only. Turns the ability draft on or off |
+| `rooms.updateSettings` | 131 | `pin, settings` | `custom` mode only. Validates and merges speed, lives, starting length and growth |
+| `rooms.start` | 165 | `pin, gameMode?` | Prunes disconnected players, clears the game's old players and rounds, sets `status: 'in_progress'`, then calls `rounds.generate` |
+| `rooms.kick` | 188 | `pin, playerId` | Lobby only. `$pull`s a non-host player. Refuses to kick the host |
+| `rooms.disconnect` | 201 | `pin, playerId` | Lobby only. If the id is the host's, **deletes the whole room**; otherwise `$pull`s the player |
+| `rooms.join` | 219 | `pin, playerName, accountId?` | Checks the browser session and room bans, rejects duplicate names case-insensitively, `$push`es the player. Returns `{ roomId, playerId, gameMode, customSettings }` |
+| `rooms.updateGameName` | 260 | `pin, gameName` | Lobby only. Renames the lobby |
+| `rooms.reconnect` | 282 | `pin, playerId` | Lobby only. Refused for another browser session's player. Returns the player's name. `isHost` is always `false` (see D6) |
 
 PIN alphabet is `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (`rooms.js:12`), generated with `Math.random()` (`rooms.js:15`), retried up to 10 times against a `findOne` collision check.
 
@@ -421,13 +472,14 @@ PIN alphabet is `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (`rooms.js:12`), generated wi
 | `players.rebind` | 347 | `playerId, reconnectToken` | Verifies the private credential before binding the caller's connection after a DDP reconnect (D21, D24). Refused while that browser or address is banned from the room |
 | `players.startAttempt` | 364 | `playerId, roundId` | Opens one attempt for the caller's player once the draft has resolved. Returns `{ attemptId }` |
 | `players.submitSequence` | 401 | `playerId, attemptedSequence, attempt?` | Grades against `secret.sequence`. A connected caller, with detection on, must send `{ attemptId, roundId, offsets }` from `players.startAttempt`. Lives move with `$inc` |
-| `browserSessions.resume` | | `token` | Binds this DDP connection to an anonymous browser session. Returns the token. Only the hash is stored |
+| `browserSessions.resume` | `browserSessions.js:45` | `token` | Binds this DDP connection to an anonymous browser session. Returns the token. Only the hash is stored |
 | `players.timeoutTurn` | 412 | `playerId` | Deducts a life and updates the public round status |
 | `players.timeoutRound` | 454 | `playerId, timeoutRoundId` | Eliminates the caller's own player at once. The client no longer calls it: the server's round deadline (`rounds.expire`) does this for everyone |
 | `players.leaveGame` | 490 | `playerId` | Marks a spectator eliminated while retaining their result, then rechecks the winner and round progress |
-| `rounds.advance` | 515 | `currentRoundId` | Marks the round advanced, inserts the next one (with a draft when abilities are on, and its `deadlineAt` unless a draft is holding the clock), moves active players onto it with their new `secret.sequence` |
+| `rounds.advance` | 515 | `currentRoundId` | Claims the round atomically, inserts the next one (with a draft when abilities are on, and its `deadlineAt` unless a draft is holding the clock), moves active players onto it with their new `secret.sequence` |
 | `rounds.expire` | 591 | `roundId` | Enforces a round's deadline: past `deadlineAt` + `ROUND_EXPIRE_GRACE_MS` it eliminates every player who has not cleared the round (and removes any whose connection has closed, as the disconnect cleanup does), drops lobby members who never joined, then declares a winner or advances. Any client may call it; the server checks the deadline. Returns whether it ran |
 | `time.now` | 597 | none | The server's clock in ms, so the client counts down to `deadlineAt` on the server's time |
+| `game.resetSequences` | 602 | `gameId` | Deletes the game's rounds. Called from the end screen. No ownership check (D3) |
 
 Shared helpers live in `gameEngine.js`: `checkWinner`, `advanceRoundIfReady`, `getOrCreateRound`, `loseLife`, `clearRound`, `moveToLevel`, `recordGlobalResult`, `removePlayerFromGame` (player, leaderboard rows and lobby seat; used by the disconnect cleanup and `expireRound`), and the round clock: `startRoundClock`, `startClockIfEveryoneJoined`, `armRoundTimer`, `armRoundStartFallback`, `expireRound`, `assertRoundOpen`, `sweepRoundDeadlines`.
 
@@ -443,31 +495,39 @@ The lobby's `SEE THE CARDS` guide (`ui/abilities/LobbyAbilities.jsx`, built by `
 
 | Method | Line | Args | Description |
 |---|---|---|---|
-| `abilities.pick` | 20 | `playerId, type, targetId?` | Takes a dealt card. Closes the round's draft early once everyone has chosen |
-| `abilities.skip` | 27 | `playerId` | Passes on the draft |
-| `abilities.use` | 34 | `playerId, cardId, targetId?` | Plays a held card: Free Pass, Reroll, Scramble, Jump. Refused while the round's draft is open |
-| `abilities.closeDraft` | 41 | `roundId` | Client fallback for the server's draft timer. Resolves only past `endsAt` or once everyone has chosen, and only once |
+| `abilities.pick` | 16 | `playerId, type, targetId?` | Takes a dealt card. Closes the round's draft early once everyone has chosen |
+| `abilities.skip` | 23 | `playerId` | Passes on the draft |
+| `abilities.use` | 30 | `playerId, cardId, targetId?` | Plays a held card: Free Pass, Reroll, Scramble, Jump. Refused while the round's draft is open |
+| `abilities.closeDraft` | 37 | `roundId` | Client fallback for the server's draft timer. Resolves only past `endsAt` or once everyone has chosen, and only once |
 
 Ability outcomes are written to `gameEvents` as `{ type: 'ability', ability, outcome: 'hit'|'blocked'|'failed'|'eliminated'|'used', playerId, playerName, targetId, targetName, round }`.
 The game screen's live feed (`ui/abilities/LiveFeed.jsx`) lists all of them for the whole game, merged with eliminations from `players`.
 Ability events are the only thing written to `gameEvents`; the old `level-up` and `correct-submission` events and the `gameEvents` publication were removed with the toasts they fed.
 
-A round advances only when **every** active player has submitted (`:79-81` and `:206-208`).
+A standard round advances once every active lobby player has cleared it (`advanceRoundIfReady` in `gameEngine.js`); eliminated players stop counting.
 The server enforces a deadline (`deadlineAt`, see `rounds`), so a player who stops responding cannot hold a round (D5, fixed 2026-10-18). `expireRound` runs from three places: a `Meteor.setTimeout` armed when the clock starts, the sweep in `server/main.js` every `ROUND_SWEEP_INTERVAL_MS` (a restart loses the timers), and any client whose countdown reached zero (`rounds.expire`). It is idempotent and safe on every replica.
 Answers are accepted until `ROUND_EXPIRE_GRACE_MS` after `deadlineAt`. After that `players.startAttempt`, `players.submitSequence` and `playCard` throw `round-expired` and eliminate the player, so a phone that comes back late cannot answer its way back into the game.
+A player whose connection closes is removed after `DISCONNECT_GRACE_MS` (15 s) unless they rebind.
+Battle Royale has no shared round: each player moves through their own level rounds.
 
 ### Accounts (`imports/api/playerAccounts.js`)
 
 | Method | Line | Args | Description |
 |---|---|---|---|
-| `playerAccounts.register` | 120 | `{ displayName, email, password }` | Salted SHA-256, min 8-char password. Returns `{ _id, displayName, email, sessionToken }` |
-| `playerAccounts.signIn` | 160 | `{ email, password }` | Returns `{ _id, displayName, email, sessionToken }`. Each sign-in is its own session. Throws `use-google` for a Google-only account |
-| `playerAccounts.googleClientId` | 190 | none | The public OAuth client ID, or `null` when Google sign-in is off |
-| `playerAccounts.googleSignIn` | 194 | `idToken` | Verifies a Google ID token (audience, signature, `email_verified`), then finds by `googleSub`, links by email (removing that account's password and sessions), or creates. Returns the same shape as `signIn` |
-| `playerAccounts.resume` | 222 | `token` | Returns `{ _id, displayName, email }` for a live session, else throws `invalid-session` |
-| `playerAccounts.signOut` | 230 | `token` | Deletes that one session. Unknown tokens are a no-op |
+| `playerAccounts.register` | 129 | `{ displayName, email, password }` | Salted SHA-256, min 8-char password. Returns `{ _id, displayName, email, sessionToken }` |
+| `playerAccounts.signIn` | 169 | `{ email, password }` | Returns `{ _id, displayName, email, sessionToken }`. Each sign-in is its own session. Throws `use-google` for a Google-only account |
+| `playerAccounts.googleClientId` | 199 | none | The public OAuth client ID, or `null` when Google sign-in is off |
+| `playerAccounts.googleSignIn` | 203 | `idToken` | Verifies a Google ID token (audience, signature, `email_verified`), then finds by `googleSub`, links by email (removing that account's password and sessions), or creates. Returns the same shape as `signIn` |
+| `playerAccounts.resume` | 231 | `token` | Returns `{ _id, displayName, email }` for a live session, else throws `invalid-session` |
+| `playerAccounts.signOut` | 239 | `token` | Deletes that one session. Unknown tokens are a no-op |
 
 `PlayerAccountsCollection` is never published, so hashes and salts stay server-side.
+
+### Global leaderboard (`imports/api/globalLeaderboard.js`)
+
+| Method | Line | Args | Description |
+|---|---|---|---|
+| `globalLeaderboard.myStanding` | 22 | `accountId` | Returns `{ displayName, bestRound, gamesPlayed, wins }` for that account, or `null` before its first game. Trusts the supplied id |
 Meteor's `accounts-base` / `accounts-password` / `accounts-google` packages are **not** installed; this is a hand-rolled implementation.
 Google sign-in uses Google Identity Services in the browser and `google-auth-library` on the server, loaded lazily from `imports/api/googleAuth.js`.
 That module reaches the client bundle through `playerAccounts.js`, so `app/rspack.config.js` aliases `google-auth-library` to nothing for the client build.
@@ -477,13 +537,14 @@ That module reaches the client bundle through `playerAccounts.js`, so `app/rspac
 ## Identity and State
 
 There are four unrelated identity mechanisms, none of them Meteor's.
-`Meteor.userId()` and `this.userId` are used nowhere in the repository, so **the server cannot identify the caller of any method**.
+`Meteor.userId()` and `this.userId` are used nowhere in the repository.
+The server identifies a caller only by their DDP connection and the browser session bound to it, never by account.
 
-1. **Lobby identity** - a server-minted `Random.id()` (`rooms.js:50` for the host, `:116` for joiners).
-   Joiners persist it to `localStorage.reconnectData` at `JoinRoom.jsx:53-58`.
-   The host branch that would persist it is commented out at `PlayRoute.jsx:144-150`, so a host who reloads has no reconnect path.
+1. **Lobby identity** - a server-minted `Random.id()` (`rooms.js:60` for the host, `:233` for joiners).
+   Joiners persist it to `localStorage.reconnectData` at `JoinRoom.jsx:73-78`.
+   The host branch that would persist it is commented out at `PlayRoute.jsx:169-174`, so a host who reloads has no reconnect path.
 2. **In-game identity** - the `_id` of a `players` document, held in React state by `GamePage.jsx`.
-   The player ID is also saved in `localStorage`, and lobby joins resume the same player on refresh.
+   The player ID is also saved in `localStorage['gamePlayerId:<gameId>']`, and a refresh resumes the same player through `players.join` (with the lobby ID) or `players.rebind`.
    A random reconnect credential is kept in `sessionStorage` per game and lobby player, with an in-memory fallback when storage is blocked.
    The server stores only its hash and checks it before rebinding; public player IDs and lobby IDs are insufficient.
    Legacy players without a hash can enroll a credential only while their original connection still owns them.
@@ -495,7 +556,7 @@ There are four unrelated identity mechanisms, none of them Meteor's.
    The token is not bound to the DDP connection, and methods such as `rooms.join` and `players.join` still accept a client-supplied `accountId`.
 
 `location.state` is stored in `window.history.state.usr`, so it survives F5 on the same history entry but **not** a new tab or a shared link.
-On `/game` a missing `location.state.pin` renders a "no game selected" screen (`gameId` is `null`). The display name still falls back to `'Demo Player'` (`GamePage.jsx:21`). There is deliberately no `'demo'` gameId: a placeholder would subscribe to a game that does not exist and hang on LOADING.
+On `/game` a missing `location.state.pin` renders a "no game selected" screen (`gameId` is `null`). The display name still falls back to `'Demo Player'` (`GamePage.jsx:140`). There is deliberately no `'demo'` gameId: a placeholder would subscribe to a game that does not exist and hang on LOADING.
 
 ---
 
@@ -519,7 +580,7 @@ How to write and run them is the `test` skill. What exists today:
 
 | File | Covers |
 |---|---|
-| `rooms.test.js` | `rooms.create`, `rooms.join`, `rooms.kick` |
+| `rooms.test.js` | `rooms.create`, `rooms.join`, `rooms.kick`, `rooms.setGameMode` |
 | `playerAccounts.test.js` | register and signIn validation, hashing, normalisation; session issue, resume, expiry, sign-out; Google sign-in create, link, reject (verifier stubbed) |
 | `roundAdvance.test.js` | `rounds.advance` increments, player migration, idempotency, concurrent advances create one round |
 | `roundDeadline.test.js` | The round clock: when it starts (round 1 on the last join or the fallback, draft rounds on resolve), `expireRound` eliminations, idempotency and lease, late answers rejected, the sweep |
@@ -527,7 +588,7 @@ How to write and run them is the `test` skill. What exists today:
 | `streak.test.js` | current vs longest streak |
 | `accuracy.test.js` | `totalGuesses` / `correctGuesses` |
 | `updateWinner.test.js` | last-one-standing winner selection |
-| `uiHelpers.test.js` | `roomCode.js` (normalising, and when the hidden input may be written to), `keyboard.js`, and `savedUsername.js` pure helpers |
+| `uiHelpers.test.js` | `roomCode.js` (normalising, and when the hidden input may be written to), `keyboard.js`, `savedUsername.js` and `accountReturn.js` pure helpers |
 | `sequencePlayback.test.js` | `sequencePlayback.js`: which sequences a tab has watched, and whether the board plays, skips or waits |
 | `sequence.test.js` | `imports/api/sequence.js` |
 | `publications.test.js` | scoped pubs; no `sequence` on `rounds`; no `attemptedSequence` or `secret` on `players` / `eliminations`; `players.secret` is connection-bound; `gameFeed` |
@@ -541,10 +602,14 @@ How to write and run them is the `test` skill. What exists today:
 | `browserSessions.test.js` | create, resume, hash-only storage, and clearing the connection binding |
 | `roomBans.test.js` | attempt validation, third-strike removal, session and 15-minute IP bans |
 | `leaveGame.test.js` | spectator departure retains their result and allows the game to finish |
+| `globalLeaderboard.test.js` | game results for signed-in winners and losers, no row for guests, the higher `bestRound` kept, the 50-row cap |
 
-**Not covered:** authorization on the older game and room mutations, most concurrency or race scenarios, `rooms.start`, `rooms.disconnect`, `rooms.updateGameName`, `rooms.reconnect`.
+`tests/manual/ddpBot.mjs` is not a spec: it is a raw DDP client that plays a room at machine speed, for checking bot detection by hand.
 
-CI (`.github/workflows/test.yml`) runs on pull requests to `main` and `dev` only, never on merge, behind a coverage smoke gate.
+**Not covered:** authorization on the room host mutations, most concurrency or race scenarios, `rooms.start`, `rooms.disconnect`, `rooms.updateGameName`, `rooms.updateSettings`, `rooms.reconnect`, `game.resetSequences`.
+
+CI (`.github/workflows/test.yml`) runs `meteor test --once --full-app` on pull requests to `main` and `dev` only, never on merge, behind a coverage smoke gate.
+Prettier is not a CI gate, although `npm run format:check` now passes.
 
 ---
 
@@ -557,18 +622,15 @@ One line each, so a review can cite an ID without opening anything.
 |---|---|---|
 | D3 | `rooms.js` host methods | Gameplay mutations now require the owning connection. Room host actions (`rooms.start`, `rooms.kick`, `rooms.disconnect`) still trust a client-supplied id. Fix is binding the connection, **not** a login wall |
 | D4 | `gameEngine.js` `checkWinner` | Read-then-write race: double winner. Life changes now use `$inc` and `rounds.advance` claims the round atomically |
-| D5 | `gameEngine.js` `expireRound` | **Fixed 2026-10-18.** Round deadline is now server-owned (`rounds.deadlineAt`); a player who froze or left can no longer stall a game or answer late |
-| D6 | `rooms.js:172` | `hostId` is never persisted, so `rooms.reconnect` always reports `isHost: false` |
-| D7 | `GamePage.jsx:43-53` | `playerId` lives only in React state, so a refresh mints a second player with fresh lives |
-| D8 | `playerAccounts.js:22-24` | Unstretched SHA-256, non-constant-time compare, no rate limiting, enumeration oracle |
-| D11 | root `package-lock.json` | Desynced against an empty root `package.json`, so `npm ci` at the repo root fails |
-| D12 | `ColourSequence.jsx:80-92` | A new `AudioContext` per tile click, never closed |
-| D14 | repo-wide | `npm run format:check` fails on `main`. Needs one dedicated formatting commit before it can gate CI |
-| D23 | `docker-compose.yml` | Fixed 2026-10-12: local Rspack hot reload needs the backend's published port 8080 alongside the app on 3000 |
+| D6 | `rooms.js:318` | `hostId` is never persisted, so `rooms.reconnect` always reports `isHost: false` |
+| D8 | `playerAccounts.js:24`, `:191` | Unstretched SHA-256, non-constant-time compare, no rate limiting, enumeration oracle |
+| D12 | `ColourSequence.jsx:130-143` | A new `AudioContext` per tile click, never closed |
+| D46 | `gameEvents` | No TTL index, so ability events accumulate forever against the 512 MB Atlas allowance |
+| D47 | `globalLeaderboard` publication | Publishes every listed `accountId`, and `rooms.join` / `players.join` accept a client-supplied `accountId`, so anyone can record games against a top-50 account |
 | D44 | `roomBans.js`, trusted proxy handling | Spoofed forwarded headers yield no client address, so removal writes no IP ban and a fresh session bypasses it |
 | D45 | Production-mode Rspack CSS serving | Local `meteor run --production` returns HTTP 500 for the main CSS chunk, leaving the browser unstyled |
 
-Fixed and kept for history in the register: D1, D2, D9, D10, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D43.
+Fixed and kept for history in the register: D1, D2, D5, D7, D9, D10, D11, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D43.
 
 ### Not a defect, so nobody chases it again
 
@@ -593,39 +655,38 @@ Dev, from `docker-compose.yml`:
 `docker-compose.yml` locally (from the root `.env`), plain `environment` in `infra/ecs/task-definition.{dev,prod}.json` on ECS, and `/opt/kimply/.env` on the legacy EC2 instances.
 It is a public value, not a secret, so it is not in Secrets Manager. Setup is [`docs/google-sign-in.md`](docs/google-sign-in.md).
 
-`METEOR_SETTINGS` is not passed by either compose file, and **`Meteor.settings` is never read anywhere in the codebase**.
-Apart from `GOOGLE_CLIENT_ID`, there is no configuration surface: starting lives (3), initial sequence length (4), PIN length (5), and minimum password length (8) are all hardcoded literals.
+On ECS, `infra/ecs/task-definition.{dev,prod}.json` also set `METEOR_POLLING_INTERVAL_MS=3000`, because Atlas M0 has no oplog and Meteor falls back to polling; `MONGO_URL` comes from Secrets Manager.
+
+`METEOR_SETTINGS` is not passed anywhere, and **`Meteor.settings` is never read anywhere in the codebase**.
+Apart from `GOOGLE_CLIENT_ID`, there is no runtime configuration surface.
+Gameplay tunables (lives, sequence length, timers, ability weights, bot thresholds, PIN length, password length) are constants in `app/imports/constants.js`, and a room picks its lives, starting length, growth and speed from `GAME_MODE_PRESETS` or its custom settings.
 
 ---
 
 ## Deployment
 
-Two independent stacks, each a single arm64 EC2 instance behind Nginx with Let's Encrypt TLS and its own MongoDB Atlas free cluster.
-Images are built by CI, pushed to ECR by commit SHA, and pulled by the instance over SSM.
-Runbooks are [`docs/deployment-manual.md`](docs/deployment-manual.md), [`docs/dev-environment.md`](docs/dev-environment.md), and [`docs/operations.md`](docs/operations.md). Shipping, rolling back, and the traps are the `deploy` skill.
+Both environments run on **ECS Fargate (arm64)**, built from `infra/terraform/` and deployed by `.github/workflows/deploy.yml` through `deploy/ecs-deploy.sh`.
+The workflow picks its target from `github.ref_name`, so merging to `dev` deploys development and merging to `main` deploys production.
+Runbooks are [`infra/terraform/README.md`](infra/terraform/README.md), [`docs/ecs-target-architecture.md`](docs/ecs-target-architecture.md), and [`infra/docs/architecture.md`](infra/docs/architecture.md). Shipping, rolling back, and the traps are the `deploy` skill.
 
 | | Production | Development |
 |---|---|---|
 | Branch | `main` | `dev` |
-| URL | `https://kimply.online` | `https://dev.kimply.online` |
-| Instance | `i-08184036cf37c932c` | `i-09575e88c984e1c7d` |
-| Elastic IP | `15.134.53.178` | `15.134.96.122` |
+| URL | `https://www.kimply.online` (the apex `kimply.online` also serves it) | `https://dev.kimply.online` |
+| ECS cluster / service | `kimply-prod` | `kimply-dev` |
+| Task definition template | `infra/ecs/task-definition.prod.json` | `infra/ecs/task-definition.dev.json` |
 | ECR repo | `kimply` | `kimply-dev` |
-| OIDC roles | `GitHubActionsECRPush`, `GitHubActionsEC2Commands` | same names with a `Dev` suffix |
+| Deploy roles | `GitHubActionsECRPush`, `kimply-prod-github-deploy` | `GitHubActionsECRPushDev`, `kimply-dev-github-deploy` |
 | Atlas cluster | `kimply-mongodb` | `kimply-dev-mongodb` |
 
-Both are driven by the single workflow `.github/workflows/deploy.yml`, which picks its target from `github.ref_name`.
-The two share no AWS resource: the IAM roles are per-branch, because GitHub's OIDC subject claim names one ref, so a push to `dev` cannot obtain a credential that reaches production.
+DNS for `kimply.online` is hosted in Route 53.
+Development has its own cluster, service, ECR repository, deploy roles and database, but it **shares production's load balancer** (a host-header listener rule) **and NAT gateway**, to save cost. Apply production's Terraform before development's, because development reads both from production's state.
+The IAM roles stay per-branch, because GitHub's OIDC subject claim names one ref, so a push to `dev` cannot obtain a credential that reaches production.
+A deploy takes about 37 minutes end to end: ECS waits out two 15-minute canary alarm periods before it reports the rollout complete, and `ROLLOUT_TIMEOUT` (2700 s) allows for that.
 
-Everything else - `deploy/`, `nginx/`, `docker-compose.prod.yml`, `scripts/` - is environment-agnostic and reads its configuration from `/opt/kimply/.env` on the box.
-**Do not fork any of those per environment.** If something must differ, it belongs in `.env`.
+The EC2 stack that served both sites before the cutover is retired: its instances no longer exist.
+`docker-compose.prod.yml`, `nginx/`, `scripts/check-mongo.mjs`, and `deploy/deploy.sh`, `sync-config.sh`, `bootstrap-ec2.sh` and `init-letsencrypt.sh` belong to that stack and are not used by CI. CI still runs `deploy/build-push.sh` (the arm64 image) and `deploy/ecs-deploy.sh`, which ends with `scripts/health-check.sh`. [`docs/deployment-manual.md`](docs/deployment-manual.md) and [`docs/dev-environment.md`](docs/dev-environment.md) are kept as its historical runbook.
 `docker-compose.yml` is development only and must stay working.
-
-**Production is migrating to ECS on Fargate** (issue #1), designed in [`docs/ecs-target-architecture.md`](docs/ecs-target-architecture.md) and built from `infra/terraform/` and `infra/ecs/task-definition.prod.json`.
-Until the cutover step in that document, the EC2 stack above is still what serves `kimply.online`.
-The pipeline now deploys **only** to ECS: `main` to the `kimply-prod` cluster (serving `www.kimply.online`, with the apex forwarded to it) and `dev` to `kimply-dev` (serving `dev.kimply.online`), both through `deploy/ecs-deploy.sh`.
-Both also answer on `ecs.kimply.online` / `ecs-dev.kimply.online`, which bypass the apex redirect.
-The EC2 instances therefore keep serving whatever they last received until each cutover. To ship to one in the meantime, run `deploy/deploy.sh <sha>` on that instance by hand.
 
 ---
 

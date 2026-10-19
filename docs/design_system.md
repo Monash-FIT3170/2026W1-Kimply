@@ -2,7 +2,7 @@
 
 Multiplayer memory challenge. This document is the single source of truth for how Kimply looks, sounds, and behaves. Check here before designing or building anything new.
 
-**Status:** v0.7 · Active
+**Status:** v0.8 · Active
 **Owner:** Design
 
 ---
@@ -19,6 +19,7 @@ Multiplayer memory challenge. This document is the single source of truth for ho
 - [Components](#components)
 - [Patterns](#patterns)
 - [Voice & copy](#voice--copy)
+- [Presentations](#presentations)
 - [CSS tokens](#css-tokens)
 - [Contributing](#contributing)
 
@@ -60,17 +61,21 @@ The mark is the **KIMPLY** wordmark in Outfit 800, paired with a 2×2 tile clust
 
 Neutrals carry ~95% of surface area. The tile palette is the game's signature — used for memory tiles, the logo, avatars, and small accents. Lime is reserved for the single most important action on a screen.
 
+OKLCH is the source of truth: it is what the app renders.
+Each Hex value is that colour converted to sRGB, for tools that do not take OKLCH, such as PowerPoint, Keynote, Google Slides and most image editors.
+If you change a token, convert it again rather than editing the hex by eye.
+
 ### Neutrals
 
 | Token | Hex | OKLCH | Use |
 |---|---|---|---|
-| `--bg` | `#1f2030` | `oklch(0.14 0.02 270)` | Page background |
-| `--surface` | `#2a2b3a` | `oklch(0.20 0.02 270)` | Cards, inputs, rows |
-| `--surface-2` | `#33344a` | `oklch(0.24 0.02 270)` | Raised / filled states |
-| `--hairline` | `#494a5e` | `oklch(0.32 0.02 270)` | 1px borders, dividers |
-| `--fg` | `#f7f6f0` | `oklch(0.97 0.006 80)` | Primary text |
-| `--fg-2` | `#b0b1bd` | `oklch(0.72 0.01 270)` | Secondary text |
-| `--fg-3` | `#7a7b8c` | `oklch(0.55 0.015 270)` | Meta, labels, placeholders |
+| `--bg` | `#060911` | `oklch(0.14 0.02 270)` | Page background |
+| `--surface` | `#12161f` | `oklch(0.20 0.02 270)` | Cards, inputs, rows |
+| `--surface-2` | `#1b1f29` | `oklch(0.24 0.02 270)` | Raised / filled states |
+| `--hairline` | `#2f333d` | `oklch(0.32 0.02 270)` | 1px borders, dividers |
+| `--fg` | `#f7f5f1` | `oklch(0.97 0.006 80)` | Primary text |
+| `--fg-2` | `#a2a4ab` | `oklch(0.72 0.01 270)` | Secondary text |
+| `--fg-3` | `#6e717b` | `oklch(0.55 0.015 270)` | Meta, labels, placeholders |
 
 ### Tile palette
 
@@ -78,16 +83,16 @@ Assign in fixed order. When mapping players to colors, follow this sequence.
 
 | Token | Hex | OKLCH |
 |---|---|---|
-| `--tile-pink` | `#ee6f7c` | `oklch(0.72 0.19 12)` |
-| `--tile-amber` | `#f4ba53` | `oklch(0.83 0.16 80)` |
-| `--tile-teal` | `#5ec7c8` | `oklch(0.78 0.13 195)` |
-| `--tile-violet` | `#9968d7` | `oklch(0.66 0.19 295)` |
+| `--tile-pink` | `#ff6885` | `oklch(0.72 0.19 12)` |
+| `--tile-amber` | `#fdba2f` | `oklch(0.83 0.16 80)` |
+| `--tile-teal` | `#1ad1d1` | `oklch(0.78 0.13 195)` |
+| `--tile-violet` | `#9d74f8` | `oklch(0.66 0.19 295)` |
 
 ### Primary
 
 | Token | Hex | OKLCH | Use |
 |---|---|---|---|
-| `--primary` | `#c8e94d` | `oklch(0.86 0.19 130)` | The one key CTA per screen |
+| `--primary` | `#a7e954` | `oklch(0.86 0.19 130)` | The one key CTA per screen |
 
 Soft tint for pulsing states and chip backgrounds: `color-mix(in oklab, var(--primary) 14%, var(--bg))`
 
@@ -389,6 +394,58 @@ Kimply talks like a quietly confident host. Direct, second person, present tense
 
 ---
 
+## Presentations
+
+Slides use the game's brand, colours and fonts, at sizes that survive a projector.
+Everything below is about decks and handouts; the rest of this document is about the app.
+
+### Canvas
+
+16:9 at 1920 × 1080, background `--bg` `#060911`.
+Group content on `--surface` `#12161f` panels with a 1px `--hairline` `#2f333d` border and rounded corners, as the app does with cards.
+Leave at least 96px of margin on every side; projectors crop edges.
+
+### Type for projection
+
+The app's 11px labels and 16px body vanish on a projected screen. Use this scale instead, in points at 1920 × 1080.
+
+| Role | Size / weight | Face | Tracking |
+|---|---|---|---|
+| Title slide | 72–96pt / 800 | Outfit | `-0.025em` |
+| Slide title | 40–54pt / 800 | Outfit | `-0.02em` |
+| Eyebrow label | 14–18pt / 600 uppercase | JetBrains Mono | `0.18em` |
+| Body | 20–28pt / 500 | Manrope | normal |
+| Big number, room code | 48–72pt / 700 | JetBrains Mono | normal |
+
+Nothing an audience must read goes below 14pt.
+Secondary text uses `--fg-2` `#a2a4ab`; keep `--fg-3` `#6e717b` for decoration only, because a projector washes it out.
+The eyebrow over a title is the deck's equivalent of the game's HUD label: `MILESTONE 4 · RESULTS`.
+
+### Colour
+
+- Keep one lime (`--primary` `#a7e954`) element per slide: the takeaway, the number that matters, or the call to action.
+- Chart series follow the tile order: pink `#ff6885`, amber `#fdba2f`, teal `#1ad1d1`, violet `#9d74f8`. Gridlines are `--hairline`, axis labels `--fg-2`.
+- On slides about abilities, use the ability accents with their meanings: pink hurts another player, teal protects, amber helps yourself, violet changes a sequence or a level.
+- No other hues, gradients or photo backgrounds behind text.
+
+### Logo
+
+The wordmark in `--fg` on `--bg`, with the tile cluster in its fixed pink → amber → teal → violet order.
+Give it clear space of at least the cluster's width; never recolour, outline or stretch it.
+
+### Fonts
+
+Outfit, Manrope and JetBrains Mono are free from Google Fonts.
+Install them on the presenting machine, or embed them in the file (PowerPoint: Save options › Embed fonts in the file), or present from a PDF export.
+Otherwise the app's character is lost to a substitute face.
+
+### Print
+
+There is no light theme yet, so handouts print the dark slides as they are.
+If a light variant is needed, propose its tokens here first rather than inventing them in a deck.
+
+---
+
 ## CSS tokens
 
 Drop this into your global stylesheet.
@@ -440,7 +497,7 @@ Drop this into your global stylesheet.
 ### Favicon
 
 ```html
-<meta name="theme-color" content="#1f2030" />
+<meta name="theme-color" content="#060911" />
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
@@ -479,3 +536,4 @@ The system grows by addition, not by drift.
 | v0.5 | 2026-10-12 | Adds the `lightsOut` animation and the Playback effect chip for the Slo-Mo, 2x Speed and Lights Out abilities. |
 | v0.6 | 2026-10-13 | Adds the Ability guide pattern and the read-only Ability card, so the lobby can show every card before the game. |
 | v0.7 | 2026-10-15 | Replaces the looping `lightsOut` animation with the Lights Out overlay, which covers only the hidden flashes, and gives joined players the invite link. |
+| v0.8 | 2026-10-16 | Corrects every Hex value to the sRGB conversion of its OKLCH token, states that OKLCH is authoritative, and adds the Presentations section for slides and handouts. |

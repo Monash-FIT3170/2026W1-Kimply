@@ -4,11 +4,14 @@ Day-2 operations for the production deployment: monitoring, backups, cost, and i
 
 Setup and deployment are in [deployment-manual.md](deployment-manual.md).
 
-> **Partly superseded by ECS.** Traffic is now served by ECS Fargate, so container health, restarts, rolling deploys and rollback are described in [ecs-target-architecture.md](ecs-target-architecture.md) and [`infra/terraform/README.md`](../infra/terraform/README.md).
-> Monitoring is now a CloudWatch Synthetics canary on `/health/ready` with an SNS email alarm, rather than an external uptime monitor to be set up. Atlas backups and cost sections below still apply.
+> **Largely superseded by ECS.** Traffic is served by ECS Fargate, and the EC2 instances this document was written for were terminated on 2026-10-04.
+> Container health, restarts, rolling deploys and rollback are in [ecs-target-architecture.md](ecs-target-architecture.md) and [`infra/terraform/README.md`](../infra/terraform/README.md).
+> Monitoring is a CloudWatch Synthetics canary on `/health/ready` every 15 minutes per environment, with an SNS email alarm that also rolls a failed deploy back.
+> Still current here: Atlas monitoring (section 3), backups (section 5), and the Atlas parts of the incident runbook.
+> The CPU-credit, disk, Nginx and EC2 cost figures no longer describe anything running; ECS costs are in ecs-target-architecture.md (D42).
 Known application defects are in [defect-register.md](defect-register.md).
 
-**Last updated:** 2026-08-05
+**Last updated:** 2026-10-17 (banner only; the body is from 2026-08-05)
 
 ---
 

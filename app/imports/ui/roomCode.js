@@ -17,3 +17,8 @@ export function roomCodeInputWriteBack(rawValue, normalized, composing) {
   if (composing || rawValue === normalized) return null;
   return normalized;
 }
+
+// The join page for a room, as an invite link uses it. An empty code opens plain code entry.
+export function joinRoomPath(code) {
+  return code ? `/play/join?code=${encodeURIComponent(code)}` : '/play/join';
+}
