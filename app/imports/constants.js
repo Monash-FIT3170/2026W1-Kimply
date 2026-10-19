@@ -7,7 +7,7 @@ export const DEFAULT_SEQUENCE_LENGTH = 4;
 export const INITIAL_LEVEL = 4; // starting currentLevel (level 1 == sequence length 4)
 export const BONUS_LIFE_ROUND = 7; // completing this round grants +1 life
 export const STREAK_BONUS_LIFE_THRESHOLD = 3; // a life for every N correct rounds in a row (capped at starting lives outside battle royale)
-export const ROUND_TIMER_SECONDS = 50; // whole-round countdown (not battle royale)
+export const ROUND_TIMER_SECONDS = 45; // whole-round countdown (not battle royale)
 // Round 1's clock starts when the last lobby member has joined, or this long after the round
 // is created if someone has not, whichever comes first.
 export const ROUND_START_FALLBACK_MS = 5000;
