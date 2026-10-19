@@ -215,7 +215,7 @@ It is not app markup. Nobody needs to chase it.
 
 **Reset the database.**
 `docker compose down -v` stops everything and wipes the Mongo volume.
-Plain `docker compose down` keeps your data.
+Plain `docker compose down` keeps your data. 
 
 ---
 
