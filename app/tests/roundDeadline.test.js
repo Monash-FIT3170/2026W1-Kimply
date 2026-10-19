@@ -5,7 +5,7 @@ import { RoundsCollection } from '../imports/api/rounds.js';
 import { PlayersCollection } from '../imports/api/players.js';
 import { RoomsCollection } from '../imports/api/rooms.js';
 import { LeaderboardCollection } from '../imports/api/leaderboard.js';
-import { expireRound, startRoundClock, sweepRoundDeadlines } from '../imports/api/gameEngine.js';
+import { expireRound, removeIfStillGone, startRoundClock, sweepRoundDeadlines } from '../imports/api/gameEngine.js';
 import { resolveRoundDraft } from '../imports/api/abilityEngine.js';
 import { ROUND_EXPIRE_GRACE_MS, ROUND_START_FALLBACK_MS, ROUND_TIMER_SECONDS } from '../imports/constants.js';
 
@@ -184,20 +184,24 @@ if (Meteor.isServer) {
         assert.strictEqual(round.expiringUntil, undefined);
       });
 
-      it('removes a player whose connection closed, as the disconnect cleanup would, rather than eliminating them', async function () {
+      it('puts out a player whose connection closed like anyone else, flagged for the disconnect cleanup', async function () {
+        // At the deadline they may only be reconnecting (a server restart, a deploy), so they
+        // are not deleted here: a rebind must still find them.
         await insertRoom(['a', 'b', 'c']);
         const roundId = await insertRound({ deadlineAt: overdue() });
         await insertPlayer(roundId, 'a', { completeRound: true });
         await insertPlayer(roundId, 'b', { completeRound: true });
-        const gone = await insertPlayer(roundId, 'c', { connected: false });
-        await LeaderboardCollection.insertAsync({ gameId, playerId: gone, name: 'c', roundId });
+        const away = await insertPlayer(roundId, 'c', { connected: false });
 
         await expireRound(roundId);
 
-        assert.strictEqual(await PlayersCollection.findOneAsync(gone), undefined);
-        assert.strictEqual(await LeaderboardCollection.find({ playerId: gone }).countAsync(), 0);
+        const player = await PlayersCollection.findOneAsync(away);
+        assert.strictEqual(player.eliminated, true);
+        assert.strictEqual(player.timedOutWhileAway, true);
+        assert.strictEqual(player.eliminatedRound, 1);
+        assert.strictEqual(player.currentLevel, 4);
         const room = await RoomsCollection.findOneAsync({ pin: gameId });
-        assert.deepStrictEqual(room.players.map((p) => p.id).sort(), ['a', 'b']);
+        assert.strictEqual(room.players.length, 3);
         assert.strictEqual((await RoundsCollection.findOneAsync(roundId)).advanced, true);
       });
 
@@ -253,6 +257,19 @@ if (Meteor.isServer) {
         assert.strictEqual((await RoundsCollection.findOneAsync(roundId)).advanced, true);
       });
 
+      it('ends a game down to one player once the clock puts them out', async function () {
+        // The other lobby members never joined, so the game has a single player left.
+        await insertRoom(['a', 'never-joined']);
+        const roundId = await insertRound({ deadlineAt: overdue() });
+        const only = await insertPlayer(roundId, 'a');
+
+        await expireRound(roundId);
+
+        const player = await PlayersCollection.findOneAsync(only);
+        assert.strictEqual(player.eliminated, true);
+        assert.strictEqual(player.gameFinished, true);
+      });
+
       it('declares the last player standing the winner', async function () {
         await insertRoom(['a', 'b']);
         const roundId = await insertRound({ deadlineAt: overdue() });
@@ -301,6 +318,67 @@ if (Meteor.isServer) {
         assert.strictEqual(await Meteor.callAsync('rounds.expire', roundId), true);
         assert.strictEqual((await PlayersCollection.findOneAsync(slow)).eliminated, true);
         await assert.rejects(Meteor.callAsync('rounds.expire', ''), (error) => error.error === 'invalid');
+      });
+    });
+
+    describe('the disconnect cleanup', function () {
+      it('removes a player the clock put out while away, once their grace runs out', async function () {
+        await insertRoom(['a', 'b', 'c']);
+        const roundId = await insertRound({ deadlineAt: overdue() });
+        await insertPlayer(roundId, 'a', { completeRound: true });
+        await insertPlayer(roundId, 'b', { completeRound: true });
+        const away = await insertPlayer(roundId, 'c', { connected: false, connectionId: 'conn-c' });
+        await LeaderboardCollection.insertAsync({ gameId, playerId: away, name: 'c', roundId });
+        await expireRound(roundId);
+
+        await removeIfStillGone('conn-c');
+
+        assert.strictEqual(await PlayersCollection.findOneAsync(away), undefined);
+        assert.strictEqual(await LeaderboardCollection.find({ playerId: away }).countAsync(), 0);
+        const room = await RoomsCollection.findOneAsync({ pin: gameId });
+        assert.deepStrictEqual(room.players.map((p) => p.id).sort(), ['a', 'b']);
+      });
+
+      it('keeps a player the clock put out who has come back', async function () {
+        await insertRoom(['a', 'b']);
+        const roundId = await insertRound();
+        const back = await insertPlayer(roundId, 'a', {
+          eliminated: true,
+          timedOutWhileAway: true,
+          connected: true,
+          connectionId: 'conn-a',
+        });
+        await insertPlayer(roundId, 'b');
+
+        await removeIfStillGone('conn-a');
+
+        assert.ok(await PlayersCollection.findOneAsync(back));
+      });
+
+      it('keeps an eliminated spectator who leaves, on the board', async function () {
+        await insertRoom(['a', 'b']);
+        const roundId = await insertRound();
+        const spectator = await insertPlayer(roundId, 'a', {
+          eliminated: true,
+          connected: false,
+          connectionId: 'conn-a',
+        });
+        await insertPlayer(roundId, 'b');
+
+        await removeIfStillGone('conn-a');
+
+        assert.ok(await PlayersCollection.findOneAsync(spectator));
+      });
+
+      it('removes a player who left mid-round and never came back', async function () {
+        await insertRoom(['a', 'b']);
+        const roundId = await insertRound();
+        const gone = await insertPlayer(roundId, 'a', { connected: false, connectionId: 'conn-a' });
+        await insertPlayer(roundId, 'b');
+
+        await removeIfStillGone('conn-a');
+
+        assert.strictEqual(await PlayersCollection.findOneAsync(gone), undefined);
       });
     });
 

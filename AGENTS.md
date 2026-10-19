@@ -303,7 +303,7 @@ Each definition is wrapped in a `global._<Name>Collection` guard so it survives 
   longestStreak: 0, totalGuesses: 0, correctGuesses: 0, currentLevel: 4, eliminatedRound: null,
   eliminated: false, eliminatedAt: null, isBattleRoyale, winner: false, completeRound: false,
   roundStatus: 'Playing' | 'Correct' | 'Passed' | 'Eliminated', gameFinished: false,
-  connectionId, connected, reconnectTokenHash?,
+  connectionId, connected, reconnectTokenHash?, timedOutWhileAway?,
   guard: { browserSessionId, boundAt, botStrikes, attempt },
   secret: {
     sequence: { roundId, colours, version },   // what this player must repeat
@@ -317,6 +317,7 @@ Each definition is wrapped in a `global._<Name>Collection` guard so it survives 
   } }
 ```
 `reconnectTokenHash` is a server-only SHA-256 hash of the per-tab reconnect credential.
+`timedOutWhileAway` marks a player the round clock put out while their connection was closed. The disconnect cleanup removes them if they are still away when their grace runs out; a rebind clears it.
 It is excluded from every player publication.
 `secret` is hidden state. It is excluded from `players` and `eliminations` and reaches only its owner, through `players.secret`.
 `guard` holds the open attempt, the strike count, and which browser session owns the player. It is excluded from `players` and `eliminations` and is never published.
@@ -467,21 +468,21 @@ PIN alphabet is `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (`rooms.js:12`), generated wi
 
 | Method | Line | Args | Description |
 |---|---|---|---|
-| `rounds.generate` | 232 | `gameId = null` | Inserts a new `isCurrent` round. A standard round starts with `deadlineAt: null` and arms the `ROUND_START_FALLBACK_MS` timer |
-| `players.join` | 264 | `roundId, playerName, gameId, lobbyPlayerId, isBattleRoyale, accountId, reconnectToken` | Inserts a player with the room's starting lives and their own copy of the round's sequence, or rebinds an existing one |
-| `players.rebind` | 347 | `playerId, reconnectToken` | Verifies the private credential before binding the caller's connection after a DDP reconnect (D21, D24). Refused while that browser or address is banned from the room |
-| `players.startAttempt` | 364 | `playerId, roundId` | Opens one attempt for the caller's player once the draft has resolved. Returns `{ attemptId }` |
-| `players.submitSequence` | 401 | `playerId, attemptedSequence, attempt?` | Grades against `secret.sequence`. A connected caller, with detection on, must send `{ attemptId, roundId, offsets }` from `players.startAttempt`. Lives move with `$inc` |
+| `rounds.generate` | 234 | `gameId = null` | Inserts a new `isCurrent` round. A standard round starts with `deadlineAt: null` and arms the `ROUND_START_FALLBACK_MS` timer |
+| `players.join` | 266 | `roundId, playerName, gameId, lobbyPlayerId, isBattleRoyale, accountId, reconnectToken` | Inserts a player with the room's starting lives and their own copy of the round's sequence, or rebinds an existing one |
+| `players.rebind` | 349 | `playerId, reconnectToken` | Verifies the private credential before binding the caller's connection after a DDP reconnect (D21, D24). Refused while that browser or address is banned from the room |
+| `players.startAttempt` | 366 | `playerId, roundId` | Opens one attempt for the caller's player once the draft has resolved. Returns `{ attemptId }` |
+| `players.submitSequence` | 403 | `playerId, attemptedSequence, attempt?` | Grades against `secret.sequence`. A connected caller, with detection on, must send `{ attemptId, roundId, offsets }` from `players.startAttempt`. Lives move with `$inc` |
 | `browserSessions.resume` | `browserSessions.js:45` | `token` | Binds this DDP connection to an anonymous browser session. Returns the token. Only the hash is stored |
-| `players.timeoutTurn` | 412 | `playerId` | Deducts a life and updates the public round status |
-| `players.timeoutRound` | 454 | `playerId, timeoutRoundId` | Eliminates the caller's own player at once. The client no longer calls it: the server's round deadline (`rounds.expire`) does this for everyone |
-| `players.leaveGame` | 490 | `playerId` | Marks a spectator eliminated while retaining their result, then rechecks the winner and round progress |
-| `rounds.advance` | 515 | `currentRoundId` | Claims the round atomically, inserts the next one (with a draft when abilities are on, and its `deadlineAt` unless a draft is holding the clock), moves active players onto it with their new `secret.sequence` |
-| `rounds.expire` | 591 | `roundId` | Enforces a round's deadline: past `deadlineAt` + `ROUND_EXPIRE_GRACE_MS` it eliminates every player who has not cleared the round (and removes any whose connection has closed, as the disconnect cleanup does), drops lobby members who never joined, then declares a winner or advances. Any client may call it; the server checks the deadline. Returns whether it ran |
-| `time.now` | 597 | none | The server's clock in ms, so the client counts down to `deadlineAt` on the server's time |
-| `game.resetSequences` | 602 | `gameId` | Deletes the game's rounds. Called from the end screen. No ownership check (D3) |
+| `players.timeoutTurn` | 414 | `playerId` | Deducts a life and updates the public round status |
+| `players.timeoutRound` | 456 | `playerId, timeoutRoundId` | Eliminates the caller's own player at once. The client no longer calls it: the server's round deadline (`rounds.expire`) does this for everyone |
+| `players.leaveGame` | 492 | `playerId` | Marks a spectator eliminated while retaining their result, then rechecks the winner and round progress |
+| `rounds.advance` | 517 | `currentRoundId` | Claims the round atomically, inserts the next one (with a draft when abilities are on, and its `deadlineAt` unless a draft is holding the clock), moves active players onto it with their new `secret.sequence` |
+| `rounds.expire` | 593 | `roundId` | Enforces a round's deadline: past `deadlineAt` + `ROUND_EXPIRE_GRACE_MS` it eliminates every player who has not cleared the round (one whose connection has closed is flagged `timedOutWhileAway`, not deleted, so a player who is only reconnecting can rebind), drops lobby members who never joined, then declares a winner or advances. Any client may call it; the server checks the deadline. Returns whether it ran |
+| `time.now` | 599 | none | The server's clock in ms, so the client counts down to `deadlineAt` on the server's time |
+| `game.resetSequences` | 604 | `gameId` | Deletes the game's rounds. Called from the end screen. No ownership check (D3) |
 
-Shared helpers live in `gameEngine.js`: `checkWinner`, `advanceRoundIfReady`, `getOrCreateRound`, `loseLife`, `clearRound`, `moveToLevel`, `recordGlobalResult`, `removePlayerFromGame` (player, leaderboard rows and lobby seat; used by the disconnect cleanup and `expireRound`), and the round clock: `startRoundClock`, `startClockIfEveryoneJoined`, `armRoundTimer`, `armRoundStartFallback`, `expireRound`, `assertRoundOpen`, `sweepRoundDeadlines`.
+Shared helpers live in `gameEngine.js`: `checkWinner`, `advanceRoundIfReady`, `getOrCreateRound`, `loseLife`, `clearRound`, `moveToLevel`, `recordGlobalResult`, `removePlayerFromGame` (player, leaderboard rows and lobby seat), `removeIfStillGone` (the disconnect cleanup, run `DISCONNECT_GRACE_MS` after a connection closes), and the round clock: `startRoundClock`, `startClockIfEveryoneJoined`, `armRoundTimer`, `armRoundStartFallback`, `expireRound`, `assertRoundOpen`, `sweepRoundDeadlines`.
 
 ### Abilities (`imports/api/abilities.js`)
 
@@ -507,7 +508,7 @@ Ability events are the only thing written to `gameEvents`; the old `level-up` an
 A standard round advances once every active lobby player has cleared it (`advanceRoundIfReady` in `gameEngine.js`); eliminated players stop counting.
 The server enforces a deadline (`deadlineAt`, see `rounds`), so a player who stops responding cannot hold a round (D5, fixed 2026-10-18). `expireRound` runs from three places: a `Meteor.setTimeout` armed when the clock starts, the sweep in `server/main.js` every `ROUND_SWEEP_INTERVAL_MS` (a restart loses the timers), and any client whose countdown reached zero (`rounds.expire`). It is idempotent and safe on every replica.
 Answers are accepted until `ROUND_EXPIRE_GRACE_MS` after `deadlineAt`. After that `players.startAttempt`, `players.submitSequence` and `playCard` throw `round-expired` and eliminate the player, so a phone that comes back late cannot answer its way back into the game.
-A player whose connection closes is removed after `DISCONNECT_GRACE_MS` (15 s) unless they rebind.
+A player whose connection closes is removed after `DISCONNECT_GRACE_MS` (15 s) unless they rebind, including one the clock put out in the meantime.
 Battle Royale has no shared round: each player moves through their own level rounds.
 
 ### Accounts (`imports/api/playerAccounts.js`)
@@ -583,7 +584,7 @@ How to write and run them is the `test` skill. What exists today:
 | `rooms.test.js` | `rooms.create`, `rooms.join`, `rooms.kick`, `rooms.setGameMode` |
 | `playerAccounts.test.js` | register and signIn validation, hashing, normalisation; session issue, resume, expiry, sign-out; Google sign-in create, link, reject (verifier stubbed) |
 | `roundAdvance.test.js` | `rounds.advance` increments, player migration, idempotency, concurrent advances create one round |
-| `roundDeadline.test.js` | The round clock: when it starts (round 1 on the last join or the fallback, draft rounds on resolve), `expireRound` eliminations, idempotency and lease, late answers rejected, the sweep |
+| `roundDeadline.test.js` | The round clock: when it starts (round 1 on the last join or the fallback, draft rounds on resolve), `expireRound` eliminations, idempotency and lease, late answers rejected, the sweep, a one-player game ending, and the disconnect cleanup (`removeIfStillGone`) |
 | `lifeDeduction.test.js` | life loss on wrong guess, streak reset |
 | `streak.test.js` | current vs longest streak |
 | `accuracy.test.js` | `totalGuesses` / `correctGuesses` |
@@ -592,7 +593,7 @@ How to write and run them is the `test` skill. What exists today:
 | `sequencePlayback.test.js` | `sequencePlayback.js`: which sequences a tab has watched, and whether the board plays, skips or waits |
 | `sequence.test.js` | `imports/api/sequence.js` |
 | `publications.test.js` | scoped pubs; no `sequence` on `rounds`; no `attemptedSequence` or `secret` on `players` / `eliminations`; `players.secret` is connection-bound; `gameFeed` |
-| `playerReconnect.test.js` | Rebind and join ownership, valid reconnects, legacy enrollment, lobby and round checks, credential publication exclusion |
+| `playerReconnect.test.js` | Rebind and join ownership, valid reconnects, legacy enrollment, lobby and round checks, credential publication exclusion, a rebind clearing `timedOutWhileAway` |
 | `abilityRules.test.js` | dealing, eligibility, Shield, hand expiry, caller binding, `playbackFor` and `playbackTiming` |
 | `abilities.test.js` | draft dealing, resolution order, Shield, Steal and Strike outcomes, Slo-Mo / 2x Speed / Lights Out landing, stacking, lapsing and Battle Royale pending, Free Pass, Reroll, Scramble, Jump, `rooms.setAbilities` |
 | `abilityFeed.test.js` | feed rows, scope filtering and the wording of ability notices, playback cards included; the lobby card guide per mode and starting lives |

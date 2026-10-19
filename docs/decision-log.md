@@ -20,6 +20,24 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-19 - The round clock no longer deletes a player who is reconnecting; end-of-game ranks fixed
+
+Testing the server-owned deadline end to end found that `expireRound` deleted every unfinished player whose connection was closed at that moment, with no grace.
+A server restart or a deploy (every connection closes), or a network blip at the deadline, therefore erased players who were only reconnecting: the browser came back to "Could not join the game." instead of its result, and the player vanished from the leaderboard and their global result.
+On `dev`, the same player simply rebound.
+
+`expireRound` now eliminates a disconnected straggler like anyone else and flags them `timedOutWhileAway`.
+The disconnect cleanup, moved into `removeIfStillGone` in `gameEngine.js`, removes a flagged player if they are still away when their grace runs out, so a phone that has really gone is removed as the 2026-10-18 entry intended; a rebind clears the flag.
+
+- **Restart:** the cleanup's timers do not survive a restart, so a flagged player who never returns stays on the board as eliminated rather than being removed. That is the safer failure.
+- **One-player games:** `checkWinner` ended a standard game only when more than one player was left, so a game reduced to one player (the rest never joined, or left) by the time the clock put that player out never finished, and the player sat on "You are spectating" with nobody else in the game. A game everyone has been put out of now ends, whatever its size.
+- **End-of-game ranks:** `EndLeaderboard.jsx` ranked standard players by `currentLevel`, which only moves on a wrong answer, so players knocked out in different rounds showed as tied (a round-2 and a round-1 elimination were both "=2"). Standard games now rank by `eliminatedRound`; Battle Royale still ranks by `currentLevel`. `expireRound` now also sets `currentLevel`, as `loseLife` does.
+- **`tests/manual/ddpBot.mjs`** sends the 43-character reconnect credential `players.join` has required since the credential was added; without it every run stopped at `not-yours`.
+
+Files: `api/gameEngine.js`, `api/gameMethods.js`, `ui/EndLeaderboard.jsx`, `tests/roundDeadline.test.js`, `tests/playerReconnect.test.js`, `tests/manual/ddpBot.mjs`, `AGENTS.md`.
+
+---
+
 ## 2026-10-18 - Room code letters no longer duplicate on Android keyboards with predictive text
 
 The join page captured the code in a hidden `<input>` that it emptied after every keystroke, adding each input event's text to the code. A keyboard with predictive text keeps the word it is composing in its own buffer and re-sends it as the user types, so after the field was emptied behind its back the next event carried letters already typed, and they were added twice. It affected only players whose keyboard composes (Gboard with suggestions on); a keyboard that commits one character at a time never showed it. Suggestions off made it stop, which is how it was narrowed down.

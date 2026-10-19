@@ -19,7 +19,7 @@ import {
   expireRound,
   generateSequence,
   loseLife,
-  removePlayerFromGame,
+  removeIfStillGone,
   roundDeadline,
   roundLevel,
   sequenceFor,
@@ -221,6 +221,8 @@ async function rebindPlayer(player, connectionId, token, extraSet = {}) {
     : { _id: player._id, reconnectTokenHash: hash };
   const updated = await PlayersCollection.updateAsync(selector, {
     $set: { connectionId, connected: true, ...extraSet, ...(enroll ? { reconnectTokenHash: hash } : {}) },
+    // Back in time: the disconnect cleanup must not remove them for a deadline they missed while away.
+    $unset: { timedOutWhileAway: '' },
   });
   if (!updated) throw new Meteor.Error('not-yours', 'This reconnect credential does not belong to that player');
 }
@@ -621,19 +623,8 @@ if (Meteor.isServer && !global._gameMethodsInitialized) {
         await PlayersCollection.updateAsync({ connectionId: closedId }, { $set: { connected: false } });
       })();
 
-      Meteor.setTimeout(async () => {
-        const gone = await PlayersCollection.find({
-          connectionId: closedId,
-          connected: false,
-          eliminated: false,
-          gameFinished: false,
-        }).fetchAsync();
-        for (const p of gone) {
-          await removePlayerFromGame(p);
-          await checkWinner(p.gameId, p.isBattleRoyale ?? false);
-          const round = await RoundsCollection.findOneAsync(p.roundId);
-          if (round) await advanceRoundIfReady(round);
-        }
+      Meteor.setTimeout(() => {
+        removeIfStillGone(closedId).catch((error) => console.error('Could not remove a disconnected player', error));
       }, DISCONNECT_GRACE_MS);
     });
   });

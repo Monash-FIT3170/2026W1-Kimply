@@ -58,6 +58,16 @@ if (Meteor.isServer) {
       assert.strictEqual(player.lives, 1);
     });
 
+    it("clears the round clock's away flag, so the disconnect cleanup keeps a player who came back", async function () {
+      await PlayersCollection.updateAsync(playerId, {
+        $set: { connected: false, eliminated: true, timedOutWhileAway: true },
+      });
+      await callAs('new-owner', 'players.rebind', playerId, token);
+      const player = await PlayersCollection.findOneAsync(playerId);
+      assert.strictEqual(player.connected, true);
+      assert.strictEqual(player.timedOutWhileAway, undefined);
+    });
+
     it('requires the same credential when players.join finds an existing lobby player', async function () {
       const args = [roundId, 'Owner', 'RCN01', 'lobby-owner', false, null];
       await assert.rejects(callAs('attacker', 'players.join', ...args), (e) => e.error === 'not-yours');

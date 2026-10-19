@@ -10,6 +10,7 @@
 // Optional --xff 198.51.100.20 sends a spoofed X-Forwarded-For. With HTTP_FORWARDED_COUNT=0
 // the server ignores it. Behind the documented one-hop proxy, count 1 keeps the appended peer.
 
+import { randomBytes } from 'crypto';
 import WebSocket from 'ws';
 
 const args = process.argv.slice(2);
@@ -93,7 +94,9 @@ socket.on('message', async (raw) => {
     send({ msg: 'sub', id: 'rounds', name: 'rounds', params: [pin] });
     const roundId = waiters.round.held || (await waitFor('round'));
     console.log(`round ${roundId}`);
-    const playerId = await call('players.join', [roundId, name, pin, joined.playerId, false, null]);
+    // players.join requires the per-tab reconnect credential: 43 URL-safe characters.
+    const reconnectToken = randomBytes(32).toString('base64url');
+    const playerId = await call('players.join', [roundId, name, pin, joined.playerId, false, null, reconnectToken]);
     console.log(`playing as ${playerId}`);
     send({ msg: 'sub', id: 'secret', name: 'players.secret', params: [pin] });
     const sequence = waiters.sequence.held || (await waitFor('sequence'));

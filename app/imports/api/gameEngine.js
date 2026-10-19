@@ -105,7 +105,6 @@ export async function checkWinner(gameId, isBattleRoyale = false) {
   if (players.length < expectedPlayerCount) return;
 
   const active = players.filter((p) => !p.eliminated);
-  const hasMultiplePlayers = players.length > 1;
 
   // Battle Royale: everyone races independently; the winner is whoever reached
   // the highest level once nobody is left standing.
@@ -160,7 +159,8 @@ export async function checkWinner(gameId, isBattleRoyale = false) {
   }
 
   // Standard mode - everyone was eliminated on the same round: highest round reached wins.
-  if (hasMultiplePlayers && active.length === 0 && players.length > 0) {
+  // This includes a game down to one player, which players who left or never joined can leave.
+  if (active.length === 0 && players.length > 0) {
     const highestRound = Math.max(...players.map((p) => p.eliminatedRound ?? 0));
 
     await PlayersCollection.updateAsync(
@@ -242,6 +242,25 @@ export async function removePlayerFromGame(player) {
   }
 }
 
+// The disconnect grace has run out for a connection: remove its players who are still away,
+// whether still playing or put out by the round clock while away (expireRound). Both have left
+// rather than lost. Other eliminated players stay on the board as spectators, and a finished
+// game is left alone.
+export async function removeIfStillGone(connectionId) {
+  const gone = await PlayersCollection.find({
+    connectionId,
+    connected: false,
+    gameFinished: false,
+    $or: [{ eliminated: false }, { timedOutWhileAway: true }],
+  }).fetchAsync();
+  for (const player of gone) {
+    await removePlayerFromGame(player);
+    await checkWinner(player.gameId, player.isBattleRoyale ?? false);
+    const round = await RoundsCollection.findOneAsync(player.roundId);
+    if (round) await advanceRoundIfReady(round);
+  }
+}
+
 // --- The round clock ---
 // A standard round carries deadlineAt, the server's own deadline, so one player who stops
 // responding (a phone that left the browser) cannot hold everyone else on a round. It is
@@ -305,8 +324,7 @@ export async function startClockIfEveryoneJoined(gameId, roundId) {
   return startRoundClock(roundId);
 }
 
-// The deadline passed: eliminate every player who has not cleared the round (and remove the
-// ones who have disconnected), drop lobby
+// The deadline passed: eliminate every player who has not cleared the round, drop lobby
 // members who never joined (they would hold the round forever), then declare a winner or
 // advance as any other elimination does. Returns whether this call did the work.
 //
@@ -337,13 +355,10 @@ export async function expireRound(roundId, now = Date.now()) {
       winner: { $ne: true },
     }).fetchAsync();
     for (const player of stragglers) {
-      // Someone whose connection has closed has gone, not run out of time. Remove them, as the
-      // disconnect cleanup does after its grace period. That cleanup skips eliminated players,
-      // so eliminating them here would leave them in the game for good.
-      if (player.connected === false) {
-        await removePlayerFromGame(player);
-        continue;
-      }
+      // A player whose connection has closed is put out like anyone else, not deleted: at the
+      // deadline they may only be reconnecting (a server restart, a deploy, a network blip).
+      // timedOutWhileAway lets the disconnect cleanup still remove them once their grace runs
+      // out, if they have not come back; a rebind clears it.
       await PlayersCollection.updateAsync(
         { _id: player._id, roundId, eliminated: false, completeRound: false },
         {
@@ -351,10 +366,12 @@ export async function expireRound(roundId, now = Date.now()) {
             lives: 0,
             currentStreak: 0,
             longestStreak: Math.max(player.longestStreak ?? 0, player.currentStreak ?? 0),
+            currentLevel: round.level ?? round.lengthOfSequence,
             eliminated: true,
             roundStatus: 'Eliminated',
             eliminatedRound: roundLevel(round),
             eliminatedAt: new Date(),
+            ...(player.connected === false ? { timedOutWhileAway: true } : {}),
           },
         }
       );
