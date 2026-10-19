@@ -20,6 +20,21 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-19 - The draft countdown follows the server; the tile background no longer widens pages
+
+The draft readout counted 20 seconds from when the screen first showed the draft, while the server closes it at `endsAt`.
+A reload or a remount mid-draft restarted the readout at 20 (measured: 15 s shown against 9 s left after one reload), so a player could be refused a pick with time still on the screen.
+`DraftOverlay.jsx` now counts down to `secret.draft.endsAt` on the server's clock (`serverClock.js`, already synced by `GamePage` for the round deadline), falling back to a local 20 s only before the dealt draft arrives.
+The original reason for a local count, that a device with a wrong clock could see its draft cut short, is covered by the server-clock offset.
+
+`TileLattice` drew its rotated grid at `inset: -10%` straight into each page, so every page using it was about 15 % wider than the window.
+The pages hide that with `overflow-hidden`, but such a box still scrolls when something takes focus or is scrolled into view: in the lobby the whole screen slid about 200 px left, cutting off the room panel.
+The grid now sits in its own clipping box the size of its parent, which looks identical and never widens the page.
+
+Files: `ui/abilities/DraftOverlay.jsx`, `ui/components/design.jsx`.
+
+---
+
 ## 2026-10-19 - The round clock no longer deletes a player who is reconnecting; end-of-game ranks fixed
 
 Testing the server-owned deadline end to end found that `expireRound` deleted every unfinished player whose connection was closed at that moment, with no grace.
