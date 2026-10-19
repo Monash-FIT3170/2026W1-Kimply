@@ -136,17 +136,15 @@ The likely mechanism, read from the code and not reproduced on a phone: the froz
 
 ---
 
-## D6 - `rooms.reconnect` always reports `isHost: false`
+## D6 - `rooms.reconnect` always reports `isHost: false` - **fixed 2026-10-19**
 
-`rooms.js:318` returns `isHost: room.hostId === playerId`, but `rooms.create` (`rooms.js:55-95`) **never writes a `hostId` field** to the document.
-`room.hostId` is therefore always `undefined` and the comparison is always false.
+`rooms.reconnect` returned `isHost: room.hostId === playerId`, but `rooms.create` **never wrote a `hostId` field** to the document, so the comparison was always false.
+Compounding this, the host's reconnect data was never persisted: the branch that would store it in `PlayRoute.jsx` was commented out (and read `result.gameId`, which `rooms.create` does not return).
+A host who lost the lobby page (a new tab, a closed browser) had no way back, and the room sat orphaned until its TTL.
 
-`rooms.create` does return `hostId` to the client at `:95`, and `PlayRoute.jsx:176` uses it, so only the reconnect path is broken.
-
-Compounding this, the host's reconnect data is never persisted at all: the branch that would store it is commented out at `PlayRoute.jsx:169-174`.
-A host who reloads has no reconnect path.
-
-**Fix:** persist `hostId` on the room document in `rooms.create`, and re-enable the host branch in `PlayRoute.jsx`. This also fixes the name-comparison problem in D4.
+**Fix:** `rooms.create` records `hostId`, and `isRoomHost` in `rooms.js` recognises the host by it in `rooms.reconnect`, `rooms.kick` and `rooms.disconnect` (a room created before the fix falls back to `hostName`).
+`PlayRoute.jsx` stores the host's `reconnectData`, so the host gets the same rejoin prompt on `/play` as a joiner and lands back in the host's lobby.
+Backing out of the mode picker now closes the room, so the prompt never offers a room the host just abandoned.
 
 ---
 

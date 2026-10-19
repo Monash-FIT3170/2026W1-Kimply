@@ -165,13 +165,9 @@ export function PlayRoute() {
         return;
       }
 
-      //! For host reconnection
-      // const reconnectData = {
-      //   playerId : result.hostId,
-      //   gameId : result.gameId
-      // };
-
-      // localStorage.setItem('reconnectData', JSON.stringify(reconnectData));
+      // A host who reloads gets the same rejoin prompt as a joiner. rooms.reconnect knows
+      // the host by the room's hostId and sends them back to the host's lobby.
+      localStorage.setItem('reconnectData', JSON.stringify({ playerId: result.hostId, gameId: result.pin }));
       navigate(`/play/modes/${result.pin}`, {
         state: { playerName: trimmedName, isHost: true, playerId: result.hostId },
       });

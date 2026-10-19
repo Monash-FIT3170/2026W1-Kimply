@@ -10,7 +10,7 @@ Shared guidance for any coding agent working in this repository (Cursor, Claude 
 > If you change any of those things, update the matching table before you finish, and add an entry to [docs/decision-log.md](docs/decision-log.md) in the same change.
 > See [Maintaining this file](#maintaining-this-file) at the bottom.
 
-**Last verified against the codebase:** 2026-10-18
+**Last verified against the codebase:** 2026-10-19
 
 ---
 
@@ -268,9 +268,9 @@ Each definition is wrapped in a `global._<Name>Collection` guard so it survives 
 
 ### Document shapes
 
-**`rooms`** (written by `rooms.create`, `rooms.js:55-95`)
+**`rooms`** (written by `rooms.create`, `rooms.js:62-104`)
 ```js
-{ pin, hostName, gameName: `Game${pin}`, status: 'lobby' | 'in_progress',
+{ pin, hostId, hostName, gameName: `Game${pin}`, status: 'lobby' | 'in_progress',
   players: [{ id, name, accountId, connected, connectionId, browserSessionId }], createdAt,
   gameMode: 'default' | 'easy' | 'medium' | 'hard' | 'custom' | 'battle_royale',
   customSettings: { flashingSpeed: 'slow'|'medium'|'fast', startingLives, startingSequenceLength, sequenceGrowth },
@@ -280,7 +280,7 @@ Each definition is wrapped in a `global._<Name>Collection` guard so it survives 
 `customSettings` is copied from `GAME_MODE_PRESETS` in `constants.js` whenever the mode changes, and only `custom` accepts edits through `rooms.updateSettings`.
 `rooms.start` prunes players with `connected: false` and deletes the game's old `players` and `rounds` before generating round 1.
 `abilitiesEnabled` is set by `rooms.create` and `rooms.setAbilities`. The server treats a missing value as off, so rooms from before abilities existed play without them.
-`hostId` is returned to the client by `rooms.create` but is **never persisted on the document**.
+`hostId` is the host's lobby player id. `rooms.reconnect`, `rooms.kick` and `rooms.disconnect` recognise the host by it (`isRoomHost`); a room created before it was recorded falls back to comparing `hostName`. `rooms.lobby` does not publish it.
 `security` is private. Session blocks last until the room's TTL. Each IP ban stops applying at `expiresAt` without waiting for a cleanup. `rooms.lobby` is a field whitelist, so neither `security` nor `players.browserSessionId` is published.
 
 **`rounds`** (written by `rounds.generate` and `rounds.advance`)
@@ -404,7 +404,7 @@ Every game publication is **scoped to a single game**. `gameId` is the 5-charact
 | `eliminations` | `server/publications.js:42` | `gameId` | eliminated players in game | excludes `attemptedSequence`, `secret`, `guard`, `reconnectTokenHash`, newest 20 |
 | `gameFeed` | `server/publications.js:52` | `gameId` | `{ gameId, type: 'ability' }` | newest `FEED_EVENT_LIMIT` (500) |
 | `globalLeaderboard` | `server/publications.js:60` | none | `{}` | top 50 by `bestRound`, `wins`, then earliest `achievedAt`; no field projection, so `accountId` is published (D47) |
-| `rooms.lobby` | `imports/api/rooms.js:23` | `pin` | `{ pin }` | `_id, pin, status, gameName, hostName, customSettings, gameMode, abilitiesEnabled, players.name, players.id, players.connected` |
+| `rooms.lobby` | `imports/api/rooms.js:30` | `pin` | `{ pin }` | `_id, pin, status, gameName, hostName, customSettings, gameMode, abilitiesEnabled, players.name, players.id, players.connected` |
 
 These properties are load-bearing and must not be undone:
 
@@ -451,16 +451,16 @@ D3 remains open for the other game and room mutations.
 
 | Method | Line | Args | Description |
 |---|---|---|---|
-| `rooms.create` | 55 | `hostName, accountId?` | Generates a unique 5-char PIN, inserts the room in `default` mode with abilities on, returns `{ pin, hostId }` |
-| `rooms.setGameMode` | 98 | `pin, gameMode` | Lobby only. Sets the mode and copies its preset into `customSettings` |
-| `rooms.setAbilities` | 121 | `pin, enabled` | Lobby only. Turns the ability draft on or off |
-| `rooms.updateSettings` | 131 | `pin, settings` | `custom` mode only. Validates and merges speed, lives, starting length and growth |
-| `rooms.start` | 165 | `pin, gameMode?` | Prunes disconnected players, clears the game's old players and rounds, sets `status: 'in_progress'`, then calls `rounds.generate` |
-| `rooms.kick` | 188 | `pin, playerId` | Lobby only. `$pull`s a non-host player. Refuses to kick the host |
-| `rooms.disconnect` | 201 | `pin, playerId` | Lobby only. If the id is the host's, **deletes the whole room**; otherwise `$pull`s the player |
-| `rooms.join` | 219 | `pin, playerName, accountId?` | Checks the browser session and room bans, rejects duplicate names case-insensitively, `$push`es the player. Returns `{ roomId, playerId, gameMode, customSettings }` |
-| `rooms.updateGameName` | 260 | `pin, gameName` | Lobby only. Renames the lobby |
-| `rooms.reconnect` | 282 | `pin, playerId` | Lobby only. Refused for another browser session's player. Returns the player's name. `isHost` is always `false` (see D6) |
+| `rooms.create` | 62 | `hostName, accountId?` | Generates a unique 5-char PIN, inserts the room in `default` mode with abilities on, returns `{ pin, hostId }` |
+| `rooms.setGameMode` | 106 | `pin, gameMode` | Lobby only. Sets the mode and copies its preset into `customSettings` |
+| `rooms.setAbilities` | 129 | `pin, enabled` | Lobby only. Turns the ability draft on or off |
+| `rooms.updateSettings` | 139 | `pin, settings` | `custom` mode only. Validates and merges speed, lives, starting length and growth |
+| `rooms.start` | 173 | `pin, gameMode?` | Prunes disconnected players, clears the game's old players and rounds, sets `status: 'in_progress'`, then calls `rounds.generate` |
+| `rooms.kick` | 196 | `pin, playerId` | Lobby only. `$pull`s a non-host player. Refuses to kick the host |
+| `rooms.disconnect` | 209 | `pin, playerId` | Lobby only. If the id is the host's, **deletes the whole room**; otherwise `$pull`s the player |
+| `rooms.join` | 227 | `pin, playerName, accountId?` | Checks the browser session and room bans, rejects duplicate names case-insensitively, `$push`es the player. Returns `{ roomId, playerId, gameMode, customSettings }` |
+| `rooms.updateGameName` | 268 | `pin, gameName` | Lobby only. Renames the lobby |
+| `rooms.reconnect` | 290 | `pin, playerId` | Lobby only. Refused for another browser session's player. Returns `{ playerName, isHost, playerId }`; `isHost` comes from the room's `hostId` |
 
 PIN alphabet is `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (`rooms.js:12`), generated with `Math.random()` (`rooms.js:15`), retried up to 10 times against a `findOne` collision check.
 
@@ -541,9 +541,9 @@ There are four unrelated identity mechanisms, none of them Meteor's.
 `Meteor.userId()` and `this.userId` are used nowhere in the repository.
 The server identifies a caller only by their DDP connection and the browser session bound to it, never by account.
 
-1. **Lobby identity** - a server-minted `Random.id()` (`rooms.js:60` for the host, `:233` for joiners).
-   Joiners persist it to `localStorage.reconnectData` at `JoinRoom.jsx:73-78`.
-   The host branch that would persist it is commented out at `PlayRoute.jsx:169-174`, so a host who reloads has no reconnect path.
+1. **Lobby identity** - a server-minted `Random.id()` (`rooms.js:67` for the host, `:241` for joiners).
+   Joiners persist it to `localStorage.reconnectData` in `JoinRoom.jsx`, and the host in `PlayRoute.jsx` when the room is created, so either gets the rejoin prompt on `/play` after losing the lobby page.
+   Backing out of `/play/modes/:pin` closes the room, since that page is only reached by creating one.
 2. **In-game identity** - the `_id` of a `players` document, held in React state by `GamePage.jsx`.
    The player ID is also saved in `localStorage['gamePlayerId:<gameId>']`, and a refresh resumes the same player through `players.join` (with the lobby ID) or `players.rebind`.
    A random reconnect credential is kept in `sessionStorage` per game and lobby player, with an in-memory fallback when storage is blocked.
@@ -581,7 +581,7 @@ How to write and run them is the `test` skill. What exists today:
 
 | File | Covers |
 |---|---|
-| `rooms.test.js` | `rooms.create`, `rooms.join`, `rooms.kick`, `rooms.setGameMode` |
+| `rooms.test.js` | `rooms.create`, `rooms.join`, `rooms.kick`, `rooms.setGameMode`; host reconnect: `hostId` recorded and never published, `isHost` from `rooms.reconnect`, legacy rooms by name, the host leaving deletes the room |
 | `playerAccounts.test.js` | register and signIn validation, hashing, normalisation; session issue, resume, expiry, sign-out; Google sign-in create, link, reject (verifier stubbed) |
 | `roundAdvance.test.js` | `rounds.advance` increments, player migration, idempotency, concurrent advances create one round |
 | `roundDeadline.test.js` | The round clock: when it starts (round 1 on the last join or the fallback, draft rounds on resolve), `expireRound` eliminations, idempotency and lease, late answers rejected, the sweep, a one-player game ending, and the disconnect cleanup (`removeIfStillGone`) |
@@ -607,7 +607,7 @@ How to write and run them is the `test` skill. What exists today:
 
 `tests/manual/ddpBot.mjs` is not a spec: it is a raw DDP client that plays a room at machine speed, for checking bot detection by hand.
 
-**Not covered:** authorization on the room host mutations, most concurrency or race scenarios, `rooms.start`, `rooms.disconnect`, `rooms.updateGameName`, `rooms.updateSettings`, `rooms.reconnect`, `game.resetSequences`.
+**Not covered:** authorization on the room host mutations, most concurrency or race scenarios, `rooms.start`, `rooms.updateGameName`, `rooms.updateSettings`, `game.resetSequences`.
 
 CI (`.github/workflows/test.yml`) runs `meteor test --once --full-app` on pull requests to `main` and `dev` only, never on merge, behind a coverage smoke gate.
 Prettier is not a CI gate, although `npm run format:check` now passes.
@@ -623,7 +623,6 @@ One line each, so a review can cite an ID without opening anything.
 |---|---|---|
 | D3 | `rooms.js` host methods | Gameplay mutations now require the owning connection. Room host actions (`rooms.start`, `rooms.kick`, `rooms.disconnect`) still trust a client-supplied id. Fix is binding the connection, **not** a login wall |
 | D4 | `gameEngine.js` `checkWinner` | Read-then-write race: double winner. Life changes now use `$inc` and `rounds.advance` claims the round atomically |
-| D6 | `rooms.js:318` | `hostId` is never persisted, so `rooms.reconnect` always reports `isHost: false` |
 | D8 | `playerAccounts.js:24`, `:191` | Unstretched SHA-256, non-constant-time compare, no rate limiting, enumeration oracle |
 | D12 | `ColourSequence.jsx:130-143` | A new `AudioContext` per tile click, never closed |
 | D46 | `gameEvents` | No TTL index, so ability events accumulate forever against the 512 MB Atlas allowance |
@@ -631,7 +630,7 @@ One line each, so a review can cite an ID without opening anything.
 | D44 | `roomBans.js`, trusted proxy handling | Spoofed forwarded headers yield no client address, so removal writes no IP ban and a fresh session bypasses it |
 | D45 | Production-mode Rspack CSS serving | Local `meteor run --production` returns HTTP 500 for the main CSS chunk, leaving the browser unstyled |
 
-Fixed and kept for history in the register: D1, D2, D5, D7, D9, D10, D11, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D43.
+Fixed and kept for history in the register: D1, D2, D5, D6, D7, D9, D10, D11, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D43.
 
 ### Not a defect, so nobody chases it again
 

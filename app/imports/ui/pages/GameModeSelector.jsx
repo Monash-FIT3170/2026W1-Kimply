@@ -93,7 +93,13 @@ export function GameModeSelector() {
     }
   };
 
+  // The mode picker is only reached by creating a room, so going back abandons it: close the
+  // room rather than leave /play asking the host to rejoin a room they just backed out of.
   const handleBack = () => {
+    if (state?.isHost && state?.playerId) {
+      Meteor.call('rooms.disconnect', pin, state.playerId);
+      localStorage.removeItem('reconnectData');
+    }
     navigate('/play');
   };
 

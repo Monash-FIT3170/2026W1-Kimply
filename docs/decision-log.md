@@ -20,6 +20,25 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-19 - A host can rejoin their lobby (D6); clearer copy after Clear and in Battle Royale
+
+A host who lost the lobby page could not get back: `rooms.create` never recorded `hostId`, so `rooms.reconnect` always answered `isHost: false`, and the host's reconnect data was never stored.
+`rooms.create` now records `hostId` (not published by `rooms.lobby`), the host and lobby checks use it through `isRoomHost`, and `PlayRoute.jsx` stores the host's reconnect data, so `/play` offers the host the same rejoin prompt as a joiner.
+Rooms created before this keep working: `isRoomHost` falls back to comparing `hostName`, as the old checks did.
+
+- **Back on the mode picker closes the room.** It is only reached by creating a room, and with the host's data stored, going back would otherwise open `/play` on a prompt to rejoin the room just abandoned.
+- **Same limits as joiners:** the prompt covers the lobby. Once the game starts, `rooms.reconnect` refuses with `not-lobby` and getting back into a running game is still `GamePage`'s per-tab credential.
+- **A plain reload never needed this:** router state survives F5 on the same history entry. The gap was a new tab or a closed browser.
+
+Copy:
+
+- **Clear** now says "Cleared. Enter the sequence from the start." instead of "Try again. Repeat the flashed sequence.", which read as if the answer had been wrong.
+- **The hand** drops "The clock keeps running" in Battle Royale, which has no clock, and **Scramble** says the target has to learn the new sequence from scratch instead of "Their clock keeps running".
+
+Files: `api/rooms.js`, `api/abilityRules.js`, `ui/pages/PlayRoute.jsx`, `ui/pages/GameModeSelector.jsx`, `ui/pages/GamePage.jsx`, `ui/abilities/HandDialog.jsx`, `tests/rooms.test.js`, `AGENTS.md`, `docs/defect-register.md`.
+
+---
+
 ## 2026-10-19 - The draft countdown follows the server; the tile background no longer widens pages
 
 The draft readout counted 20 seconds from when the screen first showed the draft, while the server closes it at `endsAt`.

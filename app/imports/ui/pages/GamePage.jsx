@@ -659,7 +659,7 @@ export const GamePage = () => {
   const handleClear = () => {
     setAttemptedSequence([]);
     resetAttempt();
-    setMessage('Try again. Repeat the flashed sequence.');
+    setMessage('Cleared. Enter the sequence from the start.');
   };
 
   const handleUndo = () => {
@@ -970,6 +970,7 @@ export const GamePage = () => {
         <HandDialog
           cards={hand}
           candidates={targetCandidates}
+          isBattleRoyale={isBattleRoyale}
           onPlay={playHandCard}
           onClose={() => setHandOpen(false)}
         />

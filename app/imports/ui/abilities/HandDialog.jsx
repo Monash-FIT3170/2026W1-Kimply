@@ -5,7 +5,8 @@ import { AbilityCard, AbilityDialog } from './AbilityDialog.jsx';
 import { TargetPicker } from './TargetPicker.jsx';
 
 // The cards a player holds, played during a round. Scramble asks for a target first.
-export function HandDialog({ cards, candidates, onPlay, onClose }) {
+// Battle Royale has no round clock, so it is only mentioned in a standard game.
+export function HandDialog({ cards, candidates, isBattleRoyale = false, onPlay, onClose }) {
   const [chosen, setChosen] = useState(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
@@ -49,7 +50,7 @@ export function HandDialog({ cards, candidates, onPlay, onClose }) {
   return (
     <AbilityDialog
       labelledBy="hand-title"
-      eyebrow="Your cards · The clock keeps running"
+      eyebrow={isBattleRoyale ? 'Your cards' : 'Your cards · The clock keeps running'}
       title={chosen ? `${ABILITIES[chosen.type].label} who?` : 'Play a card'}
       footer={
         <>
