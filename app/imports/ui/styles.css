@@ -32,22 +32,6 @@
   }
 }
 
-/* Lights Out: an overlay that holds lit, fades the board to dark, holds, and fades back. */
-@keyframes lightsOut {
-  0%,
-  15% {
-    opacity: 0;
-  }
-  45%,
-  65% {
-    opacity: 0.97;
-  }
-  95%,
-  100% {
-    opacity: 0;
-  }
-}
-
 @keyframes kimplyCaret {
   0%,
   49% {

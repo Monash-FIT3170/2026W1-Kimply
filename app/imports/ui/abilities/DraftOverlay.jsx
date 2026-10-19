@@ -4,27 +4,31 @@ import { DRAFT_SECONDS } from '../../constants';
 import { GhostButton } from '../components/design';
 import { AbilityCard, AbilityDialog, Countdown, KeyHint } from './AbilityDialog.jsx';
 import { TargetPicker } from './TargetPicker.jsx';
+import { secondsUntil } from '../serverClock';
 
-// Seconds left in a draft, counted from when this device first saw it. The server
-// closes the draft on its own clock; this is only the readout, so clock skew between
-// devices can not cut anyone's draft short.
-function useDraftSeconds(draftKey) {
-  const [deadline, setDeadline] = useState(() => Date.now() + DRAFT_SECONDS * 1000);
-  const [now, setNow] = useState(Date.now());
+// Seconds left in a draft. The server closes it at endsAt, so count down to that on the
+// server's clock (serverClock.js, synced by GamePage) rather than from when this screen
+// first showed it: a reload or a remount mid-draft used to restart the readout at the full
+// time while the server still closed the draft on schedule, refusing picks that looked in
+// time. Until the dealt draft arrives there is no endsAt, so the readout counts locally.
+function useDraftSeconds(endsAt, draftKey) {
+  const [fallbackDeadline, setFallbackDeadline] = useState(() => Date.now() + DRAFT_SECONDS * 1000);
+  const [, setTick] = useState(0);
   useEffect(() => {
-    setDeadline(Date.now() + DRAFT_SECONDS * 1000);
+    setFallbackDeadline(Date.now() + DRAFT_SECONDS * 1000);
   }, [draftKey]);
   useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 250);
+    const id = window.setInterval(() => setTick((tick) => tick + 1), 250);
     return () => window.clearInterval(id);
   }, []);
-  return Math.max(0, Math.ceil((deadline - now) / 1000));
+  if (endsAt) return secondsUntil(new Date(endsAt).getTime());
+  return Math.max(0, Math.ceil((fallbackDeadline - Date.now()) / 1000));
 }
 
 // The pick-1-of-3 draft. `draft` is the player's own secret.draft, or null while the
 // cards are still being dealt. `onExpire` runs once when the readout reaches zero.
 export function DraftOverlay({ draft, draftKey, levelLabel, candidates, onPick, onSkip, onExpire }) {
-  const seconds = useDraftSeconds(draftKey);
+  const seconds = useDraftSeconds(draft?.endsAt, draftKey);
   const [chosen, setChosen] = useState(null); // a targeted card waiting for its target
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');

@@ -47,6 +47,7 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
         name: player.name,
         eliminatedRound: player.eliminatedRound ?? null,
         currentLevel: player.currentLevel ?? 4,
+        isBattleRoyale: !!player.isBattleRoyale,
         longestStreak: player.longestStreak ?? 0,
         totalGuesses: player.totalGuesses ?? 0,
         correctGuesses: player.correctGuesses ?? 0,
@@ -54,13 +55,17 @@ export const EndLeaderboard = ({ gameId, currentPlayerId }) => {
       }));
   }, [gameId]);
 
+  // How far a player got. Battle Royale players race their own levels; in a standard game
+  // currentLevel only moves on a wrong answer, so the round they went out in is the measure.
+  const reached = (player) => (player.isBattleRoyale ? player.currentLevel : (player.eliminatedRound ?? 0));
+
   const sorted = [...players].sort((a, b) => {
     if (a.isWinner && !b.isWinner) return -1;
     if (!a.isWinner && b.isWinner) return 1;
-    return (b.currentLevel ?? b.eliminatedRound ?? 0) - (a.currentLevel ?? a.eliminatedRound ?? 0);
+    return reached(b) - reached(a);
   });
 
-  const rankKey = (player) => (player.isWinner ? 'winner' : (player.currentLevel ?? player.eliminatedRound));
+  const rankKey = (player) => (player.isWinner ? 'winner' : reached(player));
   const uniqueRanks = [...new Set(sorted.map(rankKey))];
   const ranks = sorted.map((player) => uniqueRanks.indexOf(rankKey(player)));
   const currentPlayer = sorted.find((player) => player.id === currentPlayerId);

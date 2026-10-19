@@ -18,6 +18,13 @@ function generatePin() {
   );
 }
 
+// Whether a lobby player is the room's host. Rooms record hostId from the 2026-10-19 change;
+// an older room only has the host's name, which lobby names keep unique.
+function isRoomHost(room, playerId) {
+  if (room.hostId) return room.hostId === playerId;
+  return (room.players || []).find((p) => p.id === playerId)?.name === room.hostName;
+}
+
 if (Meteor.isServer && !global._roomsServerInitialized) {
   global._roomsServerInitialized = true;
   Meteor.publish('rooms.lobby', function (pin) {
@@ -73,6 +80,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       if (!pin) throw new Meteor.Error('server-error', 'Could not generate a unique PIN');
       await RoomsCollection.insertAsync({
         pin,
+        hostId,
         hostName: name,
         gameName: `Game${pin}`,
         status: 'lobby',
@@ -192,7 +200,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       if (!room) throw new Meteor.Error('not-found', 'Room not found');
       if (room.status !== 'lobby') throw new Meteor.Error('not-lobby', 'Game already started');
 
-      const isHost = (room.players || []).find((p) => p.id === playerId)?.name === room.hostName;
+      const isHost = isRoomHost(room, playerId);
       if (isHost) throw new Meteor.Error('invalid', 'Cannot kick the host');
 
       await RoomsCollection.updateAsync({ _id: room._id }, { $pull: { players: { id: playerId } } });
@@ -205,7 +213,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
       const room = await RoomsCollection.findOneAsync({ pin: pin.trim(), status: 'lobby' });
       if (!room) throw new Meteor.Error('not-found', 'Room not found');
 
-      const isHost = (room.players || []).find((p) => p.id === playerId)?.name === room.hostName;
+      const isHost = isRoomHost(room, playerId);
 
       if (isHost) {
         // Delete room if host disconnects
@@ -315,7 +323,7 @@ if (Meteor.isServer && !global._roomsServerInitialized) {
 
       return {
         playerName: player.name,
-        isHost: room.hostId === playerId,
+        isHost: isRoomHost(room, playerId),
         playerId: playerId,
       };
     },

@@ -8,8 +8,16 @@ export const INITIAL_LEVEL = 4; // starting currentLevel (level 1 == sequence le
 export const BONUS_LIFE_ROUND = 7; // completing this round grants +1 life
 export const STREAK_BONUS_LIFE_THRESHOLD = 3; // a life for every N correct rounds in a row (capped at starting lives outside battle royale)
 export const ROUND_TIMER_SECONDS = 45; // whole-round countdown (not battle royale)
+// Round 1's clock starts when the last lobby member has joined, or this long after the round
+// is created if someone has not, whichever comes first.
+export const ROUND_START_FALLBACK_MS = 5000;
+// The server accepts an answer this long past deadlineAt (one round trip, plus clock skew)
+// before it eliminates whoever has not cleared the round.
+export const ROUND_EXPIRE_GRACE_MS = 2000;
+export const ROUND_SWEEP_INTERVAL_MS = 5000; // how often the server looks for rounds whose timer was lost
+export const ROUND_EXPIRE_LEASE_MS = 10000; // how long one expireRound call owns a round before another may retry
 export const STARTING_REPLAYS = 1; // sequence replays each player starts with (not battle royale)
-export const REPLAY_BONUS_STREAK = 1; // +1 replay every time the streak reaches a multiple of this
+export const REPLAY_BONUS_STREAK = 2; // +1 replay every time the streak reaches a multiple of this
 export const SEQUENCE_COLOURS = ['red', 'blue', 'green', 'yellow'];
 
 // --- Abilities ---
@@ -72,9 +80,10 @@ export const FLASH_SPEEDS = {
 export const PLAYBACK_SPEED_FACTORS = { slow: 2, fast: 0.5 };
 export const MIN_FLASH_MS = 160;
 export const MIN_GAP_MS = 70;
-// One fade out and back in under Lights Out. Not a multiple of any flash + gap, so a
-// replay loses different flashes to the dark.
-export const LIGHTS_OUT_CYCLE_MS = 2600;
+// Lights Out darkens one flash in every LIGHTS_OUT_EVERY, rounded down, never the first.
+export const LIGHTS_OUT_EVERY = 3;
+// The longest the board takes to fade to dark before a hidden flash, and back after it.
+export const LIGHTS_OUT_FADE_MS = 150;
 
 // --- Accounts ---
 export const MIN_PASSWORD_LENGTH = 8;

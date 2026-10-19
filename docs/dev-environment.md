@@ -1,8 +1,8 @@
 # Kimply Development Environment
 
-> **Superseded by ECS.** `www.kimply.online` and `dev.kimply.online` are served by ECS Fargate behind load balancers, built and operated from [`infra/terraform`](../infra/terraform/README.md) and described in [ecs-target-architecture.md](ecs-target-architecture.md).
-> Sections 1-6 cover the EC2 instances that preceded it.
-> They still exist but no longer receive deploys, and their runbook stays here until they are retired.
+> **Superseded by ECS.** `www.kimply.online` and `dev.kimply.online` are served by ECS Fargate behind one shared load balancer, built and operated from [`infra/terraform`](../infra/terraform/README.md) and described in [ecs-target-architecture.md](ecs-target-architecture.md).
+> The local Docker section below is current.
+> Sections 1-6 cover the EC2 development instance that preceded ECS. It was terminated on 2026-10-04, so they are kept only as history.
 
 ## Local Docker development
 
@@ -16,7 +16,7 @@ Verify the development WebSocket at `ws://localhost:8080/ws` and confirm the bro
 
 ## Legacy EC2 development environment
 
-A second, fully independent copy of the production stack, deployed automatically on every push to `dev`.
+It was a second, fully independent copy of the production stack, deployed automatically on every push to `dev` until the pipeline moved to ECS.
 
 **This document is a delta.**
 Every section of [deployment-manual.md](deployment-manual.md) applies unchanged.

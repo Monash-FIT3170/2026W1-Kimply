@@ -1,7 +1,8 @@
 # Kimply Production Deployment Runbook
 
 > **Superseded by ECS.** `www.kimply.online` and `dev.kimply.online` are served by ECS Fargate behind load balancers, built and operated from [`infra/terraform`](../infra/terraform/README.md) and described in [ecs-target-architecture.md](ecs-target-architecture.md).
-> This document covers the EC2 instances that preceded it. They still exist but no longer receive deploys, and it stays here until they are retired.
+> This document covers the EC2 stack that preceded it. Those instances were terminated and their Elastic IPs released on 2026-10-04, so nothing here describes a running system.
+> It is kept as the record of how that stack was built, and as a runbook should one ever be rebuilt.
 
 Manual deployment to a single AWS EC2 instance, with Nginx as the public reverse proxy, Let's Encrypt TLS, MongoDB Atlas Free as the database, and images pulled from Amazon ECR by exact commit SHA.
 

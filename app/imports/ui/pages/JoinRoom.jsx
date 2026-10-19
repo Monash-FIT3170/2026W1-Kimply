@@ -2,11 +2,12 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { Meteor } from 'meteor/meteor';
 import { PRIMARY, TILE, HAIRLINE, TileLattice, Wordmark, ArrowIcon, BackChevron, FG2 } from '../components/design';
-import { combineKeyHandlers, removeOnBackspace, submitOnEnter } from '../keyboard';
-import { appendRoomCodeInput, clearCapturedInput, roomCodeFromSearchParams } from '../roomCode';
+import { submitOnEnter } from '../keyboard';
+import { joinRoomPath, normalizeRoomCode, roomCodeFromSearchParams, roomCodeInputWriteBack } from '../roomCode';
 import { useSignedInAccount } from '../accountSession';
 import { loadUsername, saveUsername, USERNAME_MAX_LENGTH } from '../savedUsername';
 import { banMessage } from '../browserSession';
+import { AccountStatus } from '../components/AccountStatus';
 
 const SLOTS = 5;
 
@@ -17,6 +18,8 @@ export function JoinRoom() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const inputRef = useRef(null);
+  // True between the keyboard starting and finishing a composition (predictive text).
+  const composingRef = useRef(false);
   const navigate = useNavigate();
   const { state } = useLocation();
   const [playerName, setPlayerName] = useState(() => state?.playerName || loadUsername());
@@ -35,18 +38,14 @@ export function JoinRoom() {
     inputRef.current?.focus();
   }, []);
 
-  const removeLastCodeCharacter = () => {
-    setCode((prev) => prev.slice(0, -1));
-    setError('');
-  };
-
-  const handleInput = (e) => {
-    // Read the typed value before clearing: clearCapturedInput blanks e.target.value
-    // synchronously, and React may evaluate the setCode updater afterwards, which would
-    // otherwise read '' and drop the keystroke (forcing users to type each letter twice).
-    const typed = e.target.value;
-    clearCapturedInput(e);
-    setCode((prev) => appendRoomCodeInput(prev, typed, SLOTS));
+  // The hidden input holds the whole code and is the source of truth; the slots show it.
+  // It is never cleared, which would make a predictive-text keyboard resend what it is
+  // composing and duplicate letters. Backspace is the input's own.
+  const syncCodeFromInput = (input) => {
+    const next = normalizeRoomCode(input.value, SLOTS);
+    const writeBack = roomCodeInputWriteBack(input.value, next, composingRef.current);
+    if (writeBack !== null) input.value = writeBack;
+    setCode(next);
     setError('');
   };
 
@@ -89,8 +88,6 @@ export function JoinRoom() {
     });
   };
 
-  const handleCodeKeyDown = combineKeyHandlers(removeOnBackspace(removeLastCodeCharacter), submitOnEnter(handleJoin));
-
   const canJoin = code.length === SLOTS && playerName.trim().length > 0 && !loading;
 
   return (
@@ -111,10 +108,21 @@ export function JoinRoom() {
       {/* hidden keyboard capture */}
       <input
         ref={inputRef}
-        onInput={handleInput}
-        onKeyDown={handleCodeKeyDown}
+        defaultValue={prefill}
+        onInput={(e) => syncCodeFromInput(e.target)}
+        onCompositionStart={() => {
+          composingRef.current = true;
+        }}
+        onCompositionEnd={(e) => {
+          composingRef.current = false;
+          syncCodeFromInput(e.target);
+        }}
+        onKeyDown={submitOnEnter(handleJoin)}
         className="pointer-events-none absolute h-px w-px opacity-0"
+        aria-label="Room code"
         autoComplete="off"
+        autoCorrect="off"
+        enterKeyHint="go"
         autoCapitalize="characters"
         spellCheck={false}
       />
@@ -168,23 +176,27 @@ export function JoinRoom() {
           5-character code · Ask the host to share theirs
         </p>
 
-        {!state?.playerName && (
-          <div className="w-full max-w-sm">
-            <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg3">Username</p>
-            <input
-              value={playerName}
-              onChange={(e) => {
-                nameChosen.current = true;
-                setPlayerName(e.target.value);
-              }}
-              onKeyDown={submitOnEnter(handleJoin)}
-              placeholder="Enter your username"
-              maxLength={USERNAME_MAX_LENGTH}
-              className="w-full rounded-[14px] border border-hairline bg-surface px-4 py-3 font-outfit text-base font-semibold text-fg outline-none placeholder:text-fg3"
-              style={{ caretColor: PRIMARY }}
-            />
-          </div>
-        )}
+        <div className="w-full max-w-sm">
+          {!state?.playerName && (
+            <>
+              <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-fg3">Username</p>
+              <input
+                value={playerName}
+                onChange={(e) => {
+                  nameChosen.current = true;
+                  setPlayerName(e.target.value);
+                }}
+                onKeyDown={submitOnEnter(handleJoin)}
+                placeholder="Enter your username"
+                maxLength={USERNAME_MAX_LENGTH}
+                className="w-full rounded-[14px] border border-hairline bg-surface px-4 py-3 font-outfit text-base font-semibold text-fg outline-none placeholder:text-fg3"
+                style={{ caretColor: PRIMARY }}
+              />
+            </>
+          )}
+          {/* An invite link lands here without passing /play, so this is where they sign up. */}
+          <AccountStatus returnTo={joinRoomPath(code)} />
+        </div>
 
         {error && <p className="m-0 text-center font-manrope text-[13px] text-red-400">{error}</p>}
 

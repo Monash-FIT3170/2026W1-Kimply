@@ -1,12 +1,13 @@
 import assert from 'assert';
 import {
-  appendRoomCodeInput,
-  clearCapturedInput,
+  joinRoomPath,
   normalizeRoomCode,
   roomCodeFromSearchParams,
+  roomCodeInputWriteBack,
 } from '/imports/ui/roomCode';
 import { combineKeyHandlers, removeOnBackspace, submitOnEnter } from '/imports/ui/keyboard';
 import { loadUsername, saveUsername, USERNAME_STORAGE_KEY } from '/imports/ui/savedUsername';
+import { accountReturnPath, DEFAULT_ACCOUNT_RETURN } from '/imports/ui/accountReturn';
 
 function memoryStorage(initial = {}) {
   const data = { ...initial };
@@ -60,14 +61,52 @@ describe('UI helpers', function () {
       assert.strictEqual(roomCodeFromSearchParams(params, 'code', 5), '');
     });
 
-    it('appends normalized input to the current code', function () {
-      assert.strictEqual(appendRoomCodeInput('AB', 'c-12!', 5), 'ABC12');
+    it('reads the code from what the input holds, whatever the keyboard sends', function () {
+      // A predictive-text keyboard re-sends the word it is composing, so the input's value
+      // grows in step: 'A', 'AB', 'ABC'. The code is that value, not those values added up.
+      const composing = ['a', 'ab', 'ab ', 'abc', 'abcd', 'abcde', 'abcdef'];
+      assert.deepStrictEqual(
+        composing.map((value) => normalizeRoomCode(value, 5)),
+        ['A', 'AB', 'AB', 'ABC', 'ABCD', 'ABCDE', 'ABCDE']
+      );
     });
 
-    it('clears captured hidden input values', function () {
-      const event = { target: { value: 'ABC' } };
-      clearCapturedInput(event);
-      assert.strictEqual(event.target.value, '');
+    it('leaves the input alone while the keyboard is composing', function () {
+      assert.strictEqual(roomCodeInputWriteBack('ab ', 'AB', true), null);
+    });
+
+    it('leaves the input alone when it already holds the normalized code', function () {
+      assert.strictEqual(roomCodeInputWriteBack('ABC', 'ABC', false), null);
+    });
+
+    it('writes the normalized code back once composing has ended', function () {
+      assert.strictEqual(roomCodeInputWriteBack('ab c-', 'ABC', false), 'ABC');
+    });
+
+    it('builds the join path an invite link uses', function () {
+      assert.strictEqual(joinRoomPath('AB12C'), '/play/join?code=AB12C');
+    });
+
+    it('builds plain code entry when there is no code yet', function () {
+      assert.strictEqual(joinRoomPath(''), '/play/join');
+    });
+  });
+
+  describe('accountReturn', function () {
+    it('returns to the page that opened the account page', function () {
+      assert.strictEqual(accountReturnPath({ returnTo: '/play/join?code=AB12C' }), '/play/join?code=AB12C');
+    });
+
+    it('falls back to /play without a return path', function () {
+      assert.strictEqual(accountReturnPath(undefined), DEFAULT_ACCOUNT_RETURN);
+      assert.strictEqual(accountReturnPath({}), DEFAULT_ACCOUNT_RETURN);
+      assert.strictEqual(DEFAULT_ACCOUNT_RETURN, '/play');
+    });
+
+    it('never leaves the app', function () {
+      for (const returnTo of ['https://evil.example', '//evil.example', '/\\evil.example', 'play', 42]) {
+        assert.strictEqual(accountReturnPath({ returnTo }), DEFAULT_ACCOUNT_RETURN, String(returnTo));
+      }
     });
   });
 

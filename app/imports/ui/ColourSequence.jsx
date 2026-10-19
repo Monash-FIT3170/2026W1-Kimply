@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { BG, TILE } from './components/design';
-import { playbackTiming } from '../api/abilityRules';
-import { LIGHTS_OUT_CYCLE_MS } from '../constants';
+import { lightsOutFlashes, playbackTiming } from '../api/abilityRules';
+import { LIGHTS_OUT_FADE_MS } from '../constants';
+import { playbackDecision } from './sequencePlayback';
 
 // What Slo-Mo, 2x Speed and Lights Out show the player they have been hit with.
 const EFFECT_LABELS = { slow: 'Slo-mo', fast: '2x speed', lightsOut: 'Lights out' };
@@ -50,20 +51,29 @@ export const ColourSequence = ({
   const [clickedColour, setClickedColour] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isDone, setIsDone] = useState(false);
-  const hasRunRef = useRef(false);
+  // Lights Out: whether the board is dark for the flash being shown (or about to be).
+  const [dark, setDark] = useState(false);
+  // The replayKey this board last acted on, to tell a request to play from the sequence
+  // merely turning up (see playbackDecision).
+  const lastReplayKeyRef = useRef(replayKey);
   const effects = [speed, lightsOut && 'lightsOut'].filter(Boolean);
   // Read on every flash rather than once per playback: a Slo-Mo or 2x Speed reaches the
   // client over DDP and can land a beat after the round opens.
   const timingRef = useRef(playbackTiming(flashingSpeed, speed));
   timingRef.current = playbackTiming(flashingSpeed, speed);
+  // Lights Out can land late in the same way, so it is read during playback too.
+  const lightsOutRef = useRef(lightsOut);
+  lightsOutRef.current = lightsOut;
+
+  const hasSequence = Boolean(sequence && sequence.length > 0);
 
   useEffect(() => {
-    if (!sequence || sequence.length === 0) return;
-
-    const initialRun = !hasRunRef.current;
-    hasRunRef.current = true;
-    if (initialRun && !autoPlay) {
-      // already watched (refresh): skip replay, go straight to input
+    const requested = replayKey !== lastReplayKeyRef.current;
+    const action = playbackDecision({ hasSequence, requested, autoPlay });
+    if (action === 'wait') return;
+    lastReplayKeyRef.current = replayKey;
+    if (action === 'skip') {
+      // already watched (refresh, reconnect): go straight to input
       setIsPlaying(false);
       setIsDone(true);
       return;
@@ -72,10 +82,19 @@ export const ColourSequence = ({
     let i = 0;
     let cancelled = false;
     let timer = null;
+    // Drawn once per playback, the first time Lights Out is in effect, so each replay
+    // hides a different few and an effect arriving mid-playback still applies.
+    let hidden = null;
+    const isHidden = (index) => {
+      if (!lightsOutRef.current) return false;
+      if (!hidden) hidden = new Set(lightsOutFlashes(sequence.length));
+      return hidden.has(index);
+    };
 
     setIsPlaying(true);
     setIsDone(false);
     setActiveColour(null);
+    setDark(false);
 
     const showNext = () => {
       if (cancelled) return;
@@ -83,6 +102,7 @@ export const ColourSequence = ({
 
       if (i >= sequence.length) {
         setActiveColour(null);
+        setDark(false);
         setIsPlaying(false);
         setIsDone(true);
 
@@ -99,6 +119,8 @@ export const ColourSequence = ({
       timer = setTimeout(() => {
         setActiveColour(null);
         i++;
+        // Go dark during the gap before a hidden flash, and come back during the next one.
+        setDark(i < sequence.length && isHidden(i));
         timer = setTimeout(showNext, gap);
       }, flash);
     };
@@ -109,7 +131,7 @@ export const ColourSequence = ({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [roundId, replayKey]);
+  }, [roundId, replayKey, hasSequence]);
   const playClickSound = () => {
     const audioContext = new AudioContext();
     const oscillator = audioContext.createOscillator();
@@ -233,9 +255,9 @@ export const ColourSequence = ({
                   justifyContent: 'center',
                   borderRadius: '16px',
                   transition: 'all 0.15s ease',
-                  // No glow under Lights Out: it would spill out past the darkened board.
+                  // No glow on a hidden flash: it would spill out past the darkened board.
                   boxShadow:
-                    isActive && !lightsOut
+                    isActive && !dark
                       ? `0 0 60px ${COLOURS[colourId].active}, 0 0 20px ${COLOURS[colourId].active}`
                       : 'none',
                   border: `3px solid ${isActive ? COLOURS[colourId].active : 'rgba(255,255,255,0.08)'}`,
@@ -267,15 +289,17 @@ export const ColourSequence = ({
           })}
         </div>
         {lightsOut && (
-          // Fades the board to the page background and back. It starts lit so the first
-          // flash is always seen, and lets clicks through.
+          // Covers the board with the page background for the flashes Lights Out hides,
+          // fading in and out within the gap around each one. Lets clicks through.
           <div
             aria-hidden="true"
             data-testid="lights-out"
+            data-dark={dark}
             className="pointer-events-none absolute -inset-1 rounded-[20px]"
             style={{
               background: BG,
-              animation: `lightsOut ${LIGHTS_OUT_CYCLE_MS}ms ease-in-out infinite`,
+              opacity: dark ? 0.97 : 0,
+              transition: `opacity ${Math.min(timingRef.current.gap, LIGHTS_OUT_FADE_MS)}ms ease-in-out`,
             }}
           />
         )}

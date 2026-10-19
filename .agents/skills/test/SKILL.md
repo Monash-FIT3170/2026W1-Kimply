@@ -19,12 +19,12 @@ What a change should be tested for lives in `AGENTS.md` and the spec next to the
 From the repo root. On Windows these run in WSL2, not PowerShell.
 
 ```bash
-docker compose exec backend meteor npm test          # once
-docker compose exec backend meteor npm run test-app  # watch
-docker compose --profile test run test               # one-shot container
+docker compose --profile test run --build --rm test  # once, in the one-shot test container
 docker compose exec backend meteor npm run format
 docker compose exec backend meteor npm run format:check
 ```
+
+`meteor npm test` and `meteor npm run test-app` inside the backend container only work with the dev app stopped, because they need port 3000.
 
 CI is `.github/workflows/test.yml` on PRs to `main` and `dev` only. Coverage is a smoke gate, not a quality gate.
 

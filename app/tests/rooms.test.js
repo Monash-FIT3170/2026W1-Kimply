@@ -171,5 +171,47 @@ if (Meteor.isServer) {
         assert.ok(room.players.find((p) => p.name === 'Host'));
       });
     });
+
+    // ─── host reconnect (D6) ─────────────────────────────────────────────────
+
+    describe('host reconnect', function () {
+      it('records the host on the room', async function () {
+        const { pin, hostId } = await Meteor.callAsync('rooms.create', 'Alice');
+        const room = await RoomsCollection.findOneAsync({ pin });
+        assert.strictEqual(room.hostId, hostId);
+        assert.strictEqual(room.players[0].id, hostId);
+      });
+
+      it('reports isHost for the host and not for a joiner', async function () {
+        const { pin, hostId } = await Meteor.callAsync('rooms.create', 'Alice');
+        const { playerId } = await Meteor.callAsync('rooms.join', pin, 'Bob');
+        const host = await Meteor.callAsync('rooms.reconnect', pin, hostId);
+        const joiner = await Meteor.callAsync('rooms.reconnect', pin, playerId);
+        assert.deepStrictEqual(host, { playerName: 'Alice', isHost: true, playerId: hostId });
+        assert.strictEqual(joiner.isHost, false);
+      });
+
+      it('never publishes hostId', async function () {
+        const { pin } = await Meteor.callAsync('rooms.create', 'Alice');
+        const cursor = Meteor.server.publish_handlers['rooms.lobby'].apply({ connection: { id: 'x' } }, [pin]);
+        const [room] = await cursor.fetchAsync();
+        assert.ok(!('hostId' in room));
+      });
+
+      it('knows the host of a room created before hostId was recorded, by name', async function () {
+        const { pin, hostId } = await Meteor.callAsync('rooms.create', 'Alice');
+        await RoomsCollection.updateAsync({ pin }, { $unset: { hostId: '' } });
+        const host = await Meteor.callAsync('rooms.reconnect', pin, hostId);
+        assert.strictEqual(host.isHost, true);
+        await assert.rejects(Meteor.callAsync('rooms.kick', pin, hostId), (err) => err.error === 'invalid');
+      });
+
+      it('deletes the room when the host leaves the lobby', async function () {
+        const { pin, hostId } = await Meteor.callAsync('rooms.create', 'Alice');
+        await Meteor.callAsync('rooms.join', pin, 'Bob');
+        await Meteor.callAsync('rooms.disconnect', pin, hostId);
+        assert.strictEqual(await RoomsCollection.findOneAsync({ pin }), undefined);
+      });
+    });
   });
 }

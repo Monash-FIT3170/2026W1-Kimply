@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Meteor } from 'meteor/meteor';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { BG, HAIRLINE, PRIMARY, TILE, TileLattice, TopBar } from '../components/design';
 import { submitOnEnter } from '../keyboard';
 import { setSession } from '../accountSession';
+import { accountReturnPath } from '../accountReturn';
 
 const GOOGLE_SCRIPT_SRC = 'https://accounts.google.com/gsi/client';
 const GOOGLE_BUTTON_MAX_WIDTH = 400; // Google renders the button at most 400px wide.
@@ -103,6 +104,15 @@ function GoogleSignIn({ mode, onCredential }) {
 
 export function Account() {
   const navigate = useNavigate();
+  const { state } = useLocation();
+  const returnTo = accountReturnPath(state);
+
+  // Leaving replaces this page in history, so Back from where the player lands does not
+  // reopen the account form.
+  const finish = (account) => {
+    setSession(account);
+    navigate(returnTo, { replace: true });
+  };
 
   const [mode, setMode] = useState('register');
   const [displayName, setDisplayName] = useState('');
@@ -134,8 +144,7 @@ export function Account() {
         return;
       }
 
-      setSession(account);
-      navigate('/play');
+      finish(account);
     });
   };
 
@@ -151,8 +160,7 @@ export function Account() {
         return;
       }
 
-      setSession(account);
-      navigate('/play');
+      finish(account);
     });
   };
 
@@ -168,8 +176,7 @@ export function Account() {
         return;
       }
 
-      setSession(account);
-      navigate('/play');
+      finish(account);
     });
   };
 
@@ -186,7 +193,7 @@ export function Account() {
       <TopBar
         right={
           <button
-            onClick={() => navigate('/play')}
+            onClick={() => navigate(returnTo, { replace: true })}
             className="inline-flex min-h-11 cursor-pointer items-center rounded-lg border border-hairline bg-surface px-3 py-2 font-outfit text-[12px] font-semibold uppercase tracking-wider text-fg2"
           >
             Back

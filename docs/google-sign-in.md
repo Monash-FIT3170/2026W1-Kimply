@@ -94,8 +94,8 @@ docker compose exec backend printenv GOOGLE_CLIENT_ID
 
 ### The EC2 instances
 
-`docker-compose.prod.yml` and `.env.production.example` still carry the variable, so the legacy stack keeps working if someone deploys to it by hand.
-Those instances no longer receive deploys; see [deployment-manual.md](deployment-manual.md).
+`docker-compose.prod.yml` and `.env.production.example` still carry the variable for the retired EC2 stack.
+Those instances were terminated on 2026-10-04, so only the ECS task definitions matter now.
 
 ## Troubleshooting
 
