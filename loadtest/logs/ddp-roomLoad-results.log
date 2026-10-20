@@ -1,0 +1,71 @@
+===== A: prod 1x0.5vCPU/1GB, M10 no oplog =====
+target wss://www.kimply.online/websocket  room F8LN8  2026-10-19T11:26:12.802Z
+players 100/100, entered 100, rounds reached 6, wall 435 s
+rooms.join            n=99 p50=328 p95=568 p99=981 max=981 ms
+players.join          n=100 p50=2489 p95=4224 p99=5585 max=5585 ms
+players.startAttempt  n=545 p50=2620 p95=3781 p99=3955 max=4636 ms
+players.submitSequence n=545 p50=17334 p95=18527 p99=18765 max=49609 ms
+abilities.pick/skip   n=397 p50=1316 p95=3102 p99=3338 max=3715 ms
+round fan-out (first to last client seeing a new round):
+  round 2: seen by 100, spread 15 ms, p95 14 ms
+  round 3: seen by 100, spread 9 ms, p95 9 ms
+  round 4: seen by 100, spread 12 ms, p95 12 ms
+  round 5: seen by 100, spread 69 ms, p95 68 ms
+  round 6: seen by 100, spread 5 ms, p95 5 ms
+errors: {"abilities.skip:draft-closed":208,"abilities.pick:draft-closed":43}
+cloudwatch AWS/ECS kimply-prod, 1-min: CPU max 100% avg 87-100% from 22:19 to 22:24 (+11:00); memory max 32%
+
+===== B: prod 2x1vCPU/2GB, M10 no oplog =====
+target wss://www.kimply.online/websocket  room 8BW7S  2026-10-19T12:12:34.556Z
+players 100/100, entered 100, rounds reached 6, wall 153 s
+rooms.join             n=99 p50=30 p95=109 p99=127 max=127 ms
+players.join           n=100 p50=377 p95=845 p99=1133 max=1133 ms
+players.startAttempt   n=530 p50=133 p95=784 p99=845 max=869 ms
+players.submitSequence n=530 p50=661 p95=3267 p99=3469 max=13221 ms
+abilities.pick/skip    n=398 p50=167 p95=936 p99=1141 max=1210 ms
+round fan-out (first to last player seeing a new round):
+  round 2: seen by 100, spread 2089 ms, p95 2089 ms
+  round 3: seen by 100, spread 2371 ms, p95 2371 ms
+  round 4: seen by 100, spread 2164 ms, p95 2164 ms
+  round 5: seen by 100, spread 2404 ms, p95 2404 ms
+  round 6: seen by 100, spread 2 ms, p95 2 ms
+errors: {}
+
+cloudwatch AWS/ECS kimply-prod, 1-min: CPU max 84% / 80%, service average 47% / 46%; memory max 15%; 2 tasks throughout, no scale-out
+
+===== C: prod 2x1vCPU/2GB, M10 with oplog =====
+target wss://www.kimply.online/websocket  room NY7HN  2026-10-19T13:05:07.667Z
+players 100/100, entered 100, rounds reached 6, wall 95 s
+rooms.join             n=99 p50=47 p95=150 p99=258 max=258 ms
+players.join           n=100 p50=844 p95=1144 p99=1300 max=1300 ms
+players.startAttempt   n=542 p50=40 p95=136 p99=256 max=421 ms
+players.submitSequence n=542 p50=127 p95=394 p99=583 max=793 ms
+abilities.pick/skip    n=400 p50=38 p95=121 p99=134 max=146 ms
+round fan-out (first to last player seeing a new round):
+  round 2: seen by 100, spread 6 ms, p95 6 ms
+  round 3: seen by 100, spread 6 ms, p95 4 ms
+  round 4: seen by 100, spread 3 ms, p95 3 ms
+  round 5: seen by 100, spread 19 ms, p95 3 ms
+  round 6: seen by 100, spread 4 ms, p95 4 ms
+errors: {}
+
+cloudwatch AWS/ECS kimply-prod, 1-min: CPU max 66%, service average 19%; memory max 10%; 2 tasks throughout
+
+===== D: prod 2x1vCPU/2GB, M10 with oplog, image 57765c7 =====
+target wss://www.kimply.online/websocket  room PTBEK  2026-10-19T14:08:26.813Z
+players 100/100, entered 100, rounds reached 6, wall 97 s
+rooms.join             n=99 p50=52 p95=134 p99=184 max=184 ms
+players.join           n=100 p50=784 p95=1157 p99=1260 max=1260 ms
+players.startAttempt   n=548 p50=44 p95=122 p99=159 max=207 ms
+players.submitSequence n=548 p50=114 p95=253 p99=382 max=868 ms
+abilities.pick/skip    n=399 p50=44 p95=123 p99=133 max=153 ms
+round fan-out (first to last player seeing a new round):
+  round 2: seen by 100, spread 2 ms, p95 1 ms
+  round 3: seen by 100, spread 4 ms, p95 4 ms
+  round 4: seen by 100, spread 6 ms, p95 6 ms
+  round 5: seen by 100, spread 6 ms, p95 6 ms
+  round 6: seen by 100, spread 10 ms, p95 10 ms
+errors: {}
+
+cloudwatch AWS/ECS kimply-prod, 1-min: CPU max 30% / 18%, service average 23% / 10%; memory max 12%; 2 tasks throughout
+

@@ -87,7 +87,7 @@ CloudWatch: task logs · canary on /health/ready → alarm → ECS rollback + SN
 | D4 | Tasks in private subnets, egress through a NAT gateway with an Elastic IP | Task IPs change every deploy; Atlas M0 needs one stable IP to allowlist |
 | D5 | Prod uses the `FARGATE` capacity provider; dev will use `FARGATE_SPOT` | A Spot interruption drops every DDP session on the task |
 | D6 | Fargate bills per running task; idle savings come only from service scaling | Fargate does not scale to zero on its own |
-| D7 | Task size 0.5 vCPU / 1 GB | Idle usage is about 95 MiB. Meteor boot and poll-and-diff need CPU headroom. Right-size from CloudWatch data |
+| D7 | Task size 1 vCPU / 2 GB, at least 2 tasks (was 0.5 vCPU / 1 GB and 1 task until #166) | Meteor runs on one thread, so about 1 vCPU per task is the useful ceiling, and 2 GB fits the image's 1536 MB heap cap with room for the process. Two tasks for a 100-player session and for surviving one task failing |
 | D8 | ECS Exec enabled, via a task role scoped to its own cluster | Fargate has no host to shell into |
 | D9 | `METEOR_SETTINGS` dropped | Nothing reads it |
 | D10 | `MONGO_URL` stored whole as one Secrets Manager secret, no rotation yet | Meteor reads a single string. Matches the team's tooling at work |
@@ -128,13 +128,13 @@ CloudWatch: task logs · canary on /health/ready → alarm → ECS rollback + SN
 
 | # | Assumption | How |
 |---|---|---|
-| A1 | 0.5 vCPU / 1 GB is enough under real game load | CloudWatch task metrics during a real game |
+| A1 | 2 × 1 vCPU / 2 GB is enough for 100 players in one room | 100-player load test before and after the change (#166), then CloudWatch task metrics during the session |
 | A2 | GoDaddy forwarding serves HTTPS on the apex with a valid certificate | **Confirmed 2026-09-22** on a test subdomain. HTTPS came up about an hour after the forward was created, with a GoDaddy-issued certificate |
 | A3 | GoDaddy forwarding preserves path and query string | **False, and accepted.** Tested 2026-09-22: any path returns a GoDaddy 404 and the query string is dropped. New invite links use `www` (they are built from `window.location.origin`), so only old or hand-written apex deep links break |
 | A4 | Free-plan credits cover the NAT, ALB, tasks, canary and Secrets Manager | Budget alert (D34) |
 | A5 | Atlas M0 operation and connection limits hold with lower polling and up to 8 tasks during a deploy | Atlas metrics |
 | A6 | The existing image runs unchanged on Fargate | First deploy |
-| A7 | Meteor boots within the health check grace period at 0.5 vCPU | Measure boot time |
+| A7 | Meteor boots within the health check grace period | Measure boot time |
 
 ## Risks
 
@@ -162,7 +162,7 @@ Logged for later, not fixed as part of the migration.
 
 | # | Issue |
 |---|---|
-| I1 | Cross-task reactivity lag: without an oplog, a write on one task is only seen by the other task's subscribers at its next poll. Mitigated by D24, not removed |
+| I1 | Cross-task reactivity lag: without an oplog, a write on one task is only seen by the other task's subscribers at its next poll. **Resolved in production** on 2026-10-19 by Atlas M10 and `MONGO_OPLOG_URL` (#166): a new round reached 100 players across 2 tasks within 19 ms, against 2.1 to 2.4 s by polling. Development, on M0, still polls (D24) |
 | I2 | The disconnect grace timer (`gameMethods.js`, `Meteor.onConnection`) lives in process memory, so it is lost when a task stops or is replaced |
 | I3 | After an in-game DDP reconnect, `players.join` is skipped because `playerId` is already set, so `connectionId` may never be re-bound and the player may be removed after the 15s grace window. Needs an end-to-end reproduction |
 | I4 | The read-then-write races in D4 of the defect register now span two processes |

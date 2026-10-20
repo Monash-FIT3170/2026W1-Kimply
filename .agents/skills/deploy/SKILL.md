@@ -24,7 +24,7 @@ infra/       -> terraform apply (by hand; the pipeline never runs Terraform)
 ```
 
 `ecs-deploy.sh` renders `infra/ecs/task-definition.<env>.json` with the image, registers a revision, updates the service, waits for the rollout to report `COMPLETED`, then runs `scripts/health-check.sh` against the public URL.
-Environment variables for the app live in that template, not in Terraform and not in an `.env` file. `MONGO_URL` comes from Secrets Manager.
+Environment variables for the app live in that template, not in Terraform and not in an `.env` file. `MONGO_URL` comes from Secrets Manager, and production's `MONGO_OPLOG_URL` too.
 
 ## Deploying and rolling back
 
@@ -52,7 +52,7 @@ ECS also rolls back on its own when the circuit breaker or the canary alarm fail
 - **Tags are commit SHAs and repositories are `IMMUTABLE`.** Dev and production cannot share one repository.
 - **`ROOT_URL` is what the browser opens its DDP socket against.** Change it only together with `domain_name` in Terraform and `service_url` in the workflow; a Terraform precondition keeps them in step.
 - **`HTTP_FORWARDED_COUNT` stays `1`** behind the single ALB hop, or bot-detection IP bans read the wrong address (D44).
-- **Atlas M0 has no oplog.** `METEOR_POLLING_INTERVAL_MS=3000` sets how stale another task's writes can look. More tasks means more polling load on the database.
+- **Production follows the oplog; development polls.** Production (Atlas M10) reads `MONGO_OPLOG_URL`, and its database user must have `read` on `local`: a refused oplog read leaves the tasks healthy but every live query frozen, so smoke-test a game, not just `/health/ready`, after touching either. Development is on M0 with no oplog, so `METEOR_POLLING_INTERVAL_MS=3000` sets how stale another task's writes look there.
 
 ## Verify
 

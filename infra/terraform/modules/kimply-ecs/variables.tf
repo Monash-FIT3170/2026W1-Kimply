@@ -118,6 +118,12 @@ variable "secret_name" {
   type        = string
 }
 
+variable "oplog_url_secret_name" {
+  description = "Secrets Manager name holding MONGO_OPLOG_URL, created by hand. Null where the cluster has no oplog (Atlas M0)."
+  type        = string
+  default     = null
+}
+
 variable "log_retention_days" {
   type    = number
   default = 30

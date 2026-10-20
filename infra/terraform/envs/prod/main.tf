@@ -62,10 +62,13 @@ module "kimply" {
   ecr_repository_name      = "kimply"
   initial_image_tag        = var.initial_image_tag
   secret_name              = "kimply/prod/mongo-url"
+  oplog_url_secret_name    = "kimply/prod/mongo-oplog-url"
 
   capacity_provider = "FARGATE"
-  min_tasks         = 1
-  max_tasks         = 4
+  # Two tasks so a 100-player session has headroom and survives one task failing (#166).
+  # The nightly trim scales back to this, not below it.
+  min_tasks = 2
+  max_tasks = 4
 
   alert_email         = var.alert_email
   monthly_budget_usd  = var.monthly_budget_usd

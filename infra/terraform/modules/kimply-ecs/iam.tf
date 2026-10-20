@@ -42,6 +42,16 @@ data "aws_iam_policy_document" "execution_secret" {
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [aws_secretsmanager_secret.mongo_url.arn]
   }
+
+  # MONGO_OPLOG_URL, where the cluster has an oplog. Matched by name plus Secrets
+  # Manager's six-character suffix, since the secret is created by hand.
+  dynamic "statement" {
+    for_each = var.oplog_url_secret_name == null ? [] : [1]
+    content {
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = ["arn:${data.aws_partition.current.partition}:secretsmanager:${local.region}:${local.account_id}:secret:${var.oplog_url_secret_name}-??????"]
+    }
+  }
 }
 
 resource "aws_iam_role_policy" "execution_secret" {

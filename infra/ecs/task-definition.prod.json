@@ -2,8 +2,8 @@
   "family": "kimply-prod",
   "requiresCompatibilities": ["FARGATE"],
   "networkMode": "awsvpc",
-  "cpu": "512",
-  "memory": "1024",
+  "cpu": "1024",
+  "memory": "2048",
   "runtimePlatform": {
     "cpuArchitecture": "ARM64",
     "operatingSystemFamily": "LINUX"
@@ -35,6 +35,10 @@
         {
           "name": "MONGO_URL",
           "valueFrom": "arn:aws:secretsmanager:ap-southeast-2:827152325060:secret:kimply/prod/mongo-url-AW5Ylu"
+        },
+        {
+          "name": "MONGO_OPLOG_URL",
+          "valueFrom": "arn:aws:secretsmanager:ap-southeast-2:827152325060:secret:kimply/prod/mongo-oplog-url-2aiP6y"
         }
       ],
       "linuxParameters": {

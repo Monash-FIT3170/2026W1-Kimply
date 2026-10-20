@@ -220,7 +220,7 @@ app/
 └── tests/                    # meteortesting:mocha specs, see Testing below; tests/manual/ddpBot.mjs is a raw DDP bot
 infra/                        # Terraform (envs/dev, envs/prod, modules/kimply-ecs) and ECS task definitions
 deploy/                      # build-push.sh and ecs-deploy.sh run in CI; deploy.sh, sync-config.sh, bootstrap-ec2.sh, init-letsencrypt.sh are for the retired EC2 stack
-loadtest/                     # DDP load and smoke tests, run by hand
+loadtest/                     # DDP load and smoke tests, run by hand; RESULTS.md records measured capacity
 ```
 
 Note the design system lives at `imports/ui/components/design.jsx`, **not** `imports/ui/design.jsx`.
@@ -655,7 +655,9 @@ Dev, from `docker-compose.yml`:
 `docker-compose.yml` locally (from the root `.env`), plain `environment` in `infra/ecs/task-definition.{dev,prod}.json` on ECS, and `/opt/kimply/.env` on the legacy EC2 instances.
 It is a public value, not a secret, so it is not in Secrets Manager. Setup is [`docs/google-sign-in.md`](docs/google-sign-in.md).
 
-On ECS, `infra/ecs/task-definition.{dev,prod}.json` also set `METEOR_POLLING_INTERVAL_MS=3000`, because Atlas M0 has no oplog and Meteor falls back to polling; `MONGO_URL` comes from Secrets Manager.
+On ECS, `MONGO_URL` comes from Secrets Manager (`kimply/<env>/mongo-url`).
+Production runs on Atlas M10 and also reads `MONGO_OPLOG_URL` (`kimply/prod/mongo-oplog-url`, the same user on database `local` with `authSource=admin`), so every task follows the oplog and sees the other tasks' writes within milliseconds. The database user needs `read` on `local` as well as `readWrite` on `kimply`: without it, live queries stop updating while `/health/ready` still passes.
+Development is on Atlas M0, which has no oplog, so it polls. Both templates set `METEOR_POLLING_INTERVAL_MS=3000`, which with an oplog only applies to the few queries the oplog cannot follow.
 
 `METEOR_SETTINGS` is not passed anywhere, and **`Meteor.settings` is never read anywhere in the codebase**.
 Apart from `GOOGLE_CLIENT_ID`, there is no runtime configuration surface.

@@ -82,7 +82,7 @@ resource "aws_ecs_task_definition" "app" {
     # ECS reads a bare name as an SSM Parameter Store parameter, so a Secrets
     # Manager secret must be referenced by its full ARN, random suffix included.
     precondition {
-      condition     = one(local.app_container.secrets).valueFrom == aws_secretsmanager_secret.mongo_url.arn
+      condition     = one([for s in local.app_container.secrets : s.valueFrom if s.name == "MONGO_URL"]) == aws_secretsmanager_secret.mongo_url.arn
       error_message = "Template MONGO_URL valueFrom must be ${aws_secretsmanager_secret.mongo_url.arn}."
     }
     precondition {

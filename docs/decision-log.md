@@ -20,6 +20,34 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-19 - Production runs at least 2 tasks of 1 vCPU / 2 GB and follows the oplog (#166)
+
+A 100-player session was planned on a production service that had only ever run one 0.5 vCPU / 1 GB task.
+The task definition now asks for 1 vCPU / 2 GB and `min_tasks` is 2, so the nightly trim scales back to 2, not 1.
+Meteor runs on one thread, so about 1 vCPU per task is the most a task can use; past that, capacity comes from more tasks.
+2 GB also makes the image's `--max-old-space-size=1536` honest: on a 1 GB task the heap cap sat above the container's memory, so a leak would have been killed by the kernel rather than by Node.
+
+- **Applying it takes two steps.** `terraform apply` on `envs/prod` raises the minimum, and the size only changes on a deploy (`deploy/ecs-deploy.sh` with the running image's SHA), because the service ignores Terraform's task definition. Deploy first, then apply, so the second task starts at the new size instead of rolling twice.
+- **Cross-task lag.** Until the oplog is configured on the new Atlas M10, a write on one task reaches the other task's players on its next poll, up to `METEOR_POLLING_INTERVAL_MS` (3 s) later (I1).
+- **Cost.** About US$58/month at 2 tasks against about US$14 for one 0.5 vCPU task; scale back after the session if it is not needed.
+- **Plan check.** The local `terraform.tfvars` still had `canary_enabled = false`, so a plan from it would have switched off the running canary and the deployment alarm rollback. Plan with the value that matches production.
+
+Measured with `loadtest/ddp-roomLoadTest.mjs` (100 players, one room, 5 rounds); every run is in `loadtest/RESULTS.md`.
+Before the change, the single 0.5 vCPU task sat at 100% CPU for the whole game, an answer took 17 s to be graded (p50), and 251 draft choices reached the server after the draft had closed. Memory peaked at 32%, so the constraint was CPU alone.
+After it, with two 1 vCPU tasks and the database unchanged, an answer was graded in 661 ms (p50; p95 3.3 s), every draft choice landed in time, and the busiest task peaked at 84% CPU against a 47% service average. The price is the cross-task lag: players on the other task saw each new round 2.1 to 2.4 s later.
+
+Production's Atlas cluster moved from M0 to M10 the same evening, which provides an oplog, and the task definition now also reads `MONGO_OPLOG_URL` from its own secret (`kimply/prod/mongo-oplog-url`; the execution role may read it by name).
+With the oplog, a new round reached all 100 players within 19 ms instead of 2.1 to 2.4 s, an answer was graded in 127 ms (p50; p95 394 ms), and the busiest task's CPU fell to 66% because the tasks stopped re-polling every live query.
+
+- **The oplog needs `read` on `local`.** The app's database user had only `readWrite` on `kimply`. Atlas refused every oplog read, and live queries stopped updating, while `/health/live` and `/health/ready` both passed, so neither the deployment circuit breaker nor the canary rolled back. A game never reached round 2 for about 20 minutes, until `read` on `local` was added and the tasks were restarted. Smoke-test a game after changing the database or its user, not only the health endpoints.
+- **The M0 to M10 migration took the site down.** While Atlas migrated the data, it did not recognise the app's user (`cannot find user account after reload`), and every write failed. A write refused in a connection's `onClose` handler has no `catch`, so it crashed Node. The tasks restarted until the migration finished. That unhandled rejection is still in `gameMethods.js`.
+- **Two secrets, one password.** The oplog URL repeats the credentials of `MONGO_URL`, so a password change must update both secrets.
+- **Development is unchanged.** It stays on M0, with no oplog, so it still polls every 3 s.
+
+Files: `infra/ecs/task-definition.prod.json`, `infra/terraform/envs/prod/main.tf`, `infra/terraform/modules/kimply-ecs/{iam,ecs,variables}.tf`, `docs/ecs-target-architecture.md`, `.agents/skills/deploy/SKILL.md`, `AGENTS.md`, `loadtest/ddp-roomLoadTest.mjs`, `loadtest/RESULTS.md`.
+
+---
+
 ## 2026-10-19 - A host can rejoin their lobby (D6); clearer copy after Clear and in Battle Royale
 
 A host who lost the lobby page could not get back: `rooms.create` never recorded `hostId`, so `rooms.reconnect` always answered `isHost: false`, and the host's reconnect data was never stored.
