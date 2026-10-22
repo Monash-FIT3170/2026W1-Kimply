@@ -31,10 +31,23 @@ The Meteor build is the heavy part, not the game itself.
 | Git                   | Clone the repo                                                        | [git-scm.com](https://git-scm.com/downloads)            |
 | Docker Desktop        | Runs everything. You do not install Meteor, Node, or MongoDB yourself | [docker.com](https://www.docker.com/get-started/)       |
 | VS Code (recommended) | Editor. Workspace settings are committed                              | [code.visualstudio.com](https://code.visualstudio.com/) |
+| GitHub CLI (`gh`), logged in | Issues, linked branches and PRs. The PR process in section 7 relies on `gh issue develop` and `gh pr create` | [cli.github.com](https://cli.github.com/) |
 | WSL2 (Windows only)   | See below. Not optional                                               | Section 2                                               |
 
 You do **not** need a Meteor, Node, or MongoDB install on your machine.
 Everything runs inside containers.
+
+**Only for infrastructure work or manual deploys.**
+
+| Software | Needed for | Notes |
+|---|---|---|
+| AWS CLI v2 with credentials for the right environment | `deploy/ecs-deploy.sh`, `deploy/build-push.sh`, checking ECS, ECR and logs | Region `ap-southeast-2`. Dev and production use different roles |
+| Terraform 1.10 or newer | `infra/terraform/` | 1.10 is required for S3-native state locking. The pipeline never runs Terraform; it is applied by hand |
+| Docker with buildx (arm64) | `deploy/build-push.sh` by hand | Images are `linux/arm64` only. CI builds them on an arm64 runner |
+| Node 22 | `loadtest/` scripts | Only if you run them outside a container |
+
+**Accounts and access.**
+Beyond the tools, you will need the GitHub repository (`Monash-FIT3170/2026W1-Kimply`), the AWS account (ap-southeast-2), the MongoDB Atlas projects for dev and production, the Route 53 hosted zone, GoDaddy (registrar only) and the Google Cloud project for sign-in.
 
 ---
 
@@ -91,6 +104,9 @@ The tests run in their own container with a baked-in copy of `app/`, because a s
 `--build` is what copies your latest changes in, so do not drop it.
 `docker compose exec backend meteor npm test` fails with "Can't listen on port 3000" while the app is running.
 
+Port 8080 must also be published, because Rspack's hot reload connects to it separately.
+After changing published ports use `docker compose up -d --no-deps backend`; `docker compose restart backend` does not apply a new port mapping.
+
 Install npm packages **inside the container** so they land in the container's `node_modules`, and do not rebuild the image afterwards:
 
 ```bash
@@ -127,14 +143,6 @@ loadtest/               DDP load and smoke tests
 
 These are the rules that are not obvious from the code, and the ones most likely to be broken by accident.
 
-**Branches and pull requests.**
-`main` is production and `dev` is the integration branch.
-Never push to either.
-Every branch starts from a GitHub issue and is cut with `gh issue develop <n> --name <prefix>/<n>-<slug> --base dev --checkout`, so the branch appears in the issue's Development sidebar.
-Prefixes are `feature/`, `fix/`, `bug/`, `chore/`.
-Every PR targets `dev` and its body contains `Closes #<n>` as its own paragraph.
-The full workflow is `.agents/skills/git/SKILL.md`.
-
 **Anonymous play is deliberate.**
 The game has no login wall and must not gain one.
 `this.userId` is empty on purpose; do not "fix" it by adding authentication.
@@ -149,6 +157,9 @@ Adding any of them is a regression.
 Each player receives their own `secret` only through `players.secret`, which is keyed on their connection.
 Every game publication is scoped by `gameId`.
 Removing any of those leaks the correct sequence, another player's cards, or a reconnect credential, or fans DDP traffic out across the whole deployment.
+
+**UI follows the design system.**
+Work from [`docs/design_system.md`](docs/design_system.md). Prefer the Tailwind classes over the constants in `design.jsx`, which have drifted from the document.
 
 **Only the scripts that exist.**
 `format`, `format:check`, `test`, `test-app` from the repo root or from `app/`.
@@ -166,14 +177,65 @@ Design decisions go in `docs/design_system.md`, not in `AGENTS.md`.
 New agent skills go only in `.agents/skills/<name>/SKILL.md`; never copy them into `.claude/` or `.cursor/`.
 
 **CI and deployment.**
-Tests run on pull requests to `main` and `dev`, never on merge.
-Merging to `dev` deploys dev.kimply.online and merging to `main` deploys production, both to ECS Fargate through `.github/workflows/deploy.yml`, which picks its target from the branch name.
-The two environments have separate clusters, services, ECR repositories, deploy roles and Atlas databases, but development shares production's load balancer and NAT gateway to save cost.
-A deploy takes about 37 minutes end to end because ECS waits out the canary alarms before calling it complete.
+Merging to `dev` or `main` deploys it. See section 6.
 
 ---
 
-## 6. Where to read next
+## 6. Deployment
+
+Both environments run on ECS Fargate (arm64) and are deployed by `.github/workflows/deploy.yml` through `deploy/ecs-deploy.sh`. The target comes from the branch name. How it is built and why: [`docs/ecs-target-architecture.md`](docs/ecs-target-architecture.md), [`infra/terraform/README.md`](infra/terraform/README.md), [`infra/docs/architecture.md`](infra/docs/architecture.md). The `deploy` skill (`.agents/skills/deploy/SKILL.md`) lists the traps, exit codes and rollback detail.
+
+### Deploy steps
+
+1. **Merge your PR into `dev`.** The workflow builds the arm64 image, pushes it to ECR tagged with the full commit SHA, registers a new task definition revision from `infra/ecs/task-definition.dev.json`, and waits for ECS to report the rollout `COMPLETED`. It then probes `https://dev.kimply.online/health/ready`.
+2. **Verify development.** Check the Actions run is green, play a game with two browsers on https://dev.kimply.online, and optionally run `node loadtest/ddp-smoke.mjs wss://dev.kimply.online/websocket`.
+3. **Release to production.** Open a PR from `dev` into `main` (two approvals, section 7) and merge it when no one is playing. The same workflow deploys `kimply-prod`.
+4. **Verify production** the same way on https://www.kimply.online, then tag the release (section 7).
+
+Manual deploy or rollback of a specific commit uses the same script with an older or newer full SHA, whose image must be in ECR:
+
+```bash
+ECS_CLUSTER=kimply-dev ECS_SERVICE=kimply-dev ECR_REPOSITORY=kimply-dev \
+  TASK_DEF_TEMPLATE=infra/ecs/task-definition.dev.json SERVICE_URL=https://dev.kimply.online \
+  ./deploy/ecs-deploy.sh <full-40-char-git-sha>
+```
+
+The defaults are production's. Infrastructure under `infra/terraform/` is never applied by the pipeline; apply `envs/prod` before `envs/dev` by hand. Runtime settings live in the task definition templates and ship with the next deploy.
+
+### Things to know
+
+- A deploy takes about 35 to 37 minutes, because ECS waits out the canary alarm before it reports complete.
+- **A deploy drops live games.** Deploy when no one is playing.
+- Atlas M0 has no automated backups. Backup and incident guidance that still applies is in [`docs/operations.md`](docs/operations.md) sections 3 and 5.
+- The EC2 stack is retired (instances terminated 2026-10-04). `docs/deployment-manual.md`, `docs/dev-environment.md`, `docker-compose.prod.yml`, `nginx/` and the other EC2 `deploy/` scripts are history, not CI.
+- Google sign-in setup: [`docs/google-sign-in.md`](docs/google-sign-in.md).
+
+---
+
+## 7. Git conventions
+
+`main` is production and `dev` is the integration branch. Never push to either: everything goes in by PR. One branch per issue, cut from `dev`; `dev` is merged into `main` as a release PR. Commands are in `.agents/skills/git/SKILL.md` and the reasoning is in [`docs/quality-assurance-plan-submission.md`](docs/quality-assurance-plan-submission.md).
+
+**Pull request process**
+
+1. Start from a GitHub issue.
+2. Branch from `origin/dev` with `gh issue develop <n> --name <prefix>/<n>-<slug> --base dev --checkout` (prefixes `feature/`, `fix/`, `bug/`, `chore/`).
+3. Keep commits small, roughly 500 lines at most, and never force-push a shared branch.
+4. Run the tests and Prettier (section 3). New behaviour comes with tests.
+5. Update the docs in the same change (section 5).
+6. Open the PR into `dev` with `gh pr create --base dev`, with `Closes #<n>` as its own paragraph in the body.
+7. CI (`meteor test --once --full-app`, run on PRs to `dev` and `main`, never on merge) must pass. One approval merges into `dev`; two are needed for `main`. Reviewers use the `review` skill. Check these counts in GitHub's branch protection settings, which are not stored in the repo.
+8. Merge, then delete the branch. Merging deploys (section 6).
+
+**Versioning**
+
+The repo has no versioning today: no git tags, no `version` in `package.json`, no changelog. A release is identified only by its commit SHA, which is also the ECR image tag.
+
+Suggested: use [semantic versioning](https://semver.org) (`vMAJOR.MINOR.PATCH`) and tag the `main` merge commit of each `dev` to `main` release PR, for example `git tag -a v1.0.0 -m "v1.0.0" && git push origin v1.0.0`. A tag does not deploy anything.
+
+---
+
+## 8. Where to read next
 
 | Document                                                                                 | Holds                                                                      |
 | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
@@ -186,12 +248,14 @@ A deploy takes about 37 minutes end to end because ECS waits out the canary alar
 | [`docs/operations.md`](docs/operations.md)                                               | Monitoring, backups, incidents, cost                                       |
 | [`docs/ecs-target-architecture.md`](docs/ecs-target-architecture.md)                     | The ECS Fargate design: decisions, risks, migration history                |
 | [`infra/terraform/README.md`](infra/terraform/README.md)                                 | Building and operating the ECS stack with Terraform                        |
+| [`docs/bot-detection-test-results.md`](docs/bot-detection-test-results.md) | Executed bot-detection verification and the failures that block sign-off |
+| [`infra/docs/architecture.md`](infra/docs/architecture.md) | Mermaid diagrams of the ECS stack |
 | [`docs/google-sign-in.md`](docs/google-sign-in.md)                                       | The Google OAuth client and where `GOOGLE_CLIENT_ID` lives                 |
 | [`docs/quality-assurance-plan-submission.md`](docs/quality-assurance-plan-submission.md) | Testing plan, git gates, NFRs, accessibility                               |
 
 ---
 
-## 7. Common problems
+## 9. Common problems
 
 **File changes do not reload (Windows).**
 You are running from PowerShell, or the repo is on `/mnt/c/...`.
