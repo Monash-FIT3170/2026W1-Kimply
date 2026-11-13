@@ -50,6 +50,7 @@ Everything below has a home of its own. Read the home file rather than expecting
 | [`docs/google-sign-in.md`](docs/google-sign-in.md) | Google sign-in: the OAuth client, its origins, and where `GOOGLE_CLIENT_ID` lives in each environment |
 | [`infra/terraform/README.md`](infra/terraform/README.md) | How to build and operate the ECS stack with Terraform |
 | [`infra/docs/architecture.md`](infra/docs/architecture.md) | Mermaid diagrams of the ECS stack: runtime traffic, which Terraform file builds what, a deploy |
+| [`e2e/README.md`](e2e/README.md) | Playwright rules and browser scenarios, local commands, isolation and CI |
 | [`README.md`](README.md) | WSL2 and Docker setup, and the full local command list |
 | `.agents/skills/<name>/SKILL.md` | How to do a kind of work in this repo (git, tests, Docker). Not product rules |
 
@@ -58,7 +59,11 @@ Everything below has a home of its own. Read the home file rather than expecting
 - Anonymous play is intentional. Do not add a login wall to "fix" missing `this.userId`.
 - All writes go through Meteor methods. Do not add `.allow()` / `.deny()`, `autopublish`, or `insecure`.
 - Do not undo the publication properties: `rounds` never carries `sequence`, `players` and `eliminations` exclude `attemptedSequence`, `secret`, and `reconnectTokenHash`, `players.secret` is keyed on the caller's connection, and every publication is scoped by `gameId`.
-- Do not invent npm scripts. There is no `lint`, `build`, `dev`, `typecheck`, or `e2e`. Format with Prettier. There is no ESLint.
+- Do not invent npm scripts in `app/`.
+  The standalone `e2e/` package runs Playwright with its own `npm test`.
+  In `app/` there is no `lint`, `build`, `dev`, `typecheck`, or `e2e`.
+  Format with Prettier.
+  There is no ESLint.
 - Docker commands run from WSL2 on Windows, not PowerShell. Local compose is `docker-compose.yml`. Production runs on ECS, so production-shaped changes belong in `app/Dockerfile`, `infra/ecs/task-definition.{dev,prod}.json` and `infra/terraform/`. Keep dev and prod as the same module with different inputs; do not fork `deploy/build-push.sh` or `deploy/ecs-deploy.sh` per environment. `nginx/`, `docker-compose.prod.yml` and the other `deploy/` scripts belong to the retired EC2 stack.
 - After changing collections, publications, methods, routes, tests, or defects, update the matching table in this file and add an entry to `docs/decision-log.md` in the same change.
 
@@ -138,11 +143,12 @@ Setup, the full command list, and troubleshooting are in [README.md](README.md).
 docker compose up                                    # MongoDB + Meteor on :3000
 docker compose --profile test run --build --rm test  # tests, once, in their own container
 docker compose exec backend meteor npm run format    # Prettier, the only style gate
+(cd e2e && npm test)                                 # Playwright against the running stack
 ```
 
 `docker compose exec backend meteor npm test` fails with "Can't listen on port 3000" while the app is running. The test container bakes in a copy of `app/`, so `--build` is what picks up your changes.
 
-**Scripts that do NOT exist** (do not invent them in CI or docs): `npm run lint`, `npm run build`, `npm run dev`, `npm run typecheck`, `npm run e2e`.
+**Scripts that do NOT exist in `app/`** (do not invent them in CI or docs): `npm run lint`, `npm run build`, `npm run dev`, `npm run typecheck`, `npm run e2e`.
 The only production build path is the `meteor build` invoked inside `app/Dockerfile`.
 
 ---
@@ -218,6 +224,7 @@ app/
 │       ├── savedUsername.js       # remembers the last username in localStorage
 │       └── styles.css             # Tailwind directives + keyframes
 └── tests/                    # meteortesting:mocha specs, see Testing below; tests/manual/ddpBot.mjs is a raw DDP bot
+e2e/                          # Standalone Playwright package: rules/ DDP scenarios, ui/ Chromium, lib/ isolated fixtures
 infra/                        # Terraform (envs/dev, envs/prod, modules/kimply-ecs) and ECS task definitions
 deploy/                      # build-push.sh and ecs-deploy.sh run in CI; deploy.sh, sync-config.sh, bootstrap-ec2.sh, init-letsencrypt.sh are for the retired EC2 stack
 loadtest/                     # DDP load and smoke tests, run by hand
@@ -605,11 +612,39 @@ How to write and run them is the `test` skill. What exists today:
 | `leaveGame.test.js` | spectator departure retains their result and allows the game to finish |
 | `globalLeaderboard.test.js` | game results for signed-in winners and losers, no row for guests, the higher `bestRound` kept, the 50-row cap |
 
+The standalone `e2e/` package runs against a live app and MongoDB with bot detection enabled.
+Its `rules` project never opens a browser; its `ui` project uses Chromium at 1456x829 and 390x844.
+Every scenario owns its rooms and removes only its own data, so workers can run in parallel.
+See [`e2e/README.md`](e2e/README.md) for commands and helpers.
+
+| E2E file | Covers |
+|---|---|
+| `e2e/rules/modes.spec.js` | Every preset, custom settings, growth, life loss, elimination and independent Battle Royale levels |
+| `e2e/rules/core.spec.js` | Streak cap, round 7 bonus, spectator results, signed-in global results |
+| `e2e/rules/lobby.spec.js` | Validation, rename, settings, toggle, kick, disconnect, host reconnect and publication privacy |
+| `e2e/rules/abilities.spec.js` | Every standard card, draft clock and resolution, stacking, privacy, hand retention and expiry |
+| `e2e/rules/battle-royale.spec.js` | Level drafts, pending effects, Shield, Jump and highest-level winners |
+| `e2e/rules/reconnect-deadline.spec.js` | Credential ownership, socket loss, disconnect grace and reconnect across the real round deadline |
+| `e2e/rules/solo-deadline.spec.js` | Fallback clock and lone-entrant game completion |
+| `e2e/rules/bot-detection.spec.js` | Three machine-speed attempts trigger removal with detection enabled |
+| `e2e/ui/navigation.spec.js` | Desktop and phone navigation, page overflow and nested clipping regression |
+| `e2e/ui/join.spec.js` | Code cap, Backspace, predictive composition, Enter join and sign-up return path |
+| `e2e/ui/lobby.spec.js` | Custom controls, rename, card guide, kick, host reconnect and mode-picker Back |
+| `e2e/ui/game.spec.js` | Keyboard editing, hearts, wrong answer replay, refresh memory, clock, Replay and tile submission |
+| `e2e/ui/deadline.spec.js` | Idle and offline reconnecting players become spectators after the real deadline |
+| `e2e/ui/abilities.spec.js` | Draft reload clock, target shortcuts, Steal, Slo-Mo, Shield and held Free Pass |
+| `e2e/ui/battle-royale.spec.js` | Pending Lights Out, Jump, no clock, hand copy and first place |
+| `e2e/ui/end-and-leaderboard.spec.js` | Distinct final ranks, New Game and seeded-session global leaderboard |
+| `e2e/ui/phone.spec.js` | Phone lobby, board, draft and target picker viewport bounds |
+
 `tests/manual/ddpBot.mjs` is not a spec: it is a raw DDP client that plays a room at machine speed, for checking bot detection by hand.
 
-**Not covered:** authorization on the room host mutations, most concurrency or race scenarios, `rooms.start`, `rooms.updateGameName`, `rooms.updateSettings`, `game.resetSequences`.
+**Not covered:** authorization on the room host mutations, most concurrency or race scenarios, and `game.resetSequences`.
+The E2E rules scenarios cover `rooms.start`, `rooms.updateGameName` and `rooms.updateSettings`.
 
 CI (`.github/workflows/test.yml`) runs `meteor test --once --full-app` on pull requests to `main` and `dev` only, never on merge, behind a coverage smoke gate.
+`.github/workflows/e2e.yml` independently builds `app/Dockerfile`, starts MongoDB 7 with one-second Meteor polling and runs both Playwright projects on every pull request push to `main` and `dev`.
+Failed runs upload the HTML report, traces, videos and app log.
 Prettier is not a CI gate, although `npm run format:check` now passes.
 
 ---

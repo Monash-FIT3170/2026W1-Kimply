@@ -1,0 +1,12 @@
+{
+  "name": "kimply-e2e",
+  "private": true,
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "mongodb": "^6.20.0",
+    "ws": "^8.18.3"
+  }
+}

@@ -1019,6 +1019,7 @@ export const GamePage = () => {
             </div>
           )}
           <div
+            data-testid="hearts"
             style={{
               display: 'flex',
               flexWrap: 'wrap',
@@ -1121,6 +1122,7 @@ export const GamePage = () => {
             </p>
             {!isBattleRoyale && (
               <p
+                data-testid="round-countdown"
                 style={{
                   color: secondsLeft <= 5 ? '#ff7a7a' : '#9ce8ff',
                   marginTop: '0.8dvh',

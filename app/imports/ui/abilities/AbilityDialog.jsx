@@ -60,6 +60,7 @@ export function Countdown({ seconds }) {
     <span
       className="inline-flex shrink-0 items-center gap-2 font-mono text-[11px] font-semibold uppercase tracking-[0.12em]"
       style={{ color: seconds <= 3 ? TILE.pink : TILE.amber }}
+      data-testid="draft-countdown"
       aria-live="off"
     >
       <span

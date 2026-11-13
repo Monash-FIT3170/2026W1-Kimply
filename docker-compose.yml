@@ -23,6 +23,8 @@ services:
       PORT: 3000
       # Direct connection: do not trust X-Forwarded-For. See Meteor HTTP_FORWARDED_COUNT.
       HTTP_FORWARDED_COUNT: 0
+      # Deliver externally seeded E2E drafts before their 20-second window expires.
+      METEOR_POLLING_INTERVAL_MS: 1000
       # Set to false in the root .env to let a local agent play without detection or bans.
       BOT_DETECTION_ENABLED: ${BOT_DETECTION_ENABLED:-true}
       METEOR_ALLOW_SUPERUSER: 1

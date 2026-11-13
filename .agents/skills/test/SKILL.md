@@ -10,7 +10,9 @@ description: >-
 
 Runner is `meteortesting:mocha`. Entry `app/tests/main.js` auto-loads every sibling `*.test.js` via `require.context`. Drop a new file next to the others; do not register it by hand.
 
-There is **no** ESLint and **no** `npm run lint` / `build` / `dev` / `typecheck` / `e2e`. Do not invent those. Format with Prettier.
+In `app/`, there is **no** ESLint and **no** `npm run lint` / `build` / `dev` / `typecheck` / `e2e`.
+Do not invent those.
+Format with Prettier.
 
 What a change should be tested for lives in `AGENTS.md` and the spec next to the code. This skill is only how tests are run and shaped.
 
@@ -71,3 +73,35 @@ if (Meteor.isServer) {
 Plain `meteor test` does **not** load `server/main.js`. If a spec needs publications (or anything else registered only from the server entry), import that module in the spec.
 
 `tests/` must stay in the Docker build context: `meteor.testModule` in `package.json` points at `tests/main.js`, and `meteor build` resolves it even for a production image.
+
+## Playwright end-to-end suite
+
+`e2e/` is its own package; never install Playwright in `app/`.
+Start the app and MongoDB, keep bot detection enabled, then run:
+
+```bash
+cd e2e
+npm ci
+npx playwright install chromium
+npm test
+npm test -- --project=rules
+npm test -- --project=ui
+```
+
+Use `E2E_BASE_URL` and `E2E_MONGO_URL` for an isolated stack in another worktree.
+`e2e/compose.dev.yml` isolates the app, MongoDB and Rspack HMR ports; its internal HMR port must match its published port.
+See `e2e/README.md` for the production-image commands used by CI.
+One-second Meteor polling lets seeded cards reach the UI before the 20-second draft closes.
+
+Add rules scenarios for game state, every method's observable result, card resolution, ownership and timing.
+Add browser scenarios for navigation, keyboard and touch controls, copy, replay, layout and reconnect rendering.
+Import `test` from `e2e/lib/fixtures.js` or `e2e/lib/game.js`, so per-test teardown also runs on failure.
+Never wipe a collection globally; each test owns a room and cleans its own records.
+Seed account sessions with `seedAccount`, never type passwords.
+Use `Player.answer` or the browser `answer` helper for real elapsed human gaps, and preserve 43-character base64url reconnect tokens.
+For seeded DDP changes, wait for the published state before acting.
+
+CI is `.github/workflows/e2e.yml`, separate from the Meteor unit and integration workflow.
+Failures retain an HTML report, traces, videos and the app log.
+Before shipping new regressions, demonstrate that intentionally undoing the relevant fix makes its test fail.
+Format with `app/node_modules/.bin/prettier --write e2e` from the root.

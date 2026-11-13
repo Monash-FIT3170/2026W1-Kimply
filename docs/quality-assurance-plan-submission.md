@@ -22,7 +22,8 @@ A defect the team decides not to fix immediately receives an identifier in the d
 Deferral therefore becomes an explicit, reviewable decision instead of an accident.
 
 Third, automation owns the checks a human would forget.
-Tests, coverage, and code formatting are run by the pipeline on every pull request rather than from memory.
+Tests and coverage run in the pipeline on every pull request.
+Code formatting uses the shared Prettier configuration.
 
 The Release Train Engineers in each subteam are responsible for ensuring their subteam follows this plan in full.
 All members of each team are collectively responsible for integrating these standards into the code they produce.
@@ -45,7 +46,8 @@ The second of these matters most, because publishing a submitted answer would ha
 These properties are verified by automated tests rather than assumed.
 
 Whole-game testing exercises the complete loop, from entering a room code through gameplay and elimination to the end-of-game ranking screen.
-This is performed manually against a running deployment before each milestone, and under simulated load using purpose-built scripts that connect one hundred concurrent simulated players to a single room and play several rounds.
+Playwright automates this loop through DDP scenarios and Chromium on each pull request push.
+Manual checks supplement it before milestones, and purpose-built load scripts connect one hundred simulated players to a room.
 
 ### Developer obligations
 
@@ -58,7 +60,8 @@ Each test is named after the behaviour it verifies, so that a failure reported b
 Team members take responsibility for the tests they write.
 A test that is incorrect, unreliable, or asserting the wrong thing is that author's responsibility to correct, whether or not the current change caused the failure.
 
-Because all tests share a single database instance, each test clears the data it touches before it runs, so that tests cannot pass or fail depending on the order in which they execute.
+Meteor tests clear the data they touch before running.
+Parallel Playwright tests create separate rooms and clean only their own records, including on failure, so they never wipe another test or a developer's data.
 
 ### Continuous integration
 
@@ -78,16 +81,19 @@ Code formatting is enforced by a single automated formatter with a shared config
 Naming the gaps is part of the plan.
 A gap that is documented can be scheduled; a gap that is implied by silence cannot be.
 
-There are currently no automated tests for authorisation, because the server does not yet verify that the connection sending an identifier is the connection that owns it.
+Gameplay ownership is covered by method, publication and E2E tests.
+Room host mutations still trust client-supplied identifiers; their authorisation remains a coverage gap.
 This is recorded in the defect register as an outstanding high severity defect, and tests will be written alongside the fix.
 
-There are no tests for concurrency or race conditions.
+Concurrent round advancement has an integration test, but most concurrency and race scenarios remain uncovered.
 The register records several read-then-write sequences that could produce inconsistent results if two clients act at exactly the same moment, and reproducing these requires a test harness capable of issuing genuinely simultaneous calls.
 
-Several room management methods, including starting a game, disconnecting, renaming a room, and reconnecting, do not yet have automated tests.
+Playwright rules scenarios now cover starting a game, disconnecting, renaming a room, changing custom settings and reconnecting a host or joiner.
 
-There is no automated browser-driven end-to-end test.
-The full user journey is currently verified manually before each milestone.
+The standalone `e2e/` Playwright package automates browser user journeys in Chromium at desktop and phone widths.
+Its browser-free rules project drives real DDP players against the same server, including every card, modes, streaks, reconnects and the real round deadline.
+The independent `.github/workflows/e2e.yml` checks the production image on each pull request push to `dev` and `main`.
+Manual milestone checks supplement the automated journeys.
 
 ## Git Management Plan
 
@@ -369,13 +375,15 @@ The following are recorded so that the next milestone can close them deliberatel
 The coverage threshold is a smoke gate, which means a change can reduce meaningful coverage without failing the pipeline.
 The threshold will be raised once the untested methods identified above have tests.
 
-The automated formatting check does not yet run in the pipeline, because the existing codebase does not currently satisfy it.
-A single dedicated formatting commit is required first, after which the check can gate every pull request.
+The app now passes Prettier's formatting check.
+That check does not yet run as a pipeline gate.
 
-There is no automated browser-driven end-to-end test, so the complete user journey is verified manually before each milestone.
+The independent Playwright E2E workflow builds the production image and runs DDP rules scenarios plus Chromium user journeys on every pull request push to `dev` and `main`.
+Desktop and 390px phone tests cover navigation, controls, drafts, reconnects, deadlines, rankings and horizontal overflow.
+Failures preserve the HTML report, traces, videos and app log for review.
 
-There are no authorisation or concurrency tests, since the corresponding defects are not yet fixed.
-These tests will be written together with the fixes rather than in advance of them.
+Room host authorisation and most concurrency scenarios remain coverage gaps.
+Their tests will accompany the corresponding fixes.
 
 The game tiles lack an accessible name, and the application provides no reduced-motion alternative.
 

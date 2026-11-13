@@ -20,6 +20,28 @@ This file is the source of truth for **why** any of that is the way it is.
 
 ---
 
+## 2026-10-19 - Independent Playwright end-to-end gate (#165)
+
+`e2e/` is a separate npm package so Playwright, MongoDB seeding helpers and browser binaries never enter the Meteor image.
+The new E2E workflow builds `app/Dockerfile` and drives its real DDP endpoint plus Chromium, catching production bundling failures as well as gameplay regressions.
+It leaves the existing test and deployment workflows independent.
+`e2e/compose.dev.yml` also isolates Rspack's internal HMR port, since changing only Docker's published port made browsers connect to the other worktree and reload continuously during validation.
+MongoDB 7 has no oplog here, so CI and local compose use `METEOR_POLLING_INTERVAL_MS=1000` to deliver seeded drafts within their real 20-second window.
+
+Rules and UI tests create separate rooms and clean only their own data, allowing two local or four CI workers.
+Scripted answers use 90-200ms gaps that actually elapse with bot detection enabled, and reconnect credentials are 43 base64url characters.
+Account tests seed hashed sessions and set `kimply.session`; no test types a password.
+Browser cleanup observes all session-resume results because concurrent startup calls can mint multiple anonymous tokens; reading only the final localStorage value left earlier sessions behind.
+Browser answers wait for the published board length and then input readiness, since a Jump feed event can arrive before the new level's board.
+The suite retains reports, traces, videos and app logs when CI fails.
+
+Three stable observation points were added without changing rendering: `hearts` and `round-countdown` in `GamePage.jsx`, and `draft-countdown` in the ability dialog's countdown.
+Existing colour-tile and playback-effect test IDs are reused.
+The regression cases cover the draft clock after reload, players returning after a deadline, host identity on reconnect and the nested TileLattice clip.
+The overflow check distinguishes intentionally ellipsized leaf text from containers that clip an overflowing child layout, so the copyable invite URL is not mistaken for the sideways-slide defect.
+
+---
+
 ## 2026-10-19 - A host can rejoin their lobby (D6); clearer copy after Clear and in Battle Royale
 
 A host who lost the lobby page could not get back: `rooms.create` never recorded `hostId`, so `rooms.reconnect` always answered `isHost: false`, and the host's reconnect data was never stored.

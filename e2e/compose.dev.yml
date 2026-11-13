@@ -1,0 +1,12 @@
+# Separate source, data and ports when another worktree is already running.
+services:
+  mongodb:
+    ports: !override
+      - '${E2E_MONGO_PORT:-27118}:27017'
+  backend:
+    ports: !override
+      - '${E2E_APP_PORT:-3100}:3000'
+      - '${E2E_HMR_PORT:-8180}:${E2E_HMR_PORT:-8180}'
+    environment:
+      ROOT_URL: http://localhost:${E2E_APP_PORT:-3100}
+      RSPACK_DEVSERVER_PORT: ${E2E_HMR_PORT:-8180}

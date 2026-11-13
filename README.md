@@ -89,6 +89,20 @@ docker compose exec backend meteor npm run format  # Prettier, the only style ga
 
 The tests run in their own container with a baked-in copy of `app/`, because a second Meteor process in the backend container cannot bind port 3000 and corrupts the dev server's build.
 `--build` is what copies your latest changes in, so do not drop it.
+
+Playwright tests run against the running stack with bot detection on:
+
+```bash
+cd e2e
+npm ci
+npx playwright install chromium
+npm test
+```
+
+The `rules` project exercises real DDP methods without a browser, and `ui` exercises Chromium at desktop and phone sizes.
+The independent E2E workflow runs both against the production image on every pull request push to `dev` and `main`.
+See [e2e/README.md](e2e/README.md) for isolated ports, production-image commands and failure reports.
+
 `docker compose exec backend meteor npm test` fails with "Can't listen on port 3000" while the app is running.
 
 Install npm packages **inside the container** so they land in the container's `node_modules`, and do not rebuild the image afterwards:
@@ -152,11 +166,13 @@ Removing any of those leaks the correct sequence, another player's cards, or a r
 
 **Only the scripts that exist.**
 `format`, `format:check`, `test`, `test-app` from the repo root or from `app/`.
-There is no `lint`, `build`, `dev`, `typecheck`, or `e2e`, and CI must not invent one.
+There is no `lint`, `build`, `dev`, `typecheck`, or `e2e` script in `app/`, and CI must not invent one.
+The standalone Playwright package in `e2e/` has its own `npm test`.
 Prettier is the only style gate; there is no ESLint.
 
-**One local compose file.**
+**One local compose base.**
 `docker-compose.yml` is development only and must keep working.
+`e2e/compose.dev.yml` extends it with isolated ports when testing another worktree.
 Production runs on ECS, so production-shaped changes belong in `infra/` (Terraform and the task-definition templates), not in a second local compose file.
 
 **Docs are part of the change, not a follow-up.**
